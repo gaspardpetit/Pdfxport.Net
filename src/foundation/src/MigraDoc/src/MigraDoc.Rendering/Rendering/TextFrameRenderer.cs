@@ -134,6 +134,15 @@ namespace MigraDoc.Rendering
         void RenderFrameContent(RenderInfo[] renderInfos)
         {
             XGraphicsState state = Transform();
+            if (_documentRenderer.CenterTextFrameContentVertically?.Invoke(_textFrame) == true &&
+                !_textFrame.Height.IsEmpty)
+            {
+                var availableHeight = _textFrame.Height.Point - _textFrame.MarginTop.Point -
+                    _textFrame.MarginBottom.Point - _lineFormatRenderer.GetWidth().Point;
+                var spareHeight = availableHeight - RenderInfo.GetTotalHeight(renderInfos).Point;
+                if (spareHeight > 0)
+                    _gfx.TranslateTransform(0, spareHeight / 2);
+            }
             RenderByInfos(renderInfos);
             ResetTransform(state);
         }

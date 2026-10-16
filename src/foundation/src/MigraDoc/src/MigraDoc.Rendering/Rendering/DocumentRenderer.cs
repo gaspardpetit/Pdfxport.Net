@@ -265,6 +265,11 @@ namespace MigraDoc.Rendering
         /// </summary>
         public string WorkingDirectory { get; set; } = null!;
 
+        /// <summary>
+        /// Selects text frames whose content should be vertically centered within their fixed height.
+        /// </summary>
+        public Func<TextFrame, bool>? CenterTextFrameContentVertically { get; set; }
+
         void RenderHeader(XGraphics graphics, int page)
         {
             var formattedHeader = FormattedDocument.GetFormattedHeader(page);
