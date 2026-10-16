@@ -67,6 +67,11 @@ namespace MigraDoc.Rendering
         public Func<Shape, double, double, double?>? WrapLineFitHeight { get; set; }
 
         /// <summary>
+        /// Selects positioned TopBottom shapes whose band excludes following page text.
+        /// </summary>
+        public Func<Shape, bool>? TopBottomExclusion { get; set; }
+
+        /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.
         /// </summary>

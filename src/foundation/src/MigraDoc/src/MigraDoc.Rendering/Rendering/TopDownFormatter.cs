@@ -207,7 +207,9 @@ namespace MigraDoc.Rendering
         {
             if (documentObject is not Shape shape ||
                 shape.WrapFormat.Style is not (WrapStyle.Left or WrapStyle.Right or
-                    WrapStyle.Largest or WrapStyle.BothSides))
+                    WrapStyle.Largest or WrapStyle.BothSides) &&
+                (shape.WrapFormat.Style != WrapStyle.TopBottom ||
+                    _documentRenderer.TopBottomExclusion?.Invoke(shape) != true))
                 return area;
 
             var content = layoutInfo.ContentArea;

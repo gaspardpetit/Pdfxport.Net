@@ -337,6 +337,46 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void SelectedTopBottomImageMovesFollowingTextBelowItsBand()
+        {
+            static (double Top, string Content) Render(bool enableExclusion)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var section = document.AddSection();
+                section.PageSetup.TopMargin = Unit.FromPoint(72);
+                section.AddParagraph("Before image");
+                var image = section.AddImage(
+                    "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+                image.RelativeHorizontal = RelativeHorizontal.Margin;
+                image.RelativeVertical = RelativeVertical.Margin;
+                image.Top = Unit.FromPoint(30);
+                image.Width = Unit.FromPoint(120);
+                image.Height = Unit.FromPoint(90);
+                image.WrapFormat.Style = WrapStyle.TopBottom;
+                section.AddParagraph(string.Concat(Enumerable.Repeat(
+                    "Words flowing around the image. ", 35)));
+                var following = section.AddParagraph("Following image");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (enableExclusion)
+                    renderer.DocumentRenderer.TopBottomExclusion = shape => ReferenceEquals(shape, image);
+                renderer.RenderDocument();
+                var top = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+                    .Single(info => ReferenceEquals(info.DocumentObject, following))
+                    .LayoutInfo.ContentArea.Y.Point;
+                var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+                return (top, content);
+            }
+
+            var normal = Render(false);
+            var selected = Render(true);
+
+            selected.Top.Should().BeGreaterThan(normal.Top + 50);
+            selected.Content.Should().Contain("Following");
+            normal.Content.Should().Contain("Following");
+        }
+
+        [Fact]
         public void UnderlineAcrossSmallerFormattedSpaceUsesOneStroke()
         {
             var document = new Document();
