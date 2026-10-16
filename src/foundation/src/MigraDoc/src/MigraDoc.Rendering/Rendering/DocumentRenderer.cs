@@ -142,6 +142,9 @@ namespace MigraDoc.Rendering
                         for (int idx = 0; idx < count; idx++)
                             if (layers[idx] == TextFrameLayer.Normal)
                                 Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                        for (int idx = 0; idx < count; idx++)
+                            if (layers[idx] == TextFrameLayer.AboveContent)
+                                Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
                     }
                     else
                     {

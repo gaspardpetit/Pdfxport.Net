@@ -186,7 +186,7 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         public TextFrameLayer Layer
         {
             get => Values.Layer ?? TextFrameLayer.Normal;
-            set => Values.Layer = value is TextFrameLayer.Normal or TextFrameLayer.BehindContent
+            set => Values.Layer = value is TextFrameLayer.Normal or TextFrameLayer.BehindContent or TextFrameLayer.AboveContent
                 ? value
                 : throw new ArgumentOutOfRangeException(nameof(value));
         }

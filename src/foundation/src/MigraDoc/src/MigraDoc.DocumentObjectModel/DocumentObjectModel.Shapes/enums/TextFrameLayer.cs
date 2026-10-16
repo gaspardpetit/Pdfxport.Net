@@ -16,6 +16,11 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         /// <summary>
         /// Paint the frame before other page content.
         /// </summary>
-        BehindContent
+        BehindContent,
+
+        /// <summary>
+        /// Paint the frame after other page content.
+        /// </summary>
+        AboveContent
     }
 }

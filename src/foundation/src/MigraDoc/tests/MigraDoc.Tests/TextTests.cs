@@ -160,6 +160,43 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void AboveContentTextFrameRendersAfterBodyAndBehindContentFrame()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            var above = section.AddTextFrame();
+            above.Width = Unit.FromPoint(180);
+            above.Height = Unit.FromPoint(60);
+            above.Layer = MigraDoc.DocumentObjectModel.Shapes.TextFrameLayer.AboveContent;
+            above.AddParagraph("ABOVEMARKER");
+            var normal = section.AddTextFrame();
+            normal.Width = Unit.FromPoint(180);
+            normal.Height = Unit.FromPoint(60);
+            normal.AddParagraph("NORMALMARKER");
+            section.AddParagraph("BODYMARKER");
+            var behind = section.AddTextFrame();
+            behind.Width = Unit.FromPoint(180);
+            behind.Height = Unit.FromPoint(60);
+            behind.Layer = MigraDoc.DocumentObjectModel.Shapes.TextFrameLayer.BehindContent;
+            behind.AddParagraph("BEHINDMARKER");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+
+            var content = PageContent(renderer, 0);
+            var behindIndex = content.IndexOf("BEHINDMARKER", StringComparison.Ordinal);
+            var normalIndex = content.IndexOf("NORMALMARKER", StringComparison.Ordinal);
+            var bodyIndex = content.IndexOf("BODYMARKER", StringComparison.Ordinal);
+            var aboveIndex = content.IndexOf("ABOVEMARKER", StringComparison.Ordinal);
+            behindIndex.Should().BeGreaterThanOrEqualTo(0);
+            normalIndex.Should().BeGreaterThan(behindIndex);
+            bodyIndex.Should().BeGreaterThan(normalIndex);
+            aboveIndex.Should().BeGreaterThan(bodyIndex);
+            content.Split(new[] { "ABOVEMARKER" }, StringSplitOptions.None).Length.Should().Be(2);
+        }
+
+        [Fact]
         public void SelectedTextFramesKeepTheirOrderBeforeUnselectedContent()
         {
             var document = new Document();
