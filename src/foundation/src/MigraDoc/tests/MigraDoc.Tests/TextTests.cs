@@ -276,6 +276,67 @@ namespace MigraDoc.Tests
                 .Select(stream => Encoding.GetEncoding(28591).GetString(stream.Stream!.UnfilteredValue)));
 
         [Fact]
+        public void SelectedPositionedTextFrameContinuesTableOnNextPage()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.PageSetup.TopMargin = Unit.FromPoint(72);
+            section.PageSetup.BottomMargin = Unit.FromPoint(72);
+            var frame = section.AddTextFrame();
+            frame.RelativeHorizontal = RelativeHorizontal.Margin;
+            frame.RelativeVertical = RelativeVertical.Margin;
+            frame.Left = Unit.FromPoint(144);
+            frame.Top = Unit.FromPoint(36);
+            frame.Width = Unit.FromPoint(144);
+            frame.WrapFormat.Style = WrapStyle.TopBottom;
+            var table = frame.AddTable();
+            table.AddColumn(Unit.FromPoint(144));
+            for (var rowNumber = 1; rowNumber <= 60; rowNumber++)
+                table.AddRow().Cells[0].AddParagraph($"Row {rowNumber}");
+
+            var ordinary = new PdfDocumentRenderer { Document = (Document)document.Clone() };
+            ordinary.RenderDocument();
+            var renderer = new PdfDocumentRenderer { Document = document };
+            frame.PaginateContent = true;
+            renderer.RenderDocument();
+
+            ordinary.PdfDocument.PageCount.Should().Be(1);
+            renderer.PdfDocument.PageCount.Should().BeGreaterThan(1);
+            var contents = Enumerable.Range(0, renderer.PdfDocument.PageCount)
+                .Select(pageIndex => PdfFileHelper.GetPageContentStream(renderer.PdfDocument, pageIndex))
+                .ToArray();
+            contents.SelectMany(content => Regex.Matches(content, @"\(Row\) Tj").Cast<Match>())
+                .Should().HaveCount(60);
+            var rowNumbers = contents.SelectMany(content =>
+                    Regex.Matches(content, @"\((\d+)\) Tj").Cast<Match>())
+                .Select(match => int.Parse(match.Groups[1].Value))
+                .ToArray();
+            rowNumbers.Should().Equal(Enumerable.Range(1, 60));
+        }
+
+        [Fact]
+        public void UnselectedPositionedTextFrameRetainsDefaultPageContent()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var frame = document.AddSection().AddTextFrame();
+            frame.Width = Unit.FromPoint(144);
+            frame.AddParagraph("Ordinary frame");
+
+            var unselectedDocument = (Document)document.Clone();
+            var ordinary = new PdfDocumentRenderer { Document = document };
+            ordinary.RenderDocument();
+            var unselected = new PdfDocumentRenderer { Document = unselectedDocument };
+            ((TextFrame)unselectedDocument.Sections[0].Elements[0]).PaginateContent = false;
+            unselected.RenderDocument();
+
+            unselected.PdfDocument.PageCount.Should().Be(ordinary.PdfDocument.PageCount);
+            PdfFileHelper.GetPageContentStream(unselected.PdfDocument, 0)
+                .Should().Be(PdfFileHelper.GetPageContentStream(ordinary.PdfDocument, 0));
+        }
+
+        [Fact]
         public void UnderlineAcrossSmallerFormattedSpaceUsesOneStroke()
         {
             var document = new Document();

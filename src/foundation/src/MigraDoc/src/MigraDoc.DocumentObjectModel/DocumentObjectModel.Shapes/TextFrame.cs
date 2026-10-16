@@ -202,6 +202,15 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Gets or sets whether overflowing frame content can continue on later pages.
+        /// </summary>
+        public bool PaginateContent
+        {
+            get => Values.PaginateContent ?? false;
+            set => Values.PaginateContent = value;
+        }
+
+        /// <summary>
         /// The document elements that build the text frame’s content.
         /// </summary>
         public DocumentElements Elements
@@ -324,6 +333,11 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             /// Gets or sets whether the frame content is clipped.
             /// </summary>
             public bool? ClipContent { get; set; }
+
+            /// <summary>
+            /// Gets or sets whether frame content can continue on later pages.
+            /// </summary>
+            public bool? PaginateContent { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.

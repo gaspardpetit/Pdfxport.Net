@@ -11,35 +11,48 @@ namespace MigraDoc.Rendering
     /// </summary>
     class FormattedTextFrame : IAreaProvider
     {
-        internal FormattedTextFrame(TextFrame textframe, DocumentRenderer documentRenderer, FieldInfos? fieldInfos)
+        internal FormattedTextFrame(TextFrame textframe, DocumentRenderer documentRenderer, FieldInfos? fieldInfos,
+            XUnitPt? firstAreaHeight = null, XUnitPt? continuationAreaHeight = null)
         {
             _textFrame = textframe;
             _fieldInfos = fieldInfos;
             _documentRenderer = documentRenderer;
+            _firstAreaHeight = firstAreaHeight;
+            _continuationAreaHeight = continuationAreaHeight;
         }
 
         internal void Format(XGraphics gfx)
         {
             _gfx = gfx;
             _isFirstArea = true;
+            _areaRenderInfos.Clear();
             _formatter = new TopDownFormatter(this, _documentRenderer, _textFrame.Elements);
             _formatter.FormatOnAreas(gfx, false);
-            _contentHeight = RenderInfo.GetTotalHeight(GetRenderInfos());
+            _contentHeight = RenderInfo.GetTotalHeight(_firstAreaHeight is null
+                ? GetRenderInfos() : GetRenderInfos(0));
         }
 
         Area? IAreaProvider.GetNextArea()
         {
             if (_isFirstArea)
-                return CalcContentRect();
-            return null;
+            {
+                if (_firstAreaHeight is not null)
+                    _isFirstArea = false;
+                return BoundedContentRect(_firstAreaHeight);
+            }
+            return _continuationAreaHeight is { } height ? BoundedContentRect(height) : null;
         }
 
-        Area? IAreaProvider.ProbeNextArea() => null;
+        Area? IAreaProvider.ProbeNextArea()
+            => _continuationAreaHeight is { } height ? BoundedContentRect(height) : null;
 
         FieldInfos IAreaProvider.AreaFieldInfos => _fieldInfos ?? NRT.ThrowOnNull<FieldInfos>();
 
         void IAreaProvider.StoreRenderInfos(List<RenderInfo> renderInfos)
-            => _renderInfos = renderInfos;
+        {
+            _renderInfos = renderInfos;
+            _areaRenderInfos.Add(renderInfos.ToArray());
+        }
 
         bool IAreaProvider.IsAreaBreakBefore(LayoutInfo layoutInfo) => false;
 
@@ -48,6 +61,22 @@ namespace MigraDoc.Rendering
             if (_renderInfos != null)
                 return _renderInfos.ToArray();
             return null;
+        }
+
+        internal RenderInfo[]? GetRenderInfos(int areaIndex)
+            => areaIndex < _areaRenderInfos.Count ? _areaRenderInfos[areaIndex] : null;
+
+        internal int AreaCount => _areaRenderInfos.Count;
+
+        internal XUnitPt GetAreaContentHeight(int areaIndex)
+            => RenderInfo.GetTotalHeight(GetRenderInfos(areaIndex));
+
+        Rectangle BoundedContentRect(XUnitPt? height)
+        {
+            var rectangle = CalcContentRect();
+            return height is { } bounded
+                ? new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, bounded)
+                : rectangle;
         }
 
         Rectangle CalcContentRect()
@@ -89,7 +118,7 @@ namespace MigraDoc.Rendering
             return new Rectangle(xOffset, yOffset, width, height);
         }
 
-        XUnitPt ContentHeight => _contentHeight;
+        internal XUnitPt ContentHeight => _contentHeight;
 
         bool IAreaProvider.PositionVertically(LayoutInfo layoutInfo) => false;
 
@@ -127,6 +156,9 @@ namespace MigraDoc.Rendering
         readonly FieldInfos? _fieldInfos;
         TopDownFormatter? _formatter;
         List<RenderInfo>? _renderInfos;
+        readonly List<RenderInfo[]> _areaRenderInfos = new();
+        readonly XUnitPt? _firstAreaHeight;
+        readonly XUnitPt? _continuationAreaHeight;
         XGraphics _gfx = null!;
         bool _isFirstArea;
         XUnitPt _contentHeight;
