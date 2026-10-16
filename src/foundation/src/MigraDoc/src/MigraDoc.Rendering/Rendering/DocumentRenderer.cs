@@ -38,6 +38,10 @@ namespace MigraDoc.Rendering
         /// Null preserves the normal rendering order.
         /// </summary>
         public Func<TextFrame, bool>? TextFrameBehindContent { get; set; }
+        /// <summary>
+        /// Returns the angle in degrees to rotate a text frame around its center, or null to leave it unrotated.
+        /// </summary>
+        public Func<TextFrame, double?>? TextFrameRotation { get; set; }
 
         /// <summary>
         /// Prepares this instance for rendering.
