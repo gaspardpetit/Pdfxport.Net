@@ -599,16 +599,118 @@ namespace MigraDoc.Tests
                 .Should().BeGreaterOrEqualTo(3);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void PositionedImageContourVariesSideIntervalsByLine(bool notched)
+        {
+            var contour = notched
+                ? new[] { new PdfSharp.Drawing.XPoint(0, 0), new PdfSharp.Drawing.XPoint(1, 0),
+                    new PdfSharp.Drawing.XPoint(1, .2), new PdfSharp.Drawing.XPoint(.56, .2),
+                    new PdfSharp.Drawing.XPoint(.56, .75), new PdfSharp.Drawing.XPoint(1, .75),
+                    new PdfSharp.Drawing.XPoint(1, 1), new PdfSharp.Drawing.XPoint(0, 1) }
+                : DiamondContour();
+            var content = RenderSideWrappedImage(WrapStyle.BothSides, contour: contour);
+            var horizontal = 0.0;
+            var vertical = 0.0;
+            var rightIntervalStarts = new List<double>();
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.Trim() == "BT")
+                {
+                    horizontal = 0;
+                    vertical = 0;
+                }
+                var move = Regex.Match(line, @"^(?<dx>-?\d+(?:\.\d+)?) (?<dy>-?\d+(?:\.\d+)?) Td$");
+                if (!move.Success)
+                    continue;
+                var deltaX = double.Parse(move.Groups["dx"].Value, CultureInfo.InvariantCulture);
+                var deltaY = double.Parse(move.Groups["dy"].Value, CultureInfo.InvariantCulture);
+                horizontal += deltaX;
+                vertical += deltaY;
+                if (vertical is > 520 and < 630 && deltaY == 0 && deltaX > 100)
+                    rightIntervalStarts.Add(horizontal);
+            }
+            rightIntervalStarts.Should().HaveCountGreaterOrEqualTo(3);
+            rightIntervalStarts.Max().Should().BeGreaterThan(rightIntervalStarts.Min() +
+                (notched ? 40 : 20));
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        [InlineData(double.NaN)]
+        [InlineData(double.PositiveInfinity)]
+        public void InvalidContourBandHeightsRetainDefaultIntervals(double bandHeight)
+        {
+            var ordinary = RenderSideWrappedImage(WrapStyle.BothSides, contour: DiamondContour());
+            RenderSideWrappedImage(WrapStyle.BothSides, contour: DiamondContour(),
+                contourBandHeight: bandHeight).Should().Be(ordinary);
+        }
+
+        [Fact]
+        public void PositionedImageContourReceivesMixedLineFontHeights()
+        {
+            var fontHeights = new List<double>();
+            RenderSideWrappedImage(WrapStyle.BothSides, contour: DiamondContour(), mixedFont: true,
+                imageTop: 0,
+                contourLineFontBandHeight: (height, fontHeight) =>
+                {
+                    if (fontHeight > 0)
+                        fontHeights.Add(fontHeight);
+                    return Math.Min(height, fontHeight + .25);
+                });
+
+            fontHeights.Should().NotBeEmpty();
+            fontHeights.Max().Should().BeGreaterThan(fontHeights.Min() + 5);
+        }
+
+        [Fact]
+        public void PositionedImageNaturalFontFitCanAdmitTerminalLine()
+        {
+            var ordinary = RenderSideWrappedImage(WrapStyle.BothSides, contour: DiamondContour(),
+                pageHeight: 300, oneAndHalfSpacing: true);
+            var adjusted = RenderSideWrappedImage(WrapStyle.BothSides, contour: DiamondContour(),
+                pageHeight: 300, oneAndHalfSpacing: true,
+                lineFitHeight: (_, fontHeight) => fontHeight);
+
+            adjusted.Should().NotBe(ordinary);
+            adjusted.Length.Should().BeGreaterThan(ordinary.Length);
+        }
+
+        [Fact]
+        public void InvalidPositionedImageLineFitHeightsRetainDefaultContent()
+        {
+            var ordinary = RenderSideWrappedImage(WrapStyle.BothSides, contour: DiamondContour(),
+                pageHeight: 300, oneAndHalfSpacing: true);
+            foreach (var height in new[] { 0.0, -1.0, 100.0, double.NaN,
+                         double.PositiveInfinity })
+                RenderSideWrappedImage(WrapStyle.BothSides, contour: DiamondContour(),
+                    pageHeight: 300, oneAndHalfSpacing: true,
+                    lineFitHeight: (_, _) => height).Should().Be(ordinary);
+        }
+
+        static PdfSharp.Drawing.XPoint[] DiamondContour() =>
+        [
+            new(.5, 0), new(1, .5), new(.5, 1), new(0, .5)
+        ];
+
         static string RenderSideWrappedImage(WrapStyle style, bool justify = false,
             int pageIndex = 0, double imageTop = 100, int repetitions = 35,
-            bool secondImage = false, WrapStyle? secondStyle = null)
+            bool secondImage = false, WrapStyle? secondStyle = null,
+            IReadOnlyList<PdfSharp.Drawing.XPoint>? contour = null,
+            double? contourBandHeight = null,
+            Func<double, double, double?>? contourLineFontBandHeight = null,
+            Func<double, double, double?>? lineFitHeight = null,
+            bool mixedFont = false, double pageHeight = 792,
+            bool oneAndHalfSpacing = false)
         {
             var document = new Document();
             document.Styles.Normal.Font.Name = "Arial";
             document.Styles.Normal.Font.Size = 12;
             var section = document.AddSection();
             section.PageSetup.PageWidth = Unit.FromPoint(612);
-            section.PageSetup.PageHeight = Unit.FromPoint(792);
+            section.PageSetup.PageHeight = Unit.FromPoint(pageHeight);
             section.PageSetup.LeftMargin = Unit.FromPoint(72);
             section.PageSetup.RightMargin = Unit.FromPoint(72);
             section.PageSetup.TopMargin = Unit.FromPoint(72);
@@ -639,12 +741,34 @@ namespace MigraDoc.Tests
                 nextImage.WrapFormat.DistanceLeft = Unit.FromPoint(9);
                 nextImage.WrapFormat.DistanceRight = Unit.FromPoint(9);
             }
-            var paragraph = section.AddParagraph(
-                string.Concat(Enumerable.Repeat("Words flowing around the image. ", repetitions)));
+            var paragraph = section.AddParagraph();
+            if (mixedFont)
+            {
+                paragraph.AddFormattedText(string.Concat(Enumerable.Repeat(
+                    "Words flowing around the image. ", 3))).Size = 9;
+                paragraph.AddFormattedText(string.Concat(Enumerable.Repeat(
+                    "Words flowing around the image. ", repetitions))).Size = 18;
+            }
+            else
+                paragraph.AddText(string.Concat(Enumerable.Repeat(
+                    "Words flowing around the image. ", repetitions)));
             if (justify)
                 paragraph.Format.Alignment = ParagraphAlignment.Justify;
+            if (oneAndHalfSpacing)
+                paragraph.Format.LineSpacingRule = LineSpacingRule.OnePtFive;
 
             var renderer = new PdfDocumentRenderer { Document = document };
+            if (contour != null)
+                renderer.DocumentRenderer.WrapContour = shape => shape == image ? contour : null;
+            if (contourBandHeight != null)
+                renderer.DocumentRenderer.WrapContourBandHeight = (shape, _) =>
+                    shape == image ? contourBandHeight : null;
+            if (contourLineFontBandHeight != null)
+                renderer.DocumentRenderer.WrapContourLineFontBandHeight = (shape, height, fontHeight) =>
+                    shape == image ? contourLineFontBandHeight(height, fontHeight) : null;
+            if (lineFitHeight != null)
+                renderer.DocumentRenderer.WrapLineFitHeight = (shape, height, fontHeight) =>
+                    shape == image ? lineFitHeight(height, fontHeight) : null;
             renderer.RenderDocument();
             return string.Concat(renderer.PdfDocument.Pages[pageIndex].Contents.Elements
                 .OfType<PdfSharp.Pdf.Advanced.PdfReference>()

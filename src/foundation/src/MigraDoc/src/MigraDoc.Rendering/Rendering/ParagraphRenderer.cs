@@ -361,7 +361,7 @@ namespace MigraDoc.Rendering
         {
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak);
+                out var lineEndsWithLineBreak, out var naturalFontHeight);
             //------------------------------------------
 
             XUnitPt xPositionAfterTab = xPosition;
@@ -372,7 +372,7 @@ namespace MigraDoc.Rendering
                 xPositionAfterTab = _formattingArea.X + tabStopPosition;
 
             //--- Restore ---------------------------------
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
             //------------------------------------------
             return xPositionAfterTab;
         }
@@ -387,7 +387,7 @@ namespace MigraDoc.Rendering
         {
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak);
+                out var lineEndsWithLineBreak, out var naturalFontHeight);
             //------------------------------------------
 
             XUnitPt xPositionAfterTab = xPosition;
@@ -397,7 +397,7 @@ namespace MigraDoc.Rendering
                 xPositionAfterTab = _formattingArea.X + tabStopPosition - _currentLineWidth;
 
             //--- Restore ------------------------------
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
             //------------------------------------------
             return xPositionAfterTab;
         }
@@ -431,7 +431,7 @@ namespace MigraDoc.Rendering
         {
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak);
+                out var lineEndsWithLineBreak, out var naturalFontHeight);
             //------------------------------------------
 
             XUnitPt xPositionAfterTab = xPosition;
@@ -458,7 +458,7 @@ namespace MigraDoc.Rendering
             }
 
             //--- Restore ------------------------------
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
             //------------------------------------------
             return xPositionAfterTab;
         }
@@ -475,7 +475,7 @@ namespace MigraDoc.Rendering
 
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak);
+                out var lineEndsWithLineBreak, out var naturalFontHeight);
             //------------------------------------------
 
             try
@@ -563,7 +563,7 @@ namespace MigraDoc.Rendering
             finally
             {
                 //--- Restore ------------------------------
-                RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak);
+                RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
                 //------------------------------------------
             }
 
@@ -571,7 +571,7 @@ namespace MigraDoc.Rendering
         }
 
         void SaveBeforeProbing(out ParagraphIterator? paragraphIter, out int blankCount, out XUnitPt wordsWidth, out XUnitPt xPosition, out XUnitPt lineWidth, out XUnitPt blankWidth,
-            out bool lineEndsWithLineBreak)
+            out bool lineEndsWithLineBreak, out double naturalFontHeight)
         {
             paragraphIter = _currentLeaf;
             blankCount = _currentBlankCount;
@@ -580,10 +580,11 @@ namespace MigraDoc.Rendering
             wordsWidth = _currentWordsWidth;
             blankWidth = _savedBlankWidth;
             lineEndsWithLineBreak = _currentLineEndsWithLineBreak;
+            naturalFontHeight = _currentLineNaturalFontHeight;
         }
 
         void RestoreAfterProbing(ParagraphIterator? paragraphIter, int blankCount, XUnitPt wordsWidth, XUnitPt xPosition, XUnitPt lineWidth, XUnitPt blankWidth,
-            bool lineEndsWithLineBreak)
+            bool lineEndsWithLineBreak, double naturalFontHeight)
         {
             _currentLeaf = paragraphIter;
             _currentBlankCount = blankCount;
@@ -592,6 +593,9 @@ namespace MigraDoc.Rendering
             _currentWordsWidth = wordsWidth;
             _savedBlankWidth = blankWidth;
             _currentLineEndsWithLineBreak = lineEndsWithLineBreak;
+            _currentLineNaturalFontHeight = naturalFontHeight;
+            if (_formattingArea is SideExclusionArea sideExclusion)
+                sideExclusion.NaturalFontHeight = naturalFontHeight;
         }
 
         /// <summary>
@@ -856,7 +860,7 @@ namespace MigraDoc.Rendering
         {
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak);
+                out var lineEndsWithLineBreak, out var naturalFontHeight);
             bool origLastTabPassed = _lastTabPassed;
             //------------------------------------------
             _currentLeaf = lineInfo.StartIter;
@@ -895,7 +899,7 @@ namespace MigraDoc.Rendering
                 lineInfo.ReMeasureLine = false;
                 _lastTabPassed = origLastTabPassed;
             }
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
         }
 
         XUnitPt CurrentWordDistance
@@ -1476,9 +1480,12 @@ namespace MigraDoc.Rendering
             }
 
             _startLeaf = _currentLeaf;
+            _currentLineNaturalFontHeight = 0;
             _currentVerticalInfo = CalcCurrentVerticalInfo();
             _currentYPosition = area.Y + TopBorderOffset;
             _formattingArea = area;
+            if (area is SideExclusionArea sideExclusion)
+                sideExclusion.NaturalFontHeight = _currentLineNaturalFontHeight;
             var rect = _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height);
             if (rect == null)
                 return false;
@@ -2306,18 +2313,18 @@ namespace MigraDoc.Rendering
 
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak);
+                out var lineEndsWithLineBreak, out var naturalFontHeight);
             //------------------------------------------
             _currentLeaf = nextIter;
             var result = FormatElement(nextIter.Current);
 
             //--- Restore ------------------------------
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
             //------------------------------------------
             if (result == FormatResult.Continue)
                 return FormatResult.Continue;
 
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
             var fittingRect = _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height);
             if (fittingRect is null)
                 NRT.ThrowOnNull();
@@ -2405,6 +2412,7 @@ namespace MigraDoc.Rendering
             _currentSegmentIndex = 0;
             _currentSegmentTransitions.Clear();
             _currentLineGap = 0;
+            _currentLineNaturalFontHeight = 0;
             _currentSecondaryRect = null;
             _currentXPosition = StartXPosition;
             _currentVerticalInfo = new VerticalLineInfo();
@@ -2559,6 +2567,13 @@ namespace MigraDoc.Rendering
             var lineSpacingRule = paragraphFormat.LineSpacingRule;
 
             XUnitPt singleLineSpace = font.GetHeight();
+            if (_phase == Phase.Formatting)
+            {
+                _currentLineNaturalFontHeight = Math.Max(_currentLineNaturalFontHeight,
+                    singleLineSpace.Point);
+                if (_formattingArea is SideExclusionArea sideExclusion)
+                    sideExclusion.NaturalFontHeight = _currentLineNaturalFontHeight;
+            }
             var imageRenderInfo = CurrentImageRenderInfo;
             if (imageRenderInfo != null)
                 singleLineSpace = singleLineSpace - FontHandler.GetAscent(font) + imageRenderInfo.LayoutInfo.ContentArea.Height;
@@ -2894,6 +2909,7 @@ namespace MigraDoc.Rendering
         int _currentSegmentIndex;
         readonly List<LineSegmentInfo> _currentSegmentTransitions = [];
         XUnitPt _currentLineGap;
+        double _currentLineNaturalFontHeight;
         XUnitPt _currentYPosition;
         XUnitPt _currentXPosition;
         ParagraphIterator? _currentLeaf;
