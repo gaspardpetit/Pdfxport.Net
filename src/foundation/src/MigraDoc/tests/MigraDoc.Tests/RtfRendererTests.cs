@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using PdfSharp.Quality;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.Fields;
+using MigraDoc.DocumentObjectModel.Shapes;
 using MigraDoc.Rendering;
 using MigraDoc.RtfRendering;
 using MigraDoc.Tests.Helper;
@@ -87,6 +88,25 @@ namespace MigraDoc.Tests
 #endif
             //// … and start a viewer.
             //PdfFileUtility.ShowDocumentIfDebugging(filename);
+        }
+
+        [Theory]
+        [InlineData(WrapStyle.BothSides, 0)]
+        [InlineData(WrapStyle.Left, 1)]
+        [InlineData(WrapStyle.Right, 2)]
+        [InlineData(WrapStyle.Largest, 3)]
+        public void SquareWrapStylesRenderToRtf(WrapStyle style, int side)
+        {
+            var document = new Document();
+            var frame = document.AddSection().AddTextFrame();
+            frame.Width = Unit.FromPoint(120);
+            frame.Height = Unit.FromPoint(90);
+            frame.WrapFormat.Style = style;
+            frame.AddParagraph("Framed text");
+
+            var rtf = new RtfDocumentRenderer().RenderToString(document, Environment.CurrentDirectory);
+            rtf.Should().Contain(@"\shpwr2");
+            rtf.Should().Contain(@"\shpwrk" + side);
         }
 
         /// <summary>

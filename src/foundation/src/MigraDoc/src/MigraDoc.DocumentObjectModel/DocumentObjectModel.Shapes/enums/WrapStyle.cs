@@ -22,5 +22,25 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         /// The object will be ignored when the other elements are placed.
         /// </summary>
         Through,
+
+        /// <summary>
+        /// Place surrounding text on the left side of the shape.
+        /// </summary>
+        Left,
+
+        /// <summary>
+        /// Place surrounding text on the right side of the shape.
+        /// </summary>
+        Right,
+
+        /// <summary>
+        /// Place surrounding text on the side with more available width.
+        /// </summary>
+        Largest,
+
+        /// <summary>
+        /// Place surrounding text on both available sides of the shape.
+        /// </summary>
+        BothSides,
     }
 }

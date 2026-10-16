@@ -734,7 +734,9 @@ namespace MigraDoc.DocumentObjectModel.Visitors
 
         internal override void VisitTextFrame(TextFrame textFrame)
         {
-            if (textFrame.Values.Height.IsValueNullOrEmpty())
+            if (textFrame.Values.Height.IsValueNullOrEmpty() &&
+                textFrame.WrapFormat.Style is not (WrapStyle.Left or WrapStyle.Right or
+                    WrapStyle.Largest or WrapStyle.BothSides))
             {
                 textFrame.Values.Height = Unit.FromInch(1);
             }

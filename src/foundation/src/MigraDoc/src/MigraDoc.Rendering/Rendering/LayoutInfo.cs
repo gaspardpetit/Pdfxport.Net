@@ -104,6 +104,8 @@ namespace MigraDoc.Rendering
         /// </summary>
         internal XUnitPt Left { get; set; }
 
+        internal bool HasExplicitLeft { get; set; }
+
         /// <summary>
         /// Gets or sets the minimum width of the element.
         /// </summary>

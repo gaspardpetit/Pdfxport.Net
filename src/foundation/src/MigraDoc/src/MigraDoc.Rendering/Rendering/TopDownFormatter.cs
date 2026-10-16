@@ -139,6 +139,7 @@ namespace MigraDoc.Rendering
                         renderInfos.Add(renderer.RenderInfo);
                         isFirstOnPage = false;
                         _areaProvider.PositionVertically(renderer.RenderInfo.LayoutInfo);
+                        area = AddSideExclusion(area, docObj, renderer.RenderInfo.LayoutInfo);
                         if (renderer.RenderInfo.LayoutInfo.VerticalReference == VerticalReference.PreviousElement
                             && renderer.RenderInfo.LayoutInfo.Floating != Floating.None)
                         {
@@ -200,6 +201,24 @@ namespace MigraDoc.Rendering
                     ready = true;
                 }
             }
+        }
+
+        static Area AddSideExclusion(Area area, DocumentObject documentObject, LayoutInfo layoutInfo)
+        {
+            if (documentObject is not Shape shape ||
+                shape.WrapFormat.Style is not (WrapStyle.Left or WrapStyle.Right or
+                    WrapStyle.Largest or WrapStyle.BothSides))
+                return area;
+
+            var content = layoutInfo.ContentArea;
+            var wrap = shape.WrapFormat;
+            var left = content.X - wrap.DistanceLeft.Point;
+            var top = content.Y - wrap.DistanceTop.Point;
+            var right = content.X + content.Width + wrap.DistanceRight.Point;
+            var bottom = content.Y + content.Height + wrap.DistanceBottom.Point;
+            return area is SideExclusionArea exclusions
+                ? exclusions.Add(left, top, right, bottom, wrap.Style)
+                : new SideExclusionArea(area, left, top, right, bottom, wrap.Style);
         }
 
         /// <summary>

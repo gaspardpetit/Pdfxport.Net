@@ -366,6 +366,294 @@ namespace MigraDoc.Tests
             content.Should().Contain(".75 w");
         }
 
+        [Theory]
+        [InlineData(WrapStyle.Left, 72)]
+        [InlineData(WrapStyle.Right, 301)]
+        [InlineData(WrapStyle.Largest, 301)]
+        public void PositionedImageExcludesTextOnSelectedSide(WrapStyle style, double expectedLeft)
+        {
+            var content = RenderSideWrappedImage(style);
+            var lineStarts = new List<double>();
+            var horizontal = 0.0;
+            var vertical = 0.0;
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.Trim() == "BT")
+                {
+                    horizontal = 0;
+                    vertical = 0;
+                }
+                var move = Regex.Match(line, @"^(?<dx>-?\d+(?:\.\d+)?) (?<dy>-?\d+(?:\.\d+)?) Td$");
+                if (!move.Success)
+                    continue;
+                horizontal += double.Parse(move.Groups["dx"].Value, CultureInfo.InvariantCulture);
+                vertical += double.Parse(move.Groups["dy"].Value, CultureInfo.InvariantCulture);
+                if (vertical is > 550 and < 620 &&
+                    double.Parse(move.Groups["dy"].Value, CultureInfo.InvariantCulture) != 0)
+                    lineStarts.Add(horizontal);
+            }
+            lineStarts.Should().HaveCountGreaterOrEqualTo(2);
+            lineStarts.Should().OnlyContain(position => Math.Abs(position - expectedLeft) < 0.1);
+        }
+
+        [Fact]
+        public void PositionedImageUsesBothSidesOnSameLine()
+        {
+            var content = RenderSideWrappedImage(WrapStyle.BothSides);
+            var horizontal = 0.0;
+            var vertical = 0.0;
+            var rightIntervalStarts = new List<double>();
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.Trim() == "BT")
+                {
+                    horizontal = 0;
+                    vertical = 0;
+                }
+                var move = Regex.Match(line, @"^(?<dx>-?\d+(?:\.\d+)?) (?<dy>-?\d+(?:\.\d+)?) Td$");
+                if (!move.Success)
+                    continue;
+                var deltaX = double.Parse(move.Groups["dx"].Value, CultureInfo.InvariantCulture);
+                var deltaY = double.Parse(move.Groups["dy"].Value, CultureInfo.InvariantCulture);
+                horizontal += deltaX;
+                vertical += deltaY;
+                if (vertical is > 550 and < 620 && deltaY == 0 && deltaX > 100)
+                    rightIntervalStarts.Add(horizontal);
+            }
+            rightIntervalStarts.Should().HaveCountGreaterOrEqualTo(2);
+            rightIntervalStarts.Should().OnlyContain(position => Math.Abs(position - 301) < 0.1);
+        }
+
+        [Fact]
+        public void TwoPositionedImagesUseThreeIntervalsOnSameLine()
+        {
+            var content = RenderSideWrappedImage(WrapStyle.BothSides, secondImage: true);
+            var horizontal = 0.0;
+            var vertical = 0.0;
+            var intervalStarts = new List<double>();
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.Trim() == "BT")
+                {
+                    horizontal = 0;
+                    vertical = 0;
+                }
+                var move = Regex.Match(line, @"^(?<dx>-?\d+(?:\.\d+)?) (?<dy>-?\d+(?:\.\d+)?) Td$");
+                if (!move.Success)
+                    continue;
+                var deltaX = double.Parse(move.Groups["dx"].Value, CultureInfo.InvariantCulture);
+                var deltaY = double.Parse(move.Groups["dy"].Value, CultureInfo.InvariantCulture);
+                horizontal += deltaX;
+                vertical += deltaY;
+                if (vertical is > 550 and < 620 && deltaY == 0 && deltaX > 100)
+                    intervalStarts.Add(horizontal);
+            }
+            intervalStarts.Should().Contain(position => Math.Abs(position - 301) < 0.1);
+            intervalStarts.Should().Contain(position => Math.Abs(position - 501) < 0.1);
+        }
+
+        [Fact]
+        public void ConflictingSideWrappedImagesSkipOccupiedVerticalBand()
+        {
+            var content = RenderSideWrappedImage(WrapStyle.Left, secondImage: true,
+                secondStyle: WrapStyle.Right);
+            var verticalMoves = Regex.Matches(content,
+                @"(?m)^-?\d+(?:\.\d+)? (?<vertical>-?\d+(?:\.\d+)?) Td$")
+                .Select(match => double.Parse(match.Groups["vertical"].Value,
+                    CultureInfo.InvariantCulture));
+
+            verticalMoves.Should().Contain(move => move < -90);
+        }
+
+        [Fact]
+        public void SideWrapSupportPreservesOrdinaryTableTextOrigin()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.PageSetup.LeftMargin = Unit.FromPoint(72);
+            var table = section.AddTable();
+            table.AddColumn(Unit.FromPoint(180));
+            table.AddRow().Cells[0].AddParagraph("Table text");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
+                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
+                .Select(reference => reference.Value)
+                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
+                .Where(stream => stream.Stream != null)
+                .Select(stream => Encoding.Latin1.GetString(stream.Stream!.UnfilteredValue)));
+            var firstMove = Regex.Match(content,
+                @"(?m)^(?<horizontal>-?\d+(?:\.\d+)?) -?\d+(?:\.\d+)? Td$");
+
+            firstMove.Success.Should().BeTrue();
+            double.Parse(firstMove.Groups["horizontal"].Value, CultureInfo.InvariantCulture)
+                .Should().BeGreaterThan(70);
+        }
+
+        [Fact]
+        public void PositionedImageJustifiesWithinBothSideIntervals()
+        {
+            var content = RenderSideWrappedImage(WrapStyle.BothSides, justify: true);
+            var horizontal = 0.0;
+            var vertical = 0.0;
+            var wordPositions = new List<double>();
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.Trim() == "BT")
+                {
+                    horizontal = 0;
+                    vertical = 0;
+                }
+                var move = Regex.Match(line, @"^(?<dx>-?\d+(?:\.\d+)?) (?<dy>-?\d+(?:\.\d+)?) Td$");
+                if (!move.Success)
+                    continue;
+                horizontal += double.Parse(move.Groups["dx"].Value, CultureInfo.InvariantCulture);
+                vertical += double.Parse(move.Groups["dy"].Value, CultureInfo.InvariantCulture);
+                if (vertical is > 550 and < 620)
+                    wordPositions.Add(horizontal);
+            }
+            wordPositions.Should().Contain(position => Math.Abs(position - 72) < 0.1);
+            wordPositions.Should().Contain(position => Math.Abs(position - 301) < 0.1);
+            wordPositions.Should().OnlyContain(position => position <= 540);
+        }
+
+        [Fact]
+        public void PositionedImageDoesNotExcludeTextOnFollowingPage()
+        {
+            var content = RenderSideWrappedImage(WrapStyle.Right, pageIndex: 1,
+                imageTop: 550, repetitions: 150);
+            var firstLine = Regex.Match(content, @"(?m)^(?<horizontal>-?\d+(?:\.\d+)?) (?<vertical>-?\d+(?:\.\d+)?) Td$");
+
+            firstLine.Success.Should().BeTrue();
+            double.Parse(firstLine.Groups["horizontal"].Value, CultureInfo.InvariantCulture)
+                .Should().BeApproximately(72, 0.1);
+        }
+
+        [Theory]
+        [InlineData(144, 366)]
+        [InlineData(0, 222)]
+        public void PositionedTableFrameUsesBothSideIntervals(double frameLeft, double expectedRight)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 12;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(612);
+            section.PageSetup.PageHeight = Unit.FromPoint(792);
+            section.PageSetup.LeftMargin = Unit.FromPoint(72);
+            section.PageSetup.RightMargin = Unit.FromPoint(72);
+            section.PageSetup.TopMargin = Unit.FromPoint(72);
+            section.PageSetup.BottomMargin = Unit.FromPoint(72);
+            section.AddParagraph("Before floating table");
+            var frame = section.AddTextFrame();
+            frame.RelativeHorizontal = RelativeHorizontal.Margin;
+            frame.RelativeVertical = RelativeVertical.Margin;
+            frame.Left = Unit.FromPoint(frameLeft);
+            frame.Top = Unit.FromPoint(36);
+            frame.Width = Unit.FromPoint(144);
+            frame.WrapFormat.Style = WrapStyle.BothSides;
+            frame.WrapFormat.DistanceLeft = Unit.FromPoint(6);
+            frame.WrapFormat.DistanceRight = Unit.FromPoint(6);
+            var table = frame.AddTable();
+            table.AddColumn(Unit.FromPoint(144));
+            table.Borders.Width = Unit.FromPoint(1);
+            table.AddRow().Cells[0].AddParagraph("Floating cell");
+            table.AddRow().Cells[0].AddParagraph("Second cell");
+            table.AddRow().Cells[0].AddParagraph("Third cell");
+            section.AddParagraph(string.Concat(Enumerable.Repeat(
+                "Following text flows beside the floating table. ", 18)));
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
+                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
+                .Select(reference => reference.Value)
+                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
+                .Where(stream => stream.Stream != null)
+                .Select(stream => Encoding.Latin1.GetString(stream.Stream!.UnfilteredValue)));
+
+            var horizontal = 0.0;
+            var vertical = 0.0;
+            var rightIntervalStarts = new List<double>();
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.Trim() == "BT")
+                {
+                    horizontal = 0;
+                    vertical = 0;
+                }
+                var move = Regex.Match(line, @"^(?<dx>-?\d+(?:\.\d+)?) (?<dy>-?\d+(?:\.\d+)?) Td$");
+                if (!move.Success)
+                    continue;
+                var deltaX = double.Parse(move.Groups["dx"].Value, CultureInfo.InvariantCulture);
+                var deltaY = double.Parse(move.Groups["dy"].Value, CultureInfo.InvariantCulture);
+                horizontal += deltaX;
+                vertical += deltaY;
+                if (vertical is > 620 and < 690 &&
+                    (frameLeft == 0 ? deltaY != 0 : deltaY == 0 && deltaX > 100))
+                    rightIntervalStarts.Add(horizontal);
+            }
+            rightIntervalStarts.Count(position => Math.Abs(position - expectedRight) < 0.1)
+                .Should().BeGreaterOrEqualTo(3);
+        }
+
+        static string RenderSideWrappedImage(WrapStyle style, bool justify = false,
+            int pageIndex = 0, double imageTop = 100, int repetitions = 35,
+            bool secondImage = false, WrapStyle? secondStyle = null)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 12;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(612);
+            section.PageSetup.PageHeight = Unit.FromPoint(792);
+            section.PageSetup.LeftMargin = Unit.FromPoint(72);
+            section.PageSetup.RightMargin = Unit.FromPoint(72);
+            section.PageSetup.TopMargin = Unit.FromPoint(72);
+            section.PageSetup.BottomMargin = Unit.FromPoint(72);
+            section.AddParagraph("Before image");
+            var image = section.AddImage(
+                "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+            image.RelativeHorizontal = RelativeHorizontal.Margin;
+            image.RelativeVertical = RelativeVertical.Margin;
+            image.Left = Unit.FromPoint(100);
+            image.Top = Unit.FromPoint(imageTop);
+            image.Width = Unit.FromPoint(120);
+            image.Height = Unit.FromPoint(90);
+            image.WrapFormat.Style = style;
+            image.WrapFormat.DistanceLeft = Unit.FromPoint(9);
+            image.WrapFormat.DistanceRight = Unit.FromPoint(9);
+            if (secondImage)
+            {
+                var nextImage = section.AddImage(
+                    "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+                nextImage.RelativeHorizontal = RelativeHorizontal.Margin;
+                nextImage.RelativeVertical = RelativeVertical.Margin;
+                nextImage.Left = Unit.FromPoint(300);
+                nextImage.Top = Unit.FromPoint(imageTop);
+                nextImage.Width = Unit.FromPoint(120);
+                nextImage.Height = Unit.FromPoint(90);
+                nextImage.WrapFormat.Style = secondStyle ?? style;
+                nextImage.WrapFormat.DistanceLeft = Unit.FromPoint(9);
+                nextImage.WrapFormat.DistanceRight = Unit.FromPoint(9);
+            }
+            var paragraph = section.AddParagraph(
+                string.Concat(Enumerable.Repeat("Words flowing around the image. ", repetitions)));
+            if (justify)
+                paragraph.Format.Alignment = ParagraphAlignment.Justify;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            return string.Concat(renderer.PdfDocument.Pages[pageIndex].Contents.Elements
+                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
+                .Select(reference => reference.Value)
+                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
+                .Where(stream => stream.Stream != null)
+                .Select(stream => Encoding.Latin1.GetString(stream.Stream!.UnfilteredValue)));
+        }
+
         [Fact]
         public void Surrogate_Pairs_Test()
         {

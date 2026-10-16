@@ -689,15 +689,18 @@ namespace MigraDoc.Rendering
 
                 if (_phase == Phase.Formatting)
                 {
-                    xPos = _formattingArea.X;
+                    xPos = _formattingArea is SideExclusionArea
+                        ? _formattingArea.GetFittingRect(_currentYPosition,
+                            _currentVerticalInfo.Height)?.X ?? _formattingArea.X
+                        : _formattingArea.X;
                     xPos += LeftIndent;
                 }
                 else //if (phase == Phase.Rendering)
                 {
                     Area contentArea = _renderInfo.LayoutInfo.ContentArea;
                     // Next lines for non-fitting lines that produce an empty fitting rect:
-                    XUnitPt rectX = contentArea.X;
-                    XUnitPt rectWidth = contentArea.Width;
+                    XUnitPt rectX = _currentLineRect?.X ?? contentArea.X;
+                    XUnitPt rectWidth = _currentLineRect?.Width ?? contentArea.Width;
 
                     switch (_paragraph.Format.Alignment)
                     {
@@ -775,6 +778,13 @@ namespace MigraDoc.Rendering
         /// <param name="lineInfo"></param>
         void RenderLine(LineInfo lineInfo)
         {
+            _currentYPosition += lineInfo.GapBefore;
+            _currentLineRect = lineInfo.FittingRect;
+            var transitions = lineInfo.SegmentTransitions;
+            _currentLineWordsWidth = transitions is { Count: > 0 }
+                ? transitions[0].WordsBefore : lineInfo.WordsWidth;
+            _currentLineBlankCount = transitions is { Count: > 0 }
+                ? transitions[0].BlanksBefore : lineInfo.BlankCount;
             _currentVerticalInfo = lineInfo.Vertical;
             _currentLeaf = lineInfo.StartIter;
             _startLeaf = lineInfo.StartIter;
@@ -789,6 +799,7 @@ namespace MigraDoc.Rendering
             _lastTab = lineInfo.LastTab;
 
             _tabIdx = 0;
+            var segmentIndex = 0;
 
             bool ready = _currentLeaf == null;
             if (_isFirstLine)
@@ -807,7 +818,32 @@ namespace MigraDoc.Rendering
 
                 // If a DocumentObjectCollection is returned as a leaf, it is obviously empty.
                 // There is no need to render an empty DocumentObjectCollection. Also, RenderElement() will throw an exception, because it doesn’t contain implementations for DocumentObjectCollections. So we better won¹t call it for them.
-                if (_currentLeaf.Current is not DocumentObjectCollection)
+                if (transitions is { Count: > 0 } && segmentIndex < transitions.Count &&
+                    transitions[segmentIndex].StartIter?.Current == _currentLeaf.Current)
+                {
+                    var transition = transitions[segmentIndex];
+                    _currentXPosition = transition.Rect.X;
+                    _currentLineRect = transition.Rect;
+                    segmentIndex++;
+                    _currentLineWordsWidth = (segmentIndex < transitions.Count
+                        ? transitions[segmentIndex].WordsBefore : lineInfo.WordsWidth) -
+                        transition.WordsBefore;
+                    _currentLineBlankCount = (segmentIndex < transitions.Count
+                        ? transitions[segmentIndex].BlanksBefore : lineInfo.BlankCount) -
+                        transition.BlanksBefore;
+                    if (_paragraph.Format.Alignment == ParagraphAlignment.Justify &&
+                        _currentLineBlankCount == 0 &&
+                        !(_isLastLine && _renderInfo.FormatInfo.IsEnding))
+                    {
+                        var freeWidth = Math.Max(0, transition.Rect.Width - RightIndent -
+                            _currentLineWordsWidth);
+                        _currentXPosition += segmentIndex == transitions.Count
+                            ? freeWidth : freeWidth / 2;
+                    }
+                    if (_currentLeaf.Current is not Text splitBlank || !IsBlank(splitBlank))
+                        RenderElement(_currentLeaf.Current);
+                }
+                else if (_currentLeaf.Current is not DocumentObjectCollection)
                     RenderElement(_currentLeaf.Current);
 
                 _currentLeaf = _currentLeaf.GetNextLeaf();
@@ -869,10 +905,12 @@ namespace MigraDoc.Rendering
                 if (_phase == Phase.Rendering &&
                   _paragraph.Format.Alignment == ParagraphAlignment.Justify && _lastTabPassed)
                 {
-                    if (_currentBlankCount >= 1 && !(_isLastLine && _renderInfo.FormatInfo.IsEnding))
+                    if (_currentLineBlankCount >= 1 && !(_isLastLine && _renderInfo.FormatInfo.IsEnding))
                     {
                         var contentArea = _renderInfo.LayoutInfo.ContentArea;
-                        XUnitPt width = contentArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height)?.Width ?? NRT.ThrowOnNull<XUnitPt>();
+                        XUnitPt width = _currentLineRect?.Width ??
+                            contentArea.GetFittingRect(_currentYPosition,
+                                _currentVerticalInfo.Height)?.Width ?? NRT.ThrowOnNull<XUnitPt>();
                         if (_lastTabPosition > 0)
                         {
                             width -= (_lastTabPosition -
@@ -882,7 +920,7 @@ namespace MigraDoc.Rendering
                             width -= LeftIndent;
 
                         width -= RightIndent;
-                        return (width - _currentWordsWidth) / (_currentBlankCount);
+                        return (width - _currentLineWordsWidth) / _currentLineBlankCount;
                     }
                 }
                 return MeasureString(" ");
@@ -1684,6 +1722,21 @@ namespace MigraDoc.Rendering
             // BottomBorderOffset contains the actual last line’s bottom border offset value only for the last paragraph’s object.
             var newVertInfo = CalcVerticalInfo(CurrentFont);
             var fittingRect = _formattingArea.GetFittingRect(_currentYPosition, newVertInfo.Height + BottomBorderOffset);
+            if (_currentSegmentIndex > 0 && _currentSecondaryRect != null)
+                fittingRect = _currentSecondaryRect;
+            if (fittingRect != null && fittingRect.Width <= 0 && _currentLineWidth == 0 &&
+                _formattingArea is SideExclusionArea exclusions)
+            {
+                if (exclusions.GetNextFreeY(_currentYPosition, newVertInfo.Height + BottomBorderOffset)
+                    is not { } nextY)
+                    return FormatResult.NewArea;
+                _currentLineGap += nextY - _currentYPosition;
+                _currentYPosition = nextY;
+                fittingRect = _formattingArea.GetFittingRect(_currentYPosition,
+                    newVertInfo.Height + BottomBorderOffset);
+                if (fittingRect != null)
+                    _currentXPosition = fittingRect.X + LeftIndent;
+            }
             if (fittingRect == null)
                 return FormatResult.NewArea;
 
@@ -1882,7 +1935,10 @@ namespace MigraDoc.Rendering
             _savedWordWidth = width;
 
             if (_currentXPosition + width > fittingRect.X + fittingRect.Width - RightIndent + Tolerance)
-                return FormatResult.NewLine;
+            {
+                if (!TryMoveToSecondary(width))
+                    return FormatResult.NewLine;
+            }
 
             _currentXPosition += width;
             // For Tabs in justified context.
@@ -1899,6 +1955,29 @@ namespace MigraDoc.Rendering
                 _currentLineWidth += width + PopSavedBlankWidth();
             _minWidth = Math.Max(_minWidth, width);
             return FormatResult.Continue;
+        }
+
+        bool TryMoveToSecondary(XUnitPt width)
+        {
+            if (_formattingArea is not SideExclusionArea exclusion)
+                return false;
+
+            var intervals = exclusion.GetIntervals(_currentYPosition, _currentVerticalInfo.Height);
+            var nextIndex = _currentSegmentIndex + 1;
+            while (nextIndex < intervals.Count &&
+                width > intervals[nextIndex].Width - RightIndent + Tolerance)
+                nextIndex++;
+            if (nextIndex >= intervals.Count)
+                return false;
+            var secondary = intervals[nextIndex];
+
+            _currentSecondaryRect = secondary;
+            _currentSegmentTransitions.Add(new LineSegmentInfo(secondary, _currentLeaf,
+                _currentWordsWidth, _currentBlankCount));
+            _savedBlankWidth = 0;
+            _currentXPosition = secondary.X;
+            _currentSegmentIndex = nextIndex;
+            return true;
         }
 
         FormatResult FormatDateField(DateField dateField, Rectangle fittingRect)
@@ -2177,7 +2256,11 @@ namespace MigraDoc.Rendering
             }
 
             if (_currentXPosition + width > fittingRect.X + fittingRect.Width - RightIndent + Tolerance)
+            {
+                if (TryMoveToSecondary(0))
+                    return FormatResult.Continue;
                 return FormatResult.NewLine;
+            }
 
             _currentXPosition += width;
             SaveBlankWidth(width);
@@ -2319,6 +2402,10 @@ namespace MigraDoc.Rendering
             //    return false;
 
             _isFirstLine = false;
+            _currentSegmentIndex = 0;
+            _currentSegmentTransitions.Clear();
+            _currentLineGap = 0;
+            _currentSecondaryRect = null;
             _currentXPosition = StartXPosition;
             _currentVerticalInfo = new VerticalLineInfo();
             _currentVerticalInfo = CalcCurrentVerticalInfo();
@@ -2348,7 +2435,12 @@ namespace MigraDoc.Rendering
 
             var lineInfo = new LineInfo
             {
-                Vertical = _currentVerticalInfo
+                Vertical = _currentVerticalInfo,
+                FittingRect = _formattingArea is SideExclusionArea
+                    ? _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height)
+                    : null,
+                SegmentTransitions = [.. _currentSegmentTransitions],
+                GapBefore = _currentLineGap
             };
 
 #if true
@@ -2795,6 +2887,13 @@ namespace MigraDoc.Rendering
         bool _isLastLine;
         VerticalLineInfo _currentVerticalInfo;
         Area _formattingArea = null!;
+        Rectangle? _currentLineRect;
+        XUnitPt _currentLineWordsWidth;
+        int _currentLineBlankCount;
+        Rectangle? _currentSecondaryRect;
+        int _currentSegmentIndex;
+        readonly List<LineSegmentInfo> _currentSegmentTransitions = [];
+        XUnitPt _currentLineGap;
         XUnitPt _currentYPosition;
         XUnitPt _currentXPosition;
         ParagraphIterator? _currentLeaf;

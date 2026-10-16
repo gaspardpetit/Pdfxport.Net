@@ -41,7 +41,13 @@ namespace MigraDoc.Rendering
         public List<TabOffset> TabOffsets;
         public bool ReMeasureLine;
         public DocumentObject? LastTab;
+        public Rectangle? FittingRect;
+        public List<LineSegmentInfo>? SegmentTransitions;
+        public XUnitPt GapBefore;
     }
+
+    readonly record struct LineSegmentInfo(Rectangle Rect, ParagraphIterator? StartIter,
+        XUnitPt WordsBefore, int BlanksBefore);
 
     /// <summary>
     /// Formatting information for a paragraph.
