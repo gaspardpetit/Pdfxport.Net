@@ -1,0 +1,27 @@
+name: Core tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Download test assets
+        shell: pwsh
+        run: ./dev/download-assets.ps1
+      - name: PDFsharp tests
+        run: dotnet test src/foundation/src/PDFsharp/tests/PdfSharp.Tests/PdfSharp.Tests.csproj -f net8.0 --verbosity quiet
+      - name: MigraDoc tests
+        run: dotnet test src/foundation/src/MigraDoc/tests/MigraDoc.Tests/MigraDoc.Tests.csproj -f net8.0 --verbosity quiet
