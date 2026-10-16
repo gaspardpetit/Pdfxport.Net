@@ -909,7 +909,11 @@ namespace MigraDoc.Rendering
                 if (_phase == Phase.Rendering &&
                   _paragraph.Format.Alignment == ParagraphAlignment.Justify && _lastTabPassed)
                 {
-                    if (_currentLineBlankCount >= 1 && !(_isLastLine && _renderInfo.FormatInfo.IsEnding))
+                    if (_currentLineBlankCount >= 1 &&
+                        (!(_isLastLine && _renderInfo.FormatInfo.IsEnding) ||
+                         _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1 &&
+                         _currentLineWidth > (_currentLineRect?.Width ??
+                             _renderInfo.LayoutInfo.ContentArea.Width) - LeftIndent - RightIndent))
                     {
                         var contentArea = _renderInfo.LayoutInfo.ContentArea;
                         XUnitPt width = _currentLineRect?.Width ??
@@ -1941,9 +1945,21 @@ namespace MigraDoc.Rendering
         {
             _savedWordWidth = width;
 
-            if (_currentXPosition + width > fittingRect.X + fittingRect.Width - RightIndent + Tolerance)
+            var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+            var overrun = _currentXPosition + width - right;
+            var shrinkFactor = _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
+            var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
+            var nextLeaf = _currentLeaf?.GetNextLeaf();
+            while (nextLeaf != null && IsBlank(nextLeaf.Current))
+                nextLeaf = nextLeaf.GetNextLeaf();
+            var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
+                _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
+                blankCount > 0 && nextLeaf == null
+                ? (1 - shrinkFactor.Value) * MeasureString(" ") * blankCount
+                : 0;
+            if (overrun > 0)
             {
-                if (!TryMoveToSecondary(width))
+                if (!TryMoveToSecondary(width) && overrun > shrinkAllowance)
                     return FormatResult.NewLine;
             }
 
