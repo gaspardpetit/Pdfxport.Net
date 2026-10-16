@@ -36,6 +36,118 @@ namespace MigraDoc.Tests
             PdfSharpCore.ResetAll();
         }
 
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void SelectedTextFrameRendersBeforePageContent(bool setSelector, bool selectFrame)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.AddParagraph("BODYMARKER");
+            var frame = section.AddTextFrame();
+            frame.RelativeVertical = MigraDoc.DocumentObjectModel.Shapes.RelativeVertical.Page;
+            frame.Top = Unit.FromPoint(72);
+            frame.Left = Unit.FromPoint(72);
+            frame.Width = Unit.FromPoint(180);
+            frame.Height = Unit.FromPoint(60);
+            frame.AddParagraph("FRAMEMARKER");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            if (setSelector)
+                renderer.DocumentRenderer.TextFrameBehindContent = candidate =>
+                    selectFrame && ReferenceEquals(candidate, frame);
+
+            renderer.RenderDocument();
+
+            renderer.PdfDocument.PageCount.Should().Be(1);
+            var content = PageContent(renderer, 0);
+            var bodyIndex = content.IndexOf("BODYMARKER", StringComparison.Ordinal);
+            var frameIndex = content.IndexOf("FRAMEMARKER", StringComparison.Ordinal);
+            bodyIndex.Should().BeGreaterThanOrEqualTo(0);
+            frameIndex.Should().BeGreaterThanOrEqualTo(0);
+            (frameIndex < bodyIndex).Should().Be(selectFrame);
+        }
+
+        [Fact]
+        public void SelectedTextFramesKeepTheirOrderBeforeUnselectedContent()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.AddParagraph("BODYMARKER");
+            var foreground = section.AddTextFrame();
+            foreground.Width = Unit.FromPoint(180);
+            foreground.Height = Unit.FromPoint(60);
+            foreground.AddParagraph("FOREGROUNDMARKER");
+            var firstBehind = section.AddTextFrame();
+            firstBehind.Width = Unit.FromPoint(180);
+            firstBehind.Height = Unit.FromPoint(60);
+            firstBehind.AddParagraph("FIRSTBEHINDMARKER");
+            var secondBehind = section.AddTextFrame();
+            secondBehind.Width = Unit.FromPoint(180);
+            secondBehind.Height = Unit.FromPoint(60);
+            secondBehind.AddParagraph("SECONDBEHINDMARKER");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.TextFrameBehindContent = candidate =>
+                ReferenceEquals(candidate, firstBehind) || ReferenceEquals(candidate, secondBehind);
+
+            renderer.RenderDocument();
+
+            renderer.PdfDocument.PageCount.Should().Be(1);
+            var content = PageContent(renderer, 0);
+            var firstIndex = content.IndexOf("FIRSTBEHINDMARKER", StringComparison.Ordinal);
+            var secondIndex = content.IndexOf("SECONDBEHINDMARKER", StringComparison.Ordinal);
+            var bodyIndex = content.IndexOf("BODYMARKER", StringComparison.Ordinal);
+            var foregroundIndex = content.IndexOf("FOREGROUNDMARKER", StringComparison.Ordinal);
+            firstIndex.Should().BeGreaterThanOrEqualTo(0);
+            secondIndex.Should().BeGreaterThan(firstIndex);
+            bodyIndex.Should().BeGreaterThan(secondIndex);
+            foregroundIndex.Should().BeGreaterThan(bodyIndex);
+        }
+
+        [Fact]
+        public void SelectedTextFrameOnSecondPageRendersAfterHeaderBeforeBody()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.Headers.Primary.AddParagraph("HEADERMARKER");
+            section.AddParagraph("FIRSTPAGEMARKER");
+            section.AddPageBreak();
+            section.AddParagraph("SECONDPAGEMARKER");
+            var frame = section.AddTextFrame();
+            frame.RelativeVertical = MigraDoc.DocumentObjectModel.Shapes.RelativeVertical.Page;
+            frame.Top = Unit.FromPoint(72);
+            frame.Left = Unit.FromPoint(72);
+            frame.Width = Unit.FromPoint(180);
+            frame.Height = Unit.FromPoint(60);
+            frame.AddParagraph("FRAMEMARKER");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.TextFrameBehindContent = candidate => ReferenceEquals(candidate, frame);
+
+            renderer.RenderDocument();
+
+            renderer.PdfDocument.PageCount.Should().Be(2);
+            var firstPage = PageContent(renderer, 0);
+            var secondPage = PageContent(renderer, 1);
+            firstPage.Should().Contain("FIRSTPAGEMARKER").And.NotContain("FRAMEMARKER");
+            var headerIndex = secondPage.IndexOf("HEADERMARKER", StringComparison.Ordinal);
+            var frameIndex = secondPage.IndexOf("FRAMEMARKER", StringComparison.Ordinal);
+            var bodyIndex = secondPage.IndexOf("SECONDPAGEMARKER", StringComparison.Ordinal);
+            headerIndex.Should().BeGreaterThanOrEqualTo(0);
+            frameIndex.Should().BeGreaterThan(headerIndex);
+            bodyIndex.Should().BeGreaterThan(frameIndex);
+        }
+
+        private static string PageContent(PdfDocumentRenderer renderer, int page)
+            => string.Concat(renderer.PdfDocument.Pages[page].Contents.Elements
+                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
+                .Select(reference => reference.Value)
+                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
+                .Where(stream => stream.Stream != null)
+                .Select(stream => Encoding.GetEncoding(28591).GetString(stream.Stream!.UnfilteredValue)));
+
         [Fact]
         public void UnderlineAcrossSmallerFormattedSpaceUsesOneStroke()
         {

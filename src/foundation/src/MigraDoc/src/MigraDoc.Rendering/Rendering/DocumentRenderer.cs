@@ -34,6 +34,12 @@ namespace MigraDoc.Rendering
         public Func<TextFrame, bool>? ClipTextFrameContent { get; set; }
 
         /// <summary>
+        /// Selects text frames to render before other page content.
+        /// Null preserves the normal rendering order.
+        /// </summary>
+        public Func<TextFrame, bool>? TextFrameBehindContent { get; set; }
+
+        /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.
         /// </summary>
@@ -118,11 +124,27 @@ namespace MigraDoc.Rendering
                 if (renderInfos != null)
                 {
                     int count = renderInfos.Length;
-                    for (int idx = 0; idx < count; idx++)
+                    if (TextFrameBehindContent is { } selectBehindContent)
                     {
-                        var renderInfo = renderInfos[idx];
-                        var renderer = Renderer.Create(gfx, this, renderInfo, fieldInfos);
-                        renderer.Render();
+                        var behindContent = new bool[count];
+                        for (int idx = 0; idx < count; idx++)
+                            behindContent[idx] = renderInfos[idx].DocumentObject is TextFrame frame &&
+                                selectBehindContent(frame);
+                        for (int idx = 0; idx < count; idx++)
+                            if (behindContent[idx])
+                                Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                        for (int idx = 0; idx < count; idx++)
+                            if (!behindContent[idx])
+                                Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                    }
+                    else
+                    {
+                        for (int idx = 0; idx < count; idx++)
+                        {
+                            var renderInfo = renderInfos[idx];
+                            var renderer = Renderer.Create(gfx, this, renderInfo, fieldInfos);
+                            renderer.Render();
+                        }
                     }
                 }
             }
