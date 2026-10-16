@@ -1011,13 +1011,15 @@ namespace MigraDoc.Rendering
             }
         }
 
-        // ReSharper disable once UnusedParameter.Local
-        void RenderImage(Image _)
+        void RenderImage(Image image)
         {
             var renderInfo = CurrentImageRenderInfo;
             XUnitPt top = CurrentBaselinePosition;
             var contentArea = renderInfo?.LayoutInfo.ContentArea ?? NRT.ThrowOnNull<Area>();
             top -= contentArea.Height;
+            if (_documentRenderer.InlineImageVerticalOffset?.Invoke(image) is double offset &&
+                !double.IsNaN(offset) && !double.IsInfinity(offset))
+                top += offset;
             RenderByInfos(_currentXPosition, top, [renderInfo]);
 
             RenderUnderline(contentArea.Width, true);
