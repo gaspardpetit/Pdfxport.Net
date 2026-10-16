@@ -1,6 +1,12 @@
 name: Publish NuGet packages
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version for a dry run, for example 0.1.0-preview.1
+        required: true
+        type: string
   release:
     types: [published]
 
@@ -24,9 +30,9 @@ jobs:
         id: version
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.version }}
         run: |
-          if ($env:RELEASE_TAG -notmatch '^v(?<version>[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)$') {
+          if ($env:RELEASE_TAG -notmatch '^v?(?<version>[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)$') {
             throw "Release tag must be a version such as v0.1.0 or v0.1.0-preview.1"
           }
           "version=$($Matches.version)" >> $env:GITHUB_OUTPUT
@@ -69,11 +75,13 @@ jobs:
           path: artifacts/packages/*.nupkg
           if-no-files-found: error
       - name: Authenticate to NuGet with Trusted Publishing
+        if: github.event_name == 'release'
         id: nuget_login
         uses: NuGet/login@v1
         with:
           user: gaspardpetit
       - name: Publish packages
+        if: github.event_name == 'release'
         shell: pwsh
         env:
           NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
