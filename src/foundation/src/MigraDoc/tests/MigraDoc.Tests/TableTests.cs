@@ -124,6 +124,55 @@ namespace MigraDoc.Tests
             PdfFileUtility.ShowDocumentIfDebugging(filename);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Render_Table_With_Vertically_Merged_Cell(bool addUnmergedColumn)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("5cm");
+            if (addUnmergedColumn)
+                table.AddColumn("5cm");
+            var firstRow = table.AddRow();
+            firstRow[0].MergeDown = 1;
+            firstRow[0].AddParagraph("Merged cell");
+            var secondRow = table.AddRow();
+            if (addUnmergedColumn)
+            {
+                firstRow[1].AddParagraph("First row");
+                secondRow[1].AddParagraph("Second row");
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+
+            if (renderer.PdfDocument.Pages.Count != 1)
+                throw new InvalidOperationException("The merged table must fit on one page.");
+        }
+
+        [Fact]
+        public void Render_Table_With_Different_Vertical_Merge_Lengths()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("5cm");
+            table.AddColumn("5cm");
+            var firstRow = table.AddRow();
+            firstRow[0].MergeDown = 2;
+            firstRow[0].AddParagraph("Long merge");
+            firstRow[1].MergeDown = 1;
+            firstRow[1].AddParagraph("Short merge");
+            table.AddRow();
+            table.AddRow()[1].AddParagraph("Third row");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+
+            if (renderer.PdfDocument.Pages.Count != 1)
+                throw new InvalidOperationException("The mixed-merge table must fit on one page.");
+        }
+
         [Fact]
         public void Create_a_table_with_cloned_rows()
         {
