@@ -9,13 +9,12 @@
         <owners>$owners$</owners>
         <projectUrl>$projectUrl$</projectUrl>
         <license type="expression">MIT</license>
-        <icon>images\PDFsharp-128x128.png</icon>
-        <readme>README.md</readme>
+                <readme>README.md</readme>
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <releaseNotes>$releaseNotes$</releaseNotes>
-        <copyright>$CopyrightPdfSharp$</copyright>
+        <copyright>Copyright (c) 2005-2026 empira Software GmbH, modifications Copyright (c) 2026 Gaspard Petit</copyright>
         <tags>$tags$</tags>
-        <repository type="git" url="https://github.com/empira/PDFsharp" branch="master" commit="" />
+        <repository type="git" url="https://github.com/gaspardpetit/Pdfxport.Net" branch="main" commit="" />
         <title>$title$</title>
         <dependencies>
             <group targetFramework="net8.0">
@@ -52,6 +51,6 @@
         <file src="bin\$config$\net10.0\**\*.*" target="lib\net10.0\" exclude="**\*NuGet*"/>
         <file src="bin\$config$\netstandard2.0\**\PDFsharp*.*" target="lib\netstandard2.0\" exclude="**\*NuGet*"/>
         <file src="README.md" />
-        <file src="..\..\..\..\..\assets\pdfsharp\images\PDFsharp-128x128.png" target="images\" />
+        <file src="..\..\..\..\..\LICENSE" />
     </files>
 </package>

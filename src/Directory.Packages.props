@@ -4,7 +4,7 @@
     <Json_PackageVersion>10.0.5</Json_PackageVersion> <!-- Cleanup forms separation: Move with forms. -->
     <Logging_Abstractions_PackageVersion>10.0.5</Logging_Abstractions_PackageVersion>
     <Logging_PackageVersion>10.0.5</Logging_PackageVersion>
-    <Cryptography_PackageVersion>10.0.5</Cryptography_PackageVersion>
+    <Cryptography_PackageVersion>10.0.13</Cryptography_PackageVersion>
   </PropertyGroup>
   <ItemGroup>
     <!-- Logging packages used by all PDFsharp projects -->

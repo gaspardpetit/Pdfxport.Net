@@ -1,0 +1,3 @@
+An MIT-licensed fork of PDFsharp for creating and processing PDF files.
+
+Independent MIT-licensed fork based on PDFsharp and MigraDoc 7.0.0 Preview 1. Source: https://github.com/gaspardpetit/Pdfxport.Net

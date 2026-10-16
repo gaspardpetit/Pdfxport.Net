@@ -9,6 +9,19 @@ may still refer to upstream PDFsharp.
 
 The source in this repository is distributed under the [MIT License](LICENSE).
 
+## NuGet packages
+
+The cross-platform packages are `Pdfxport.Net` (PDFsharp) and
+`Pdfxport.Net.MigraDoc` (MigraDoc layout). Their assemblies retain the
+`PdfSharp` and `MigraDoc` namespaces for compatibility. The package
+projects and release workflow live in this repository; packages are
+published from a GitHub release tagged `vX.Y.Z` or `vX.Y.Z-suffix`.
+
+Publishing uses NuGet Trusted Publishing. In the `gaspardpetit` account on
+nuget.org, configure a GitHub trusted publishing policy for repository
+`Pdfxport.Net` and workflow file `publish-packages.yml` before the first
+release. The workflow builds and tests both packages before publishing them.
+
 ## Inherited PDFsharp documentation
 
 # PDFsharp & MigraDoc 7

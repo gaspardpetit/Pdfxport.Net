@@ -1,0 +1,1 @@
+See the release notes at https://github.com/gaspardpetit/Pdfxport.Net/releases.

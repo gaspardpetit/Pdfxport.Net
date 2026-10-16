@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.0.11205.157
@@ -212,7 +212,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MigraDoc.RtfRendering-wpf",
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MigraDoc.RtfRendering-gdi", "src\foundation\src\MigraDoc\src\MigraDoc.RtfRendering-gdi\MigraDoc.RtfRendering-gdi.csproj", "{20DEA7D4-1F92-4DEB-9841-3CF9FC6CFC5F}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PDFsharp.NuGet", "src\foundation\nuget\src\PDFsharp.NuGet\PDFsharp.NuGet.csproj", "{A98A1979-883D-463F-9461-FAFFCA97B48A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Pdfxport.Net.NuGet", "src\foundation\nuget\src\Pdfxport.Net.NuGet\Pdfxport.Net.NuGet.csproj", "{A98A1979-883D-463F-9461-FAFFCA97B48A}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dummy-PDFsharp.NuGet-wpf", "src\foundation\nuget\src\Dummy-PDFsharp.NuGet-wpf\Dummy-PDFsharp.NuGet-wpf.csproj", "{38E7DA8B-3016-49FA-8FDA-FE4CE347E40E}"
 EndProject
@@ -220,7 +220,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PDFsharp.NuGet-gdi", "src\f
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MigraDoc.NuGet-wpf", "src\foundation\nuget\src\MigraDoc.NuGet-wpf\MigraDoc.NuGet-wpf.csproj", "{1C25A0CD-7A57-434F-8B0C-06F4B2D25CBC}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MigraDoc.NuGet", "src\foundation\nuget\src\MigraDoc.NuGet\MigraDoc.NuGet.csproj", "{BEC08304-9DA2-44FC-BBC3-F432A48CE83C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Pdfxport.Net.MigraDoc.NuGet", "src\foundation\nuget\src\Pdfxport.Net.MigraDoc.NuGet\Pdfxport.Net.MigraDoc.NuGet.csproj", "{BEC08304-9DA2-44FC-BBC3-F432A48CE83C}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MigraDoc.NuGet-gdi", "src\foundation\nuget\src\MigraDoc.NuGet-gdi\MigraDoc.NuGet-gdi.csproj", "{C550C547-CC8A-471A-925F-DF1CD3FA6F50}"
 EndProject
