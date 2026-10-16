@@ -1,4 +1,4 @@
-# Pdxport.Net
+# Pdfxport.Net
 
 Pdfxport.Net is an independent fork of PDFsharp and MigraDoc, based on the
 MIT-licensed 7.0.0 Preview 1 line before the upstream project changed to
