@@ -112,6 +112,7 @@ namespace MigraDoc.RtfRendering
             _enumTranslationTable.Add(BorderStyle.DashLargeGap, "dash");
             _enumTranslationTable.Add(BorderStyle.DashSmallGap, "dashsm");
             _enumTranslationTable.Add(BorderStyle.Dot, "dot");
+            _enumTranslationTable.Add(BorderStyle.Double, "db");
             _enumTranslationTable.Add(BorderStyle.Single, "s");
             //BorderType.None simply not rendered.
 

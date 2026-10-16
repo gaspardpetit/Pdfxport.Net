@@ -43,8 +43,9 @@ namespace MigraDoc.DocumentObjectModel
         /// </summary>
         DashDotDot,
 
+        Double,
+
         /* --- unsupported ---
-          Double                = 7,
           Triple                = 8,
           ThinThickSmallGap     = 9,
           ThickThinSmallGap     = 10,
