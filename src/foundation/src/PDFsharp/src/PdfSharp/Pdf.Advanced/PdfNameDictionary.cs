@@ -60,7 +60,8 @@ namespace PdfSharp.Pdf.Advanced
 
 #if true
             PdfArray destination = new PdfArray(Owner,
-                new PdfLiteral("{0} 0 R {1}", dest.ObjectNumber, parameters));
+                dest.Reference ?? throw TH.InvalidOperationException_ReferenceMustNotBeNull(),
+                new PdfLiteral(parameters.ToString()));
             _dests.AddName(destinationName, destination);
 #else
 // Insert reference to destination dictionary instead of inserting the destination array directly.
