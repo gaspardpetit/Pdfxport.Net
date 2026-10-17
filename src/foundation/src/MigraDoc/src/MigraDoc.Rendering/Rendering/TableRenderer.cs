@@ -883,14 +883,16 @@ namespace MigraDoc.Rendering
             var resultRowIndex = row;
             var resultRow = _table.Rows[resultRowIndex];
             int clsCount = _table.Columns.Count;
+            Cell? closestCell = null;
             for (int idx = 0; idx < clsCount; idx++)
             {
                 var cell = resultRow[idx];
+                if (!_mergedCells.Contains(cell))
+                    continue;
+                if (closestCell == null || cell.MergeDown < closestCell.MergeDown)
+                    closestCell = cell;
                 if (resultRowIndex + cell.MergeDown == row)
                 {
-                    // We need a result that is in _mergedCells.
-                    if (!_mergedCells.Contains(cell))
-                        continue;
 #if DEBUG
                     // Does it matter which cell we return??? 2023-03-08 Yes, we need a result that is in _mergedCells.
                     Debug.Assert(originalResult == cell);
@@ -901,6 +903,13 @@ namespace MigraDoc.Rendering
 #endif
                     return cell;
                 }
+            }
+            if (closestCell != null)
+            {
+#if DEBUG
+                Debug.Assert(originalResult == closestCell);
+#endif
+                return closestCell;
             }
             throw new InvalidOperationException("GetMinMergedCell: Unexpected problem #1");
         }
