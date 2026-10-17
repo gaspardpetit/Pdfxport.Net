@@ -24,6 +24,42 @@ namespace MigraDoc.Tests
     public class TextTests : IDisposable
     {
         [Fact]
+        public void TextFrameLayersSurviveDdlAndControlPagePaintOrder()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.AddParagraph("BODYMARKER");
+            TextFrame AddFrame(string marker, TextFrameLayer layer)
+            {
+                var frame = section.AddTextFrame();
+                frame.Width = Unit.FromPoint(180);
+                frame.Height = Unit.FromPoint(60);
+                frame.Layer = layer;
+                frame.AddParagraph(marker);
+                return frame;
+            }
+
+            var behind = AddFrame("BEHINDMARKER", TextFrameLayer.BehindContent);
+            AddFrame("NORMALMARKER", TextFrameLayer.Normal);
+            behind.Clone().Layer.Should().Be(TextFrameLayer.BehindContent);
+
+            var ddl = MigraDoc.DocumentObjectModel.IO.DdlWriter.WriteToString(document);
+            var restored = MigraDoc.DocumentObjectModel.IO.DdlReader.DocumentFromString(ddl);
+            restored.Sections[0].Elements.OfType<TextFrame>().Select(frame => frame.Layer)
+                .Should().Equal(TextFrameLayer.BehindContent, TextFrameLayer.Normal);
+
+            var renderer = new PdfDocumentRenderer { Document = restored };
+            renderer.DocumentRenderer.TextFrameBehindContent = _ => true;
+            renderer.RenderDocument();
+            var content = PageContent(renderer, 0);
+            content.IndexOf("BEHINDMARKER", StringComparison.Ordinal)
+                .Should().BeLessThan(content.IndexOf("BODYMARKER", StringComparison.Ordinal));
+            content.IndexOf("BODYMARKER", StringComparison.Ordinal)
+                .Should().BeLessThan(content.IndexOf("NORMALMARKER", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public void TextFrameRotationSurvivesCloneAndDdl()
         {
             var document = new Document();

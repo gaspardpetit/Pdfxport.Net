@@ -34,8 +34,8 @@ namespace MigraDoc.Rendering
         public Func<TextFrame, bool>? ClipTextFrameContent { get; set; }
 
         /// <summary>
-        /// Selects text frames to render before other page content.
-        /// Null preserves the normal rendering order.
+        /// Selects text frames to render before other page content when
+        /// <see cref="TextFrame.Layer"/> has not been set.
         /// </summary>
         public Func<TextFrame, bool>? TextFrameBehindContent { get; set; }
         /// <summary>
@@ -123,17 +123,23 @@ namespace MigraDoc.Rendering
                 if (renderInfos != null)
                 {
                     int count = renderInfos.Length;
-                    if (TextFrameBehindContent is { } selectBehindContent)
+                    if (renderInfos.Any(info => info.DocumentObject is TextFrame frame &&
+                            frame.Values.Layer is not null) || TextFrameBehindContent is not null)
                     {
-                        var behindContent = new bool[count];
+                        var layers = new TextFrameLayer[count];
                         for (int idx = 0; idx < count; idx++)
-                            behindContent[idx] = renderInfos[idx].DocumentObject is TextFrame frame &&
-                                selectBehindContent(frame);
+                        {
+                            if (renderInfos[idx].DocumentObject is TextFrame frame)
+                                layers[idx] = frame.Values.Layer ??
+                                    (TextFrameBehindContent?.Invoke(frame) == true
+                                        ? TextFrameLayer.BehindContent
+                                        : TextFrameLayer.Normal);
+                        }
                         for (int idx = 0; idx < count; idx++)
-                            if (behindContent[idx])
+                            if (layers[idx] == TextFrameLayer.BehindContent)
                                 Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
                         for (int idx = 0; idx < count; idx++)
-                            if (!behindContent[idx])
+                            if (layers[idx] == TextFrameLayer.Normal)
                                 Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
                     }
                     else
