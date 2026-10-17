@@ -75,7 +75,9 @@ namespace MigraDoc.Rendering
             if (renderInfos == null)
                 return;
 
-            if (_documentRenderer.ClipTextFrameContent?.Invoke(_textFrame) == true)
+            var clipContent = _textFrame.Values.ClipContent ??
+                _documentRenderer.ClipTextFrameContent?.Invoke(_textFrame) ?? false;
+            if (clipContent)
             {
                 var clipState = _gfx.Save();
                 try

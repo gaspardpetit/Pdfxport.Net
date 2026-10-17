@@ -192,6 +192,16 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Gets or sets whether content that extends beyond the frame rectangle is clipped.
+        /// The frame fill and border are unaffected.
+        /// </summary>
+        public bool ClipContent
+        {
+            get => Values.ClipContent ?? false;
+            set => Values.ClipContent = value;
+        }
+
+        /// <summary>
         /// The document elements that build the text frame’s content.
         /// </summary>
         public DocumentElements Elements
@@ -241,6 +251,8 @@ namespace MigraDoc.DocumentObjectModel.Shapes
                 serializer.WriteSimpleAttribute("Rotation", Rotation);
             if (Values.Layer is not null)
                 serializer.WriteSimpleAttribute("Layer", Layer);
+            if (Values.ClipContent is not null)
+                serializer.WriteSimpleAttribute("ClipContent", ClipContent);
             serializer.EndAttributes(pos);
 
             serializer.BeginContent();
@@ -307,6 +319,11 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             /// Gets or sets the frame's paint order relative to page content.
             /// </summary>
             public TextFrameLayer? Layer { get; set; }
+
+            /// <summary>
+            /// Gets or sets whether the frame content is clipped.
+            /// </summary>
+            public bool? ClipContent { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
