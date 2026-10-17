@@ -40,9 +40,32 @@ namespace MigraDoc.Rendering
 
         internal override void Render()
         {
-            RenderFilling();
-            RenderContent();
-            RenderLine();
+            var angle = _textFrame.Rotation;
+            if (angle == 0)
+            {
+                RenderFilling();
+                RenderContent();
+                RenderLine();
+                return;
+            }
+
+            var area = _renderInfo.LayoutInfo.ContentArea;
+            var centerX = area.X + area.Width / 2;
+            var centerY = area.Y + area.Height / 2;
+            var state = _gfx.Save();
+            try
+            {
+                _gfx.TranslateTransform(centerX, centerY);
+                _gfx.RotateTransform(angle);
+                _gfx.TranslateTransform(-centerX, -centerY);
+                RenderFilling();
+                RenderContent();
+                RenderLine();
+            }
+            finally
+            {
+                _gfx.Restore(state);
+            }
         }
 
         void RenderContent()

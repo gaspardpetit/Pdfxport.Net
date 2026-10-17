@@ -23,6 +23,60 @@ namespace MigraDoc.Tests
     [Collection("PDFsharp")]
     public class TextTests : IDisposable
     {
+        [Fact]
+        public void TextFrameRotationSurvivesCloneAndDdl()
+        {
+            var document = new Document();
+            var frame = document.AddSection().AddTextFrame();
+            frame.Rotation = 30;
+
+            frame.Clone().Rotation.Should().Be(30);
+            var ddl = MigraDoc.DocumentObjectModel.IO.DdlWriter.WriteToString(document);
+            var restored = MigraDoc.DocumentObjectModel.IO.DdlReader.DocumentFromString(ddl);
+            restored.Sections[0].Elements.OfType<TextFrame>().Single().Rotation.Should().Be(30);
+        }
+
+        [Fact]
+        public void TextFrameRotationTransformsCompleteFrame()
+        {
+            string RenderContent(double? angle)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var section = document.AddSection();
+                var frame = section.AddTextFrame();
+                frame.Width = Unit.FromPoint(100);
+                frame.Height = Unit.FromPoint(50);
+                frame.Rotation = angle ?? 0;
+                frame.RelativeVertical = MigraDoc.DocumentObjectModel.Shapes.RelativeVertical.Page;
+                frame.Left = Unit.FromPoint(100);
+                frame.Top = Unit.FromPoint(100);
+                frame.FillFormat.Visible = true;
+                frame.FillFormat.Color = Colors.Yellow;
+                frame.LineFormat.Visible = true;
+                frame.AddParagraph("Rotated frame");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.PdfDocument.Options.CompressContentStreams = false;
+                renderer.RenderDocument();
+                var content = renderer.PdfDocument.Pages[0].Contents.CreateSingleContent();
+                return Encoding.ASCII.GetString(content.Stream?.Value ?? throw new InvalidOperationException());
+            }
+
+            var rotated = RenderContent(30);
+            var unrotated = RenderContent(null);
+            var rotation = rotated.IndexOf(".8660254 -.5 .5 .8660254", StringComparison.Ordinal);
+            rotation.Should().BeGreaterThanOrEqualTo(0);
+            var fill = rotated.IndexOf("\nf\n", rotation, StringComparison.Ordinal);
+            fill.Should().BeGreaterThan(rotation);
+            var text = rotated.IndexOf("(Rotated) Tj", fill, StringComparison.Ordinal);
+            text.Should().BeGreaterThan(fill);
+            var border = rotated.IndexOf("\nS\n", text, StringComparison.Ordinal);
+            border.Should().BeGreaterThan(text);
+            var restore = rotated.IndexOf("\nQ\n", border, StringComparison.Ordinal);
+            restore.Should().BeGreaterThan(border);
+            unrotated.Should().NotContain(".8660254 -.5 .5 .8660254");
+        }
+
         public TextTests()
         {
             PdfSharpCore.ResetAll();

@@ -38,7 +38,6 @@ namespace MigraDoc.Rendering
         /// Null preserves the normal rendering order.
         /// </summary>
         public Func<TextFrame, bool>? TextFrameBehindContent { get; set; }
-
         /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.
