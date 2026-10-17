@@ -15,7 +15,7 @@ namespace PdfSharp.Tests.Fonts
             // This small generated font has only .notdef and space, both without outlines.
             var path = Path.Combine(AppContext.BaseDirectory, "Fonts", "Fixtures", "BlankGlyphFont.ttf");
             var source = OpenTypeFontSource.GetOrCreateFrom(File.ReadAllBytes(path));
-            var face = OpenTypeFontFace.GetOrCreateFrom(source);
+            var face = source.OTFontFace ?? OpenTypeFontFace.GetOrCreateFrom(source);
             face.SetFontEmbedding(OpenTypeFontEmbedding.TryComputeSubset);
             face.glyf.GetGlyphSize(0).Should().Be(0);
             face.glyf.GetGlyphSize(1).Should().Be(0);
