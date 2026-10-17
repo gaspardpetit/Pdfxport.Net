@@ -67,11 +67,6 @@ namespace MigraDoc.Rendering
         public Func<Shape, double, double, double?>? WrapLineFitHeight { get; set; }
 
         /// <summary>
-        /// Selects positioned TopBottom shapes whose band excludes following page text.
-        /// </summary>
-        public Func<Shape, bool>? TopBottomExclusion { get; set; }
-
-        /// <summary>
         /// Gets the minimum fraction of normal space width allowed when fitting
         /// the final word of a justified paragraph. Null or values outside 0 to 1
         /// disable contraction for that paragraph.

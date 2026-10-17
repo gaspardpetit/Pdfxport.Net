@@ -209,7 +209,7 @@ namespace MigraDoc.Rendering
                 shape.WrapFormat.Style is not (WrapStyle.Left or WrapStyle.Right or
                     WrapStyle.Largest or WrapStyle.BothSides) &&
                 (shape.WrapFormat.Style != WrapStyle.TopBottom ||
-                    _documentRenderer.TopBottomExclusion?.Invoke(shape) != true))
+                    !shape.WrapFormat.ExcludeFollowingText))
                 return area;
 
             var content = layoutInfo.ContentArea;
