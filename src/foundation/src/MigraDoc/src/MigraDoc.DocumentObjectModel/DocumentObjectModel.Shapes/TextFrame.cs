@@ -168,6 +168,18 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Gets or sets the clockwise rotation of the complete frame in degrees around its center.
+        /// This is independent of the orientation of the text inside the frame.
+        /// </summary>
+        public double Rotation
+        {
+            get => Values.Rotation ?? 0;
+            set => Values.Rotation = !double.IsNaN(value) && !double.IsInfinity(value)
+                ? value
+                : throw new ArgumentOutOfRangeException(nameof(value));
+        }
+
+        /// <summary>
         /// The document elements that build the text frame’s content.
         /// </summary>
         public DocumentElements Elements
@@ -213,6 +225,8 @@ namespace MigraDoc.DocumentObjectModel.Shapes
                 serializer.WriteSimpleAttribute("MarginBottom", MarginBottom);
             if (Values.Orientation is not null)
                 serializer.WriteSimpleAttribute("Orientation", Orientation);
+            if (Values.Rotation is not null)
+                serializer.WriteSimpleAttribute("Rotation", Rotation);
             serializer.EndAttributes(pos);
 
             serializer.BeginContent();
@@ -269,6 +283,11 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public TextOrientation? Orientation { get; set; }
+
+            /// <summary>
+            /// Gets or sets the rotation of the complete frame in degrees.
+            /// </summary>
+            public double? Rotation { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.

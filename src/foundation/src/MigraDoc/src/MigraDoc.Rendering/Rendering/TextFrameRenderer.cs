@@ -40,8 +40,8 @@ namespace MigraDoc.Rendering
 
         internal override void Render()
         {
-            var rotation = _documentRenderer.TextFrameRotation?.Invoke(_textFrame);
-            if (rotation is not { } angle || angle == 0)
+            var angle = _textFrame.Rotation;
+            if (angle == 0)
             {
                 RenderFilling();
                 RenderContent();

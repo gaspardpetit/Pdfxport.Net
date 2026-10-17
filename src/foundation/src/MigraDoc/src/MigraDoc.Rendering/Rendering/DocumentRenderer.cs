@@ -39,11 +39,6 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Func<TextFrame, bool>? TextFrameBehindContent { get; set; }
         /// <summary>
-        /// Returns the angle in degrees to rotate a text frame around its center, or null to leave it unrotated.
-        /// </summary>
-        public Func<TextFrame, double?>? TextFrameRotation { get; set; }
-
-        /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.
         /// </summary>

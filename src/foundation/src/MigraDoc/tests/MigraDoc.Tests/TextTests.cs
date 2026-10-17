@@ -24,6 +24,19 @@ namespace MigraDoc.Tests
     public class TextTests : IDisposable
     {
         [Fact]
+        public void TextFrameRotationSurvivesCloneAndDdl()
+        {
+            var document = new Document();
+            var frame = document.AddSection().AddTextFrame();
+            frame.Rotation = 30;
+
+            frame.Clone().Rotation.Should().Be(30);
+            var ddl = MigraDoc.DocumentObjectModel.IO.DdlWriter.WriteToString(document);
+            var restored = MigraDoc.DocumentObjectModel.IO.DdlReader.DocumentFromString(ddl);
+            restored.Sections[0].Elements.OfType<TextFrame>().Single().Rotation.Should().Be(30);
+        }
+
+        [Fact]
         public void TextFrameRotationTransformsCompleteFrame()
         {
             string RenderContent(double? angle)
@@ -34,6 +47,7 @@ namespace MigraDoc.Tests
                 var frame = section.AddTextFrame();
                 frame.Width = Unit.FromPoint(100);
                 frame.Height = Unit.FromPoint(50);
+                frame.Rotation = angle ?? 0;
                 frame.RelativeVertical = MigraDoc.DocumentObjectModel.Shapes.RelativeVertical.Page;
                 frame.Left = Unit.FromPoint(100);
                 frame.Top = Unit.FromPoint(100);
@@ -43,7 +57,6 @@ namespace MigraDoc.Tests
                 frame.AddParagraph("Rotated frame");
                 var renderer = new PdfDocumentRenderer { Document = document };
                 renderer.PdfDocument.Options.CompressContentStreams = false;
-                renderer.DocumentRenderer.TextFrameRotation = textFrame => textFrame == frame ? angle : null;
                 renderer.RenderDocument();
                 var content = renderer.PdfDocument.Pages[0].Contents.CreateSingleContent();
                 return Encoding.ASCII.GetString(content.Stream?.Value ?? throw new InvalidOperationException());
