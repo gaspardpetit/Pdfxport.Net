@@ -2510,6 +2510,9 @@ namespace MigraDoc.Rendering
                 // ...set lineHeight to the maximum multiplied singleLineSpace value. This way the space resulting from the difference
                 // between original and multiplied singleLineSpace value will be located at the bottom of the text line.
                 lineHeight = singleLineSpace * factor;
+                if (imageRenderInfo != null)
+                    lineHeight -= Math.Max(0, imageRenderInfo.LayoutInfo.ContentArea.Height - FontHandler.GetAscent(font)) *
+                                  (factor - 1);
                 lineHeight = Math.Max(lineHeight, _currentVerticalInfo.Height);
             }
 
