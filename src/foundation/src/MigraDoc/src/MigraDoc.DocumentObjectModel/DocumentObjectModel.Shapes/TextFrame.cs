@@ -180,6 +180,18 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Gets or sets the frame's paint order relative to other page content.
+        /// Headers and footers are rendered separately before page content.
+        /// </summary>
+        public TextFrameLayer Layer
+        {
+            get => Values.Layer ?? TextFrameLayer.Normal;
+            set => Values.Layer = value is TextFrameLayer.Normal or TextFrameLayer.BehindContent
+                ? value
+                : throw new ArgumentOutOfRangeException(nameof(value));
+        }
+
+        /// <summary>
         /// The document elements that build the text frame’s content.
         /// </summary>
         public DocumentElements Elements
@@ -227,6 +239,8 @@ namespace MigraDoc.DocumentObjectModel.Shapes
                 serializer.WriteSimpleAttribute("Orientation", Orientation);
             if (Values.Rotation is not null)
                 serializer.WriteSimpleAttribute("Rotation", Rotation);
+            if (Values.Layer is not null)
+                serializer.WriteSimpleAttribute("Layer", Layer);
             serializer.EndAttributes(pos);
 
             serializer.BeginContent();
@@ -288,6 +302,11 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             /// Gets or sets the rotation of the complete frame in degrees.
             /// </summary>
             public double? Rotation { get; set; }
+
+            /// <summary>
+            /// Gets or sets the frame's paint order relative to page content.
+            /// </summary>
+            public TextFrameLayer? Layer { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
