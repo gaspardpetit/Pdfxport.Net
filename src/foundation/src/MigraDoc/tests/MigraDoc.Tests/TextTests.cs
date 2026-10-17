@@ -37,6 +37,32 @@ namespace MigraDoc.Tests
         }
 
         [Theory]
+        [InlineData(double.PositiveInfinity)]
+        [InlineData(double.NaN)]
+        public void UnusableDefaultTabStopUsesTheNormalInterval(double interval)
+        {
+            string Render(double? configuredInterval)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                if (configuredInterval is double value)
+                    document.DefaultTabStop = Unit.FromPoint(value);
+                var paragraph = document.AddSection().AddParagraph("Before");
+                paragraph.AddCharacter(SymbolName.Tab);
+                paragraph.AddText("After");
+
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.RenderDocument();
+                var content = (PdfSharp.Pdf.Advanced.PdfContent)
+                    ((PdfSharp.Pdf.Advanced.PdfReference)renderer.PdfDocument.Pages[0]
+                        .Contents.Elements[0]).Value;
+                return Encoding.Latin1.GetString(content.Stream!.Value);
+            }
+
+            Render(interval).Should().Be(Render(null));
+        }
+
+        [Theory]
         [InlineData(false, false)]
         [InlineData(true, false)]
         [InlineData(true, true)]
