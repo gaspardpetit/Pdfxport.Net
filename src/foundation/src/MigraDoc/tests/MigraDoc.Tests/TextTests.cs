@@ -732,5 +732,34 @@ namespace MigraDoc.Tests
                 .Should().BeGreaterThan(0);
             Regex.IsMatch(clipped, @"W\* n(?s:.*?)Q(?s:.*?)re\s+S").Should().BeTrue();
         }
+
+        [Fact]
+        public void TextFrameClipContentSurvivesDdlAndOverridesLegacySelector()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var frame = document.AddSection().AddTextFrame();
+            frame.Width = Unit.FromPoint(120);
+            frame.Height = Unit.FromPoint(45);
+            frame.AddParagraph("Clipped text");
+            frame.ClipContent = true;
+
+            frame.Clone().ClipContent.Should().BeTrue();
+            var ddl = MigraDoc.DocumentObjectModel.IO.DdlWriter.WriteToString(document);
+            var restored = MigraDoc.DocumentObjectModel.IO.DdlReader.DocumentFromString(ddl);
+            var restoredFrame = restored.Sections[0].Elements.OfType<TextFrame>().Single();
+            restoredFrame.ClipContent.Should().BeTrue();
+
+            var renderer = new PdfDocumentRenderer { Document = restored };
+            renderer.DocumentRenderer.ClipTextFrameContent = _ => false;
+            renderer.RenderDocument();
+            var content = string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
+                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
+                .Select(reference => reference.Value)
+                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
+                .Where(stream => stream.Stream != null)
+                .Select(stream => Encoding.Latin1.GetString(stream.Stream!.UnfilteredValue)));
+            content.Should().Contain("W* n");
+        }
     }
 }

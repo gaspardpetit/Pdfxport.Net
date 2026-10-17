@@ -29,7 +29,8 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
-        /// Selects text frames whose content is clipped to the frame rectangle.
+        /// Selects text frames whose content is clipped to the frame rectangle when
+        /// <see cref="TextFrame.ClipContent"/> has not been set.
         /// </summary>
         public Func<TextFrame, bool>? ClipTextFrameContent { get; set; }
 
