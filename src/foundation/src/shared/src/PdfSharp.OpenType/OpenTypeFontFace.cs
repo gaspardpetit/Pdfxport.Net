@@ -456,7 +456,8 @@ namespace PdfSharp.Internal.OpenType
             int size = 0;
             for (int idx = 0; idx < glyphCount; idx++)
                 size += glyf.GetGlyphSize(glyphArray[idx]);
-            glyfNew.DirectoryEntry.Length = size;
+            // Some readers treat a zero-length glyf table as missing, even when all glyphs are blank.
+            glyfNew.DirectoryEntry.Length = Math.Max(size, 1);
 
             // Create new loca table.
             int numGlyphs = maxp!.numGlyphs;

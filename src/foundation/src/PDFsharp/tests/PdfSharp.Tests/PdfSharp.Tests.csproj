@@ -58,4 +58,8 @@
     <Folder Include="Pdf\acroforms\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Fonts\Fixtures\BlankGlyphFont.ttf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
