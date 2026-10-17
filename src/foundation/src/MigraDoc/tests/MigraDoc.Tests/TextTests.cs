@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.Fields;
+using MigraDoc.DocumentObjectModel.Shapes;
 using MigraDoc.Rendering;
 using MigraDoc.RtfRendering;
 using PdfSharp.Diagnostics;
@@ -486,6 +487,48 @@ namespace MigraDoc.Tests
             pdfRenderer.PdfDocument.Save(filename);
             //// … and start a viewer.
             //Process.Sta/rt(new ProcessStartInfo(filename) { UseShellExecute = true });
+        }
+
+        [Theory]
+        [InlineData(TextOrientation.Horizontal)]
+        [InlineData(TextOrientation.Downward)]
+        [InlineData(TextOrientation.Upward)]
+        public void SelectedTextFrameClipsContentWithoutChangingTheFrame(TextOrientation orientation)
+        {
+            string Render(bool? clip)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var frame = document.AddSection().AddTextFrame();
+                frame.Width = Unit.FromPoint(120);
+                frame.Height = Unit.FromPoint(45);
+                frame.Orientation = orientation;
+                frame.LineFormat.Visible = true;
+                frame.AddParagraph("Text that continues beyond the fixed frame height " +
+                    "and should only be clipped when selected.");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (clip is bool selected)
+                    renderer.DocumentRenderer.ClipTextFrameContent = candidate => selected && ReferenceEquals(candidate, frame);
+                renderer.RenderDocument();
+                renderer.PdfDocument.PageCount.Should().Be(1);
+                return string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
+                    .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
+                    .Select(reference => reference.Value)
+                    .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
+                    .Where(stream => stream.Stream != null)
+                    .Select(stream => Encoding.Latin1.GetString(stream.Stream!.UnfilteredValue)));
+            }
+
+            var normal = Render(null);
+            var unselected = Render(false);
+            var clipped = Render(true);
+            unselected.Should().Be(normal);
+            normal.Should().NotContain("W* n");
+            clipped.Should().Contain("W* n");
+            clipped.Should().Contain("(Text) Tj");
+            Regex.Matches(clipped, @"(?m)^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re$").Count
+                .Should().BeGreaterThan(0);
+            Regex.IsMatch(clipped, @"W\* n(?s:.*?)Q(?s:.*?)re\s+S").Should().BeTrue();
         }
     }
 }

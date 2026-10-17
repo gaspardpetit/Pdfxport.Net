@@ -52,6 +52,27 @@ namespace MigraDoc.Rendering
             if (renderInfos == null)
                 return;
 
+            if (_documentRenderer.ClipTextFrameContent?.Invoke(_textFrame) == true)
+            {
+                var clipState = _gfx.Save();
+                try
+                {
+                    var area = _renderInfo.LayoutInfo.ContentArea;
+                    _gfx.IntersectClip(new XRect(area.X.Point, area.Y.Point, area.Width.Point, area.Height.Point));
+                    RenderFrameContent(renderInfos);
+                }
+                finally
+                {
+                    _gfx.Restore(clipState);
+                }
+                return;
+            }
+
+            RenderFrameContent(renderInfos);
+        }
+
+        void RenderFrameContent(RenderInfo[] renderInfos)
+        {
             XGraphicsState state = Transform();
             RenderByInfos(renderInfos);
             ResetTransform(state);
