@@ -30,11 +30,42 @@ namespace MigraDoc.Rendering
 
         internal override void Format(Area area, FormatInfo? previousFormatInfo)
         {
-            FormattedTextFrame formattedTextFrame = new FormattedTextFrame(_textFrame, _documentRenderer, _fieldInfos);
-            formattedTextFrame.Format(_gfx);
-            ((TextFrameFormatInfo)_renderInfo.FormatInfo).FormattedTextFrame = formattedTextFrame;
+            var paginate = _textFrame.PaginateContent;
+            var previousFrame = paginate ? previousFormatInfo as TextFrameFormatInfo : null;
+            var formattedTextFrame = previousFrame?.FormattedTextFrame;
+            var fragmentIndex = previousFrame == null ? 0 : previousFrame.FragmentIndex + 1;
+            if (formattedTextFrame == null)
+            {
+                XUnitPt? firstHeight = null;
+                XUnitPt? continuationHeight = null;
+                if (paginate)
+                {
+                    firstHeight = XUnitPt.FromPoint(Math.Max(1, MaxElementHeight.Point - _textFrame.Top.Position.Point));
+                    continuationHeight = MaxElementHeight;
+                }
+                formattedTextFrame = new FormattedTextFrame(_textFrame, _documentRenderer, _fieldInfos,
+                    firstHeight, continuationHeight);
+                formattedTextFrame.Format(_gfx);
+            }
+            var frameInfo = (TextFrameFormatInfo)_renderInfo.FormatInfo;
+            frameInfo.FormattedTextFrame = formattedTextFrame;
+            if (paginate && _textFrame.Height.IsEmpty)
+                _contentHeight = formattedTextFrame.GetAreaContentHeight(fragmentIndex) + _textFrame.MarginTop.Point +
+                    _textFrame.MarginBottom.Point;
             base.Format(area, previousFormatInfo);
+            if (paginate)
+            {
+                frameInfo.FragmentIndex = fragmentIndex;
+                frameInfo.FragmentCount = formattedTextFrame.AreaCount;
+                _renderInfo.LayoutInfo.KeepTogether = false;
+                if (fragmentIndex > 0)
+                    _renderInfo.LayoutInfo.Top = 0;
+            }
         }
+
+        protected override XUnitPt ShapeHeight => _contentHeight is { } contentHeight
+            ? contentHeight + _lineFormatRenderer.GetWidth()
+            : base.ShapeHeight;
 
         //internal override LayoutInfo InitialLayoutInfo => base.InitialLayoutInfo;  // redundant 
 
@@ -71,7 +102,10 @@ namespace MigraDoc.Rendering
         void RenderContent()
         {
             FormattedTextFrame formattedTextFrame = ((TextFrameFormatInfo)_renderInfo.FormatInfo).FormattedTextFrame;
-            var renderInfos = formattedTextFrame.GetRenderInfos();
+            var frameInfo = (TextFrameFormatInfo)_renderInfo.FormatInfo;
+            var renderInfos = frameInfo.FragmentCount > 0
+                ? formattedTextFrame.GetRenderInfos(frameInfo.FragmentIndex)
+                : formattedTextFrame.GetRenderInfos();
             if (renderInfos == null)
                 return;
 
@@ -153,5 +187,6 @@ namespace MigraDoc.Rendering
         }
 
         readonly TextFrame _textFrame;
+        XUnitPt? _contentHeight;
     }
 }

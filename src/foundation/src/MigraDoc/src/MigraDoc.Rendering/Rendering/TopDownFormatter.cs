@@ -2,6 +2,7 @@
 // See the LICENSE file in the solution root for more information.
 
 using MigraDoc.DocumentObjectModel;
+using MigraDoc.DocumentObjectModel.Shapes;
 using PdfSharp.Drawing;
 
 namespace MigraDoc.Rendering
@@ -156,6 +157,10 @@ namespace MigraDoc.Rendering
                 }
                 else
                 {
+                    if (docObj is TextFrame textFrame &&
+                        textFrame.PaginateContent &&
+                        !renderer.RenderInfo.FormatInfo.IsEmpty)
+                        _areaProvider.PositionVertically(renderer.RenderInfo.LayoutInfo);
                     if (renderer.RenderInfo.FormatInfo.IsEmpty && isFirstOnPage)
                     {
                         area = area.Unite(new Rectangle(area.X, area.Y, area.Width, double.MaxValue));
