@@ -120,6 +120,26 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void FramePaginationAndTopBottomExclusionSurviveCloneAndDdl()
+        {
+            var document = new Document();
+            var frame = document.AddSection().AddTextFrame();
+            frame.PaginateContent = true;
+            frame.WrapFormat.Style = WrapStyle.TopBottom;
+            frame.WrapFormat.ExcludeFollowingText = true;
+
+            var clone = frame.Clone();
+            clone.PaginateContent.Should().BeTrue();
+            clone.WrapFormat.ExcludeFollowingText.Should().BeTrue();
+
+            var ddl = MigraDoc.DocumentObjectModel.IO.DdlWriter.WriteToString(document);
+            var restored = MigraDoc.DocumentObjectModel.IO.DdlReader.DocumentFromString(ddl);
+            var restoredFrame = restored.Sections[0].Elements.OfType<TextFrame>().Single();
+            restoredFrame.PaginateContent.Should().BeTrue();
+            restoredFrame.WrapFormat.ExcludeFollowingText.Should().BeTrue();
+        }
+
+        [Fact]
         public void TextFrameRotationTransformsCompleteFrame()
         {
             string RenderContent(double? angle)
@@ -405,8 +425,7 @@ namespace MigraDoc.Tests
                     "Words flowing around the image. ", 35)));
                 var following = section.AddParagraph("Following image");
                 var renderer = new PdfDocumentRenderer { Document = document };
-                if (enableExclusion)
-                    renderer.DocumentRenderer.TopBottomExclusion = shape => ReferenceEquals(shape, image);
+                image.WrapFormat.ExcludeFollowingText = enableExclusion;
                 renderer.RenderDocument();
                 var top = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
                     .Single(info => ReferenceEquals(info.DocumentObject, following))
