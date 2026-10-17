@@ -96,6 +96,34 @@ namespace MigraDoc.Tests
             strokes.Select(match => match.Groups["x2"].Value).Should().OnlyHaveUniqueItems();
         }
 
+        [Fact]
+        public void SharedRowBorderWithSubPrecisionEndpointDifferenceKeepsBothStrokes()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var table = document.AddSection().AddTable();
+            table.AddColumn("5cm");
+            var first = table.AddRow()[0];
+            var second = table.AddRow()[0];
+            first.AddParagraph("First");
+            second.AddParagraph("Second");
+            first.Borders.Bottom.Color = Colors.Red;
+            first.Borders.Bottom.Width = 1;
+            second.Borders.Top.Color = Colors.Red;
+            second.Borders.Top.Width = 1;
+            first.Borders.Left.Color = Colors.White;
+            first.Borders.Left.Width = Unit.FromPoint(4);
+            second.Borders.Left.Color = Colors.White;
+            second.Borders.Left.Width = Unit.FromPoint(4.00001);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+                .Where(match => match.Groups["y1"].Value == match.Groups["y2"].Value).ToArray();
+            strokes.Should().HaveCount(2);
+            strokes[0].Groups["x2"].Value.Should().Be(strokes[1].Groups["x2"].Value);
+        }
+
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
