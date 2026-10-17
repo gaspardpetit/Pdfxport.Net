@@ -72,6 +72,13 @@ namespace MigraDoc.Rendering
         public Func<Shape, bool>? TopBottomExclusion { get; set; }
 
         /// <summary>
+        /// Gets the minimum fraction of normal space width allowed when fitting
+        /// the final word of a justified paragraph. Null or values outside 0 to 1
+        /// disable contraction for that paragraph.
+        /// </summary>
+        public Func<Paragraph, double?>? JustifiedSpaceShrinkFactorForParagraph { get; set; }
+
+        /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.
         /// </summary>

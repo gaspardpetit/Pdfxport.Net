@@ -24,6 +24,53 @@ namespace MigraDoc.Tests
     public class TextTests : IDisposable
     {
         [Fact]
+        public void JustifiedFinalWordCanUseContractedSpaces()
+        {
+            (int PageCount, double[] Positions, string[] PageContents) Render(
+                Func<Paragraph, double?>? shrinkFactor)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(95);
+                section.PageSetup.PageHeight = Unit.FromPoint(40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                section.PageSetup.TopMargin = Unit.FromPoint(10);
+                section.PageSetup.BottomMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph("a a a a a a a a");
+                paragraph.Format.Alignment = ParagraphAlignment.Justify;
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = shrinkFactor;
+                renderer.RenderDocument();
+                var streamEnumerator = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                var positions = new List<double>();
+                while (streamEnumerator.Text.MoveAndGetNext(true, out var textInfo))
+                    positions.Add(textInfo!.X);
+                var pageContents = Enumerable.Range(0, renderer.PdfDocument.PageCount)
+                    .Select(index => PdfFileHelper.GetPageContentStream(renderer.PdfDocument, index)).ToArray();
+                return (renderer.PdfDocument.PageCount, positions.ToArray(), pageContents);
+            }
+
+            var defaultRender = Render(null);
+            var unchangedRender = Render(_ => 1);
+            var nullRender = Render(_ => null);
+            var contractedRender = Render(_ => 0.75);
+            defaultRender.PageCount.Should().Be(2);
+            unchangedRender.PageCount.Should().Be(2);
+            nullRender.PageCount.Should().Be(2);
+            contractedRender.PageCount.Should().Be(1);
+            unchangedRender.Positions.Should().Equal(defaultRender.Positions);
+            unchangedRender.PageContents.Should().Equal(defaultRender.PageContents);
+            nullRender.PageContents.Should().Equal(defaultRender.PageContents);
+            contractedRender.Positions.Should().HaveCount(defaultRender.Positions.Length + 1);
+            (contractedRender.Positions[1] - contractedRender.Positions[0]).Should()
+                .BeLessThan(defaultRender.Positions[1] - defaultRender.Positions[0]);
+            contractedRender.Positions[^1].Should().BeApproximately(defaultRender.Positions[^1], 0.01);
+        }
+
+        [Fact]
         public void TextFrameLayersSurviveDdlAndControlPagePaintOrder()
         {
             var document = new Document();
