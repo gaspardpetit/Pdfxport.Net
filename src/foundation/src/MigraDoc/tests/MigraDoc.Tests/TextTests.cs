@@ -24,6 +24,97 @@ namespace MigraDoc.Tests
     public class TextTests : IDisposable
     {
         [Fact]
+        public void TextWidthAdjustmentIsScopedToParagraph()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(200);
+            section.PageSetup.LeftMargin = Unit.FromPoint(65);
+            section.PageSetup.RightMargin = Unit.FromPoint(65);
+            var adjusted = section.AddParagraph("Longword marker");
+            var unchanged = section.AddParagraph("Longword marker");
+            var widened = section.AddParagraph("Tiny words");
+            var widenedControl = section.AddParagraph("Tiny words");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.TextWidthAdjustment = (paragraph, word, _) =>
+                ReferenceEquals(paragraph, adjusted) && word == "marker" ? -30 :
+                ReferenceEquals(paragraph, widened) && word == "words" ? 30 : null;
+
+            renderer.RenderDocument();
+
+            var paragraphs = renderer.DocumentRenderer.FormattedDocument!.GetRenderInfos(1)!
+                .OfType<ParagraphRenderInfo>().ToArray();
+            double Height(Paragraph paragraph) => paragraphs.Single(info => ReferenceEquals(info.DocumentObject, paragraph))
+                .LayoutInfo.ContentArea.Height.Point;
+            Height(adjusted).Should().BeLessThan(Height(unchanged));
+            Height(widened).Should().BeGreaterThan(Height(widenedControl));
+        }
+
+        [Fact]
+        public void TextWidthAdjustmentDoesNotChangePaintedAdvances()
+        {
+            string Render(double? adjustment)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var paragraph = document.AddSection().AddParagraph("before after");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (adjustment is not null)
+                    renderer.DocumentRenderer.TextWidthAdjustment = (candidate, word, _) =>
+                        ReferenceEquals(candidate, paragraph) && word == "before" ? adjustment : null;
+                renderer.RenderDocument();
+                return PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            }
+
+            Render(-2).Should().Be(Render(null));
+            Render(double.NaN).Should().Be(Render(null));
+            Render(double.PositiveInfinity).Should().Be(Render(null));
+            Render(-1000).Should().Be(Render(null));
+        }
+
+        [Fact]
+        public void TextWidthAdjustmentForSuperscriptUsesFinalPointWidth()
+        {
+            double Height(double contentWidth, double adjustment)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(20);
+                section.PageSetup.RightMargin = Unit.FromPoint(20);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("before ");
+                paragraph.AddFormattedText("marker").Font.Superscript = true;
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.DocumentRenderer.TextWidthAdjustment = (_, word, _) =>
+                    word == "marker" ? adjustment : null;
+                renderer.RenderDocument();
+                return renderer.DocumentRenderer.FormattedDocument!.GetRenderInfos(1)!
+                    .OfType<ParagraphRenderInfo>().Single().LayoutInfo.ContentArea.Height.Point;
+            }
+
+            double MinimumWidth(double adjustment)
+            {
+                var oneLineHeight = Height(120, adjustment);
+                var lower = 30.0;
+                var upper = 120.0;
+                for (var iteration = 0; iteration < 12; iteration++)
+                {
+                    var middle = (lower + upper) / 2;
+                    if (Height(middle, adjustment) > oneLineHeight + 1)
+                        lower = middle;
+                    else
+                        upper = middle;
+                }
+                return upper;
+            }
+
+            (MinimumWidth(5) - MinimumWidth(0)).Should().BeApproximately(5, 0.1);
+        }
+
+        [Fact]
         public void JustifiedFinalWordCanUseContractedSpaces()
         {
             (int PageCount, double[] Positions, string[] PageContents) Render(

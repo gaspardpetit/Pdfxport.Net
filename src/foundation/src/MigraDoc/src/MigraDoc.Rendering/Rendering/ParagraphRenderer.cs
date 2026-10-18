@@ -2126,6 +2126,14 @@ namespace MigraDoc.Rendering
             if (font.Subscript || font.Superscript)
                 width *= FontHandler.GetSubSuperScaling(xFont);
 
+            if (_phase == Phase.Formatting)
+            {
+                var adjustment = _documentRenderer.TextWidthAdjustment?.Invoke(_paragraph, word, xFont);
+                if (adjustment is { } value && !double.IsNaN(value) && !double.IsInfinity(value) &&
+                    width.Point + value > 0 && !double.IsInfinity(width.Point + value))
+                    width += value;
+            }
+
             return width;
         }
 
