@@ -169,12 +169,12 @@ namespace PdfSharp.Tests.Pdf
         /// Creates test files with a manipulated, flate-encoded stream.
         /// </summary>
         /// <param name="size">Size of the raw stream.</param>
-        /// <param name="reportedLength">Length given in PDF file. Set -1 to get length of filtered stream.</param>
+        /// <param name="reportedLength">Length given in PDF file. Set -1 for the filtered length or -2 for five bytes less.</param>
         /// <param name="content">Content of the stream. Use Chars.NumberSign to get random data.</param>
         /// <param name="shouldFail">True if created files throws an exception on PdfReader.Open.</param>
         [Theory]
         [InlineData(100, -1, 'x', false)] // -1 means use correct length.
-        [InlineData(100, 1, 'x', false)]
+        [InlineData(100, -2, 'x', false)] // Understate the length within the parser's bounded recovery window.
         [InlineData(100, 512, 'x', false)]
         [InlineData(100, -1, Chars.NumberSign, false)] // -1 means use correct length.
         [InlineData(100, 1, Chars.NumberSign, true)] // Should work, but does not yet work with 6.2.0 Preview 2.
@@ -209,6 +209,8 @@ namespace PdfSharp.Tests.Pdf
             dict.Elements.SetName(PdfStream.Keys.Filter, "/FlateDecode");
             if (reportedLength == -1)
                 dict.StreamLength = compressed.Length;
+            else if (reportedLength == -2)
+                dict.StreamLength = compressed.Length - 5;
 
             document.Internals.AddObject(dict);
             document.Catalog.Elements.Add("/SomeRawDict", dict.RequiredReference);
