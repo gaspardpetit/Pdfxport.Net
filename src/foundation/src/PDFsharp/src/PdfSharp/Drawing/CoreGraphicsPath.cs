@@ -22,14 +22,17 @@ namespace PdfSharp.Drawing
         {
             _points = [..path._points];
             _types = [..path._types];
+            _startNewFigure = path._startNewFigure;
         }
+
+        public void StartSubpath() => _startNewFigure = true;
 
         public void MoveOrLineTo(double x, double y)
         {
-            // Make a MoveTo if there is no previous subpath or the previous subpath was closed.
+            // Make a MoveTo if there is no previous subpath, StartFigure was called, or the previous subpath was closed.
             // Otherwise, make a LineTo.
             // ReSharper disable once UseIndexFromEndExpression
-            if (_types.Count == 0 || (_types[_types.Count - 1] & PathPointTypeCloseSubpath) == PathPointTypeCloseSubpath)
+            if (_types.Count == 0 || _startNewFigure || (_types[_types.Count - 1] & PathPointTypeCloseSubpath) == PathPointTypeCloseSubpath)
                 MoveTo(x, y);
             else
                 LineTo(x, y, false);
@@ -37,12 +40,14 @@ namespace PdfSharp.Drawing
 
         public void MoveTo(double x, double y)
         {
+            _startNewFigure = false;
             _points.Add(new XPoint(x, y));
             _types.Add(PathPointTypeStart);
         }
 
         public void LineTo(double x, double y, bool closeSubpath)
         {
+            _startNewFigure = false;
             // ReSharper disable once UseIndexFromEndExpression
             if (_points.Count > 0 && _points[_points.Count - 1].Equals(new(x, y)))
                 return;
@@ -53,6 +58,7 @@ namespace PdfSharp.Drawing
 
         public void BezierTo(double x1, double y1, double x2, double y2, double x3, double y3, bool closeSubpath)
         {
+            _startNewFigure = false;
             _points.Add(new XPoint(x1, y1));
             _types.Add(PathPointTypeBézier);
             _points.Add(new XPoint(x2, y2));
@@ -270,5 +276,6 @@ namespace PdfSharp.Drawing
 
         readonly List<XPoint> _points = new();
         readonly List<byte> _types = new();
+        bool _startNewFigure;
     }
 }
