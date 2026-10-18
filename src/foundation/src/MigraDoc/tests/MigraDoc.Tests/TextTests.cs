@@ -23,6 +23,37 @@ namespace MigraDoc.Tests
     [Collection("PDFsharp")]
     public class TextTests : IDisposable
     {
+        [Theory]
+        [InlineData(TextOrientation.Horizontal)]
+        [InlineData(TextOrientation.Upward)]
+        [InlineData(TextOrientation.Downward)]
+        public void TextFrameRestoresGraphicsStateForEveryOrientation(TextOrientation orientation)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.AddParagraph("Before");
+            var frame = section.AddTextFrame();
+            frame.Width = Unit.FromPoint(100);
+            frame.Height = Unit.FromPoint(60);
+            frame.Orientation = orientation;
+            frame.AddParagraph("Inside");
+            section.AddParagraph("After");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+
+            var depths = new List<int>();
+            var depth = 0;
+            foreach (var line in PageContent(renderer, 0).Split('\n').Select(line => line.Trim()))
+            {
+                if (line == "q") depth++;
+                if (line == "Q") depth--;
+                if (line == "BT") depths.Add(depth);
+            }
+            depths.Should().HaveCount(3);
+            depths[2].Should().Be(depths[0]);
+        }
+
         [Fact]
         public void TextWidthAdjustmentIsScopedToParagraph()
         {
