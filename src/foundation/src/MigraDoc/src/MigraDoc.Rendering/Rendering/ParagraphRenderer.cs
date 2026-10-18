@@ -2840,7 +2840,8 @@ namespace MigraDoc.Rendering
             if (_currentUnderlinePen is null)
                 NRT.ThrowOnNull();
 
-            if (pen != null && pen.Color != _currentUnderlinePen!.Color)  // BUG_OLD in ReSharper:
+            if (pen != null && (pen.Color != _currentUnderlinePen!.Color ||
+                                pen.DashStyle != _currentUnderlinePen.DashStyle))
                 return true;
 
             if (pen is null)

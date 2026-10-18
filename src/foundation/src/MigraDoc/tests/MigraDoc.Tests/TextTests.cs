@@ -54,6 +54,26 @@ namespace MigraDoc.Tests
             depths[2].Should().Be(depths[0]);
         }
 
+        [Theory]
+        [InlineData(Underline.Dotted, Underline.Dash, 2)]
+        [InlineData(Underline.Dash, Underline.Dotted, 2)]
+        [InlineData(Underline.Dotted, Underline.Dotted, 1)]
+        public void UnderlineStartsNewStrokeWhenDashStyleChanges(
+            Underline firstStyle, Underline secondStyle, int expectedStrokes)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var paragraph = document.AddSection().AddParagraph();
+            paragraph.AddFormattedText("first").Font.Underline = firstStyle;
+            paragraph.AddFormattedText("second").Font.Underline = secondStyle;
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+
+            var strokes = Regex.Matches(PageContent(renderer, 0),
+                @"(?m)[\d.]+ [\d.]+ m\s+[\d.]+ [\d.]+ l\s+S");
+            strokes.Count.Should().Be(expectedStrokes);
+        }
+
         [Fact]
         public void TextWidthAdjustmentIsScopedToParagraph()
         {
