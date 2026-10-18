@@ -251,9 +251,6 @@ namespace PdfSharp.Internal.OpenType
         /// </summary>
         public void CompleteGlyphClosure(Dictionary<ushort, object?> glyphs)
         {
-            int count = glyphs.Count;
-            ushort[] glyphArray = new ushort[glyphs.Count];
-            glyphs.Keys.CopyTo(glyphArray, 0);
             // ReSharper disable once CanSimplifyDictionaryLookupWithTryAdd because of .NET Framework
             if (!glyphs.ContainsKey(0))
                 glyphs.Add(0, null);
@@ -263,8 +260,15 @@ namespace PdfSharp.Internal.OpenType
             try
             {
                 Locks.EnterFontManagement();
-                for (int idx = 0; idx < count; idx++)
-                    AddCompositeGlyphs(glyphs, glyphArray[idx]);
+                int previousCount;
+                do
+                {
+                    previousCount = glyphs.Count;
+                    ushort[] glyphArray = new ushort[previousCount];
+                    glyphs.Keys.CopyTo(glyphArray, 0);
+                    for (int idx = 0; idx < previousCount; idx++)
+                        AddCompositeGlyphs(glyphs, glyphArray[idx]);
+                } while (glyphs.Count > previousCount);
             }
             finally { Locks.ExitFontManagement(); }
         }
