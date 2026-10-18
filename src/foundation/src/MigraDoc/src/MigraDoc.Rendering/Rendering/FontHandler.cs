@@ -23,10 +23,10 @@ namespace MigraDoc.Rendering
         /// </summary>
         internal static XFont FontToXFont(Font font)
         {
-            // Check if both WeakReferences are still valid and point to the font we need.
-            if (_lastXFont != null && _lastFont != null &&
-                _lastFont.TryGetTarget(out var lastFont) && font == lastFont &&
-                _lastXFont.TryGetTarget(out var lastXFont))
+            var entry = _lastEntry;
+            if (entry != null &&
+                entry.FontRef.TryGetTarget(out var lastFont) && font == lastFont &&
+                entry.XFontRef.TryGetTarget(out var lastXFont))
                 return lastXFont;
 
             XFontStyleEx style = GetXStyle(font);
@@ -39,16 +39,26 @@ namespace MigraDoc.Rendering
 #if DEBUG_
             CreateFontCounter++;
 #endif
-            _lastFont = new(font);
-            _lastXFont = new(xFont);
+            _lastEntry = new FontCacheEntry(font, xFont);
 #if FORCE_MEMORYLEAK
             _lastFont2 = font;
 #endif
             return xFont;
         }
 
-        static WeakReference<XFont>? _lastXFont;
-        static WeakReference<Font>? _lastFont;
+        sealed class FontCacheEntry
+        {
+            internal FontCacheEntry(Font font, XFont xFont)
+            {
+                FontRef = new WeakReference<Font>(font);
+                XFontRef = new WeakReference<XFont>(xFont);
+            }
+
+            internal readonly WeakReference<Font> FontRef;
+            internal readonly WeakReference<XFont> XFontRef;
+        }
+
+        static volatile FontCacheEntry? _lastEntry;
 #if FORCE_MEMORYLEAK
         static Font? _lastFont2;
 #endif
