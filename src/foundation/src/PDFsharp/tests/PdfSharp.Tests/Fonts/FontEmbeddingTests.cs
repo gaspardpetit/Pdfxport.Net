@@ -5,6 +5,7 @@
 using System.IO;
 #endif
 using System.Text;
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using PdfSharp.Drawing;
 using PdfSharp.Fonts;
@@ -26,6 +27,24 @@ namespace PdfSharp.Tests.Fonts
         public void Dispose()
         {
             GlobalFontSettings.ResetFontManagement();
+        }
+
+        [Fact]
+        public void Embedded_font_descriptor_has_negative_descent()
+        {
+            var document = new PdfDocument();
+            var page = document.AddPage();
+            var font = new XFont(UnitTestFontResolver.ArialFont, 12);
+            using (var graphics = XGraphics.FromPdfPage(page))
+                graphics.DrawString("Hello", font, XBrushes.Black, 50, 100);
+
+            using var stream = new MemoryStream();
+            document.Save(stream, false);
+            var pdf = Encoding.ASCII.GetString(stream.ToArray());
+            var descent = Regex.Match(pdf, @"/Descent\s+(-?\d+)");
+
+            descent.Success.Should().BeTrue();
+            int.Parse(descent.Groups[1].Value).Should().BeLessThan(0);
         }
 
         [Fact]

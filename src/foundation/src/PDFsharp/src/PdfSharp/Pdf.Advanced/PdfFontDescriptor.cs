@@ -84,7 +84,7 @@ namespace PdfSharp.Pdf.Advanced
 
             Elements.SetInteger(Keys.Ascent, Descriptor.DesignUnitsToPdf(Descriptor.Ascender));
             Elements.SetInteger(Keys.CapHeight, Descriptor.DesignUnitsToPdf(Descriptor.CapHeight));
-            Elements.SetInteger(Keys.Descent, Descriptor.DesignUnitsToPdf(Descriptor.Descender));
+            Elements.SetInteger(Keys.Descent, -Descriptor.DesignUnitsToPdf(Descriptor.Descender));
             Elements.SetInteger(Keys.Flags, (int)FlagsFromDescriptor(Descriptor));
             Elements.SetRectangle(Keys.FontBBox, new PdfRectangle(
               Descriptor.DesignUnitsToPdf(Descriptor.XMin),
