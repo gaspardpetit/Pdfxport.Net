@@ -262,6 +262,8 @@ namespace MigraDoc.DocumentObjectModel.Shapes
                 serializer.WriteSimpleAttribute("Layer", Layer);
             if (Values.ClipContent is not null)
                 serializer.WriteSimpleAttribute("ClipContent", ClipContent);
+            if (Values.PaginateContent is not null)
+                serializer.WriteSimpleAttribute("PaginateContent", PaginateContent);
             serializer.EndAttributes(pos);
 
             serializer.BeginContent();

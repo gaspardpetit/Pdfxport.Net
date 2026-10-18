@@ -29,6 +29,12 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
+        /// The rendered border width is unchanged.
+        /// </summary>
+        public Func<Table, int, double?>? TableFragmentTopBorderReservation { get; set; }
+
+        /// <summary>
         /// Selects text frames whose content is clipped to the frame rectangle when
         /// <see cref="TextFrame.ClipContent"/> has not been set.
         /// </summary>
@@ -39,6 +45,42 @@ namespace MigraDoc.Rendering
         /// <see cref="TextFrame.Layer"/> has not been set.
         /// </summary>
         public Func<TextFrame, bool>? TextFrameBehindContent { get; set; }
+
+        /// <summary>
+        /// Selects a shape's polygonal wrap contour in normalized shape coordinates.
+        /// </summary>
+        public Func<Shape, IReadOnlyList<XPoint>?>? WrapContour { get; set; }
+
+        /// <summary>
+        /// Selects the effective contour band height for a shape and line.
+        /// </summary>
+        public Func<Shape, double, double?>? WrapContourBandHeight { get; set; }
+
+        /// <summary>
+        /// Selects the effective contour band height using the natural line font height.
+        /// </summary>
+        public Func<Shape, double, double, double?>? WrapContourLineFontBandHeight { get; set; }
+
+        /// <summary>
+        /// Selects the height used when testing whether a line fits beside a shape.
+        /// </summary>
+        public Func<Shape, double, double, double?>? WrapLineFitHeight { get; set; }
+
+        /// <summary>
+        /// Gets the minimum fraction of normal space width allowed when fitting
+        /// the final word of a justified paragraph. Null or values outside 0 to 1
+        /// disable contraction for that paragraph.
+        /// </summary>
+        public Func<Paragraph, double?>? JustifiedSpaceShrinkFactorForParagraph { get; set; }
+
+        /// <summary>
+        /// Adjusts a word's measured width in points for paragraph layout. The callback
+        /// runs during formatting only; it does not change painted glyph advances.
+        /// Return null to use the measured width. Non-finite adjustments and resulting
+        /// widths of zero or less are ignored.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? TextWidthAdjustment { get; set; }
+
         /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.

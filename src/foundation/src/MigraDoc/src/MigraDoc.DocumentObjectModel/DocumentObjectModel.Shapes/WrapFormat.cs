@@ -40,6 +40,15 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Gets or sets whether a positioned TopBottom shape excludes following text from its vertical band.
+        /// </summary>
+        public bool ExcludeFollowingText
+        {
+            get => Values.ExcludeFollowingText ?? false;
+            set => Values.ExcludeFollowingText = value;
+        }
+
+        /// <summary>
         /// Gets or sets the distance between the top side of the shape with the adjacent text.
         /// </summary>
         public Unit DistanceTop
@@ -86,6 +95,8 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             var pos = serializer.BeginContent("WrapFormat");
             if (Values.Style is not null)
                 serializer.WriteSimpleAttribute("Style", Style);
+            if (Values.ExcludeFollowingText is not null)
+                serializer.WriteSimpleAttribute("ExcludeFollowingText", ExcludeFollowingText);
             //if (Values.DistanceTop is not null)
             if (!Values.DistanceTop.IsValueNullOrEmpty())
                 serializer.WriteSimpleAttribute("DistanceTop", DistanceTop);
@@ -126,6 +137,11 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public WrapStyle? Style { get; set; }
+
+            /// <summary>
+            /// Gets or sets whether a TopBottom shape excludes following text.
+            /// </summary>
+            public bool? ExcludeFollowingText { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
