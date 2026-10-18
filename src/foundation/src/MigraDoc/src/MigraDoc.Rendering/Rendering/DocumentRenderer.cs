@@ -74,6 +74,14 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, double?>? JustifiedSpaceShrinkFactorForParagraph { get; set; }
 
         /// <summary>
+        /// Adjusts a word's measured width in points for paragraph layout. The callback
+        /// runs during formatting only; it does not change painted glyph advances.
+        /// Return null to use the measured width. Non-finite adjustments and resulting
+        /// widths of zero or less are ignored.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? TextWidthAdjustment { get; set; }
+
+        /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.
         /// </summary>
