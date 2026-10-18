@@ -462,7 +462,7 @@ namespace MigraDoc.Rendering
             switch (align)
             {
                 case ElementAlignment.Near:
-                    if (layoutInfo.Left != 0)
+                    if (layoutInfo.HasExplicitLeft || layoutInfo.Left != 0)
                     {
                         layoutInfo.ContentArea.X += layoutInfo.Left;
                         return true;

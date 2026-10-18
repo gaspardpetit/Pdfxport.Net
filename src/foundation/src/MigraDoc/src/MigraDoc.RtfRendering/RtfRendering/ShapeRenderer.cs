@@ -355,6 +355,16 @@ namespace MigraDoc.RtfRendering
             if (!RenderInParagraph())
             {
                 Translate("WrapFormat.Style", "shpwr", RtfUnit.Undefined, "3", false);
+                var wrapSide = _shape.WrapFormat.Style switch
+                {
+                    WrapStyle.Left => 1,
+                    WrapStyle.Right => 2,
+                    WrapStyle.Largest => 3,
+                    _ => 0
+                };
+                if (_shape.WrapFormat.Style is WrapStyle.Left or WrapStyle.Right or
+                    WrapStyle.Largest or WrapStyle.BothSides)
+                    _rtfWriter.WriteControl("shpwrk", wrapSide.ToString());
 
                 //REM: Distances don’t work using them like this:
                 /*

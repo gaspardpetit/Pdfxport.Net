@@ -63,6 +63,10 @@ namespace MigraDoc.Rendering
             {
                 case WrapStyle.None:
                 case WrapStyle.Through:
+                case WrapStyle.Left:
+                case WrapStyle.Right:
+                case WrapStyle.Largest:
+                case WrapStyle.BothSides:
                     return Floating.None;
             }
             return Floating.TopBottom;
@@ -112,7 +116,10 @@ namespace MigraDoc.Rendering
             layoutInfo.HorizontalAlignment = GetHorizontalAlignment();
 
             if (_shape.Left.ShapePosition == ShapePosition.Undefined)
+            {
                 layoutInfo.Left = _shape.Left.Position.Point;
+                layoutInfo.HasExplicitLeft = !_shape.Left.Position.IsEmpty;
+            }
 
             layoutInfo.HorizontalReference = GetHorizontalReference();
             layoutInfo.VerticalReference = GetVerticalReference();

@@ -185,6 +185,10 @@ namespace MigraDoc.RtfRendering
             //Caution: Word imterpretates "Through" (in rtf value "5") slightly different!
             _enumTranslationTable.Add(WrapStyle.Through, 3);
             _enumTranslationTable.Add(WrapStyle.TopBottom, 1);
+            _enumTranslationTable.Add(WrapStyle.BothSides, 2);
+            _enumTranslationTable.Add(WrapStyle.Left, 2);
+            _enumTranslationTable.Add(WrapStyle.Right, 2);
+            _enumTranslationTable.Add(WrapStyle.Largest, 2);
 
             //LineStyle
             _enumTranslationTable.Add(LineStyle.Single, 0);

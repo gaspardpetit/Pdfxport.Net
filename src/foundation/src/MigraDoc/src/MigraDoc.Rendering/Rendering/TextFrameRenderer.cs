@@ -49,8 +49,9 @@ namespace MigraDoc.Rendering
             }
             var frameInfo = (TextFrameFormatInfo)_renderInfo.FormatInfo;
             frameInfo.FormattedTextFrame = formattedTextFrame;
-            if (paginate && _textFrame.Height.IsEmpty)
-                _contentHeight = formattedTextFrame.GetAreaContentHeight(fragmentIndex) + _textFrame.MarginTop.Point +
+            if (_textFrame.Height.IsEmpty)
+                _contentHeight = (paginate ? formattedTextFrame.GetAreaContentHeight(fragmentIndex) :
+                    formattedTextFrame.ContentHeight) + _textFrame.MarginTop.Point +
                     _textFrame.MarginBottom.Point;
             base.Format(area, previousFormatInfo);
             if (paginate)

@@ -217,6 +217,81 @@ namespace MigraDoc.Tests
 #endif
         }
 
+        [Theory]
+        [InlineData(0.5, false, false)]
+        [InlineData(3, false, false)]
+        [InlineData(3, true, false)]
+        [InlineData(3, false, true)]
+        public void Fragment_top_border_width_reserves_continuation_space_only(
+            double reservation, bool repeatedHeader, bool nearPageLimit)
+        {
+            static PdfDocumentRenderer Render(double? topBorderWidth, bool repeatedHeader,
+                bool nearPageLimit)
+            {
+                var document = new Document();
+                var section = document.AddSection();
+                section.PageSetup.PageHeight = Unit.FromPoint(792);
+                section.PageSetup.TopMargin = Unit.FromPoint(72);
+                section.PageSetup.BottomMargin = Unit.FromPoint(72);
+                var table = section.AddTable();
+                table.AddColumn(Unit.FromPoint(432));
+                for (var index = 0; index < (nearPageLimit ? 50 : 27); index++)
+                {
+                    var row = table.AddRow();
+                    if (index == 0)
+                        row.HeadingFormat = repeatedHeader;
+                    row.Height = Unit.FromPoint(nearPageLimit ? 25.9 : 25);
+                    row.HeightRule = MigraDoc.DocumentObjectModel.Tables.RowHeightRule.Exactly;
+                    row[0].AddParagraph($"Row {index + 1}");
+                }
+
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (topBorderWidth != null)
+                    renderer.DocumentRenderer.TableFragmentTopBorderReservation =
+                        (_, _) => topBorderWidth;
+                renderer.RenderDocument();
+                return renderer;
+            }
+
+            var original = Render(null, repeatedHeader, nearPageLimit);
+            var reserved = Render(reservation, repeatedHeader, nearPageLimit);
+            var invalid = Render(double.NaN, repeatedHeader, nearPageLimit);
+            original.PdfDocument.Pages.Count.Should().Be(2);
+            reserved.PdfDocument.Pages.Count.Should().Be(nearPageLimit ? 3 : 2);
+            invalid.PdfDocument.Pages.Count.Should().Be(2);
+            var firstOriginal = original.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .Single(info => info.FormatInfo is TableFormatInfo);
+            var firstReserved = reserved.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .Single(info => info.FormatInfo is TableFormatInfo);
+            var secondOriginal = original.DocumentRenderer.GetRenderInfoFromPage(2)!
+                .Single(info => info.FormatInfo is TableFormatInfo);
+            var secondReserved = reserved.DocumentRenderer.GetRenderInfoFromPage(2)!
+                .Single(info => info.FormatInfo is TableFormatInfo);
+            var secondInvalid = invalid.DocumentRenderer.GetRenderInfoFromPage(2)!
+                .Single(info => info.FormatInfo is TableFormatInfo);
+            ((TableFormatInfo)firstOriginal.FormatInfo).StartRow.Should().Be(
+                ((TableFormatInfo)firstReserved.FormatInfo).StartRow);
+            ((TableFormatInfo)secondOriginal.FormatInfo).StartRow.Should().Be(
+                ((TableFormatInfo)secondReserved.FormatInfo).StartRow);
+            firstReserved.LayoutInfo.ContentArea.Height.Point.Should().BeApproximately(
+                firstOriginal.LayoutInfo.ContentArea.Height.Point, 0.001);
+            secondInvalid.LayoutInfo.ContentArea.Height.Point.Should().BeApproximately(
+                secondOriginal.LayoutInfo.ContentArea.Height.Point, 0.001);
+            if (nearPageLimit)
+            {
+                var secondEnd = ((TableFormatInfo)secondReserved.FormatInfo).EndRow;
+                secondEnd.Should().Be(((TableFormatInfo)secondOriginal.FormatInfo).EndRow - 1);
+                var thirdReserved = reserved.DocumentRenderer.GetRenderInfoFromPage(3)!
+                    .Single(info => info.FormatInfo is TableFormatInfo);
+                ((TableFormatInfo)thirdReserved.FormatInfo).StartRow.Should().Be(secondEnd + 1);
+                ((TableFormatInfo)thirdReserved.FormatInfo).EndRow.Should().Be(49);
+            }
+            else
+                (secondReserved.LayoutInfo.ContentArea.Height.Point -
+                    secondOriginal.LayoutInfo.ContentArea.Height.Point).Should().BeApproximately(
+                        repeatedHeader ? 0 : reservation, 0.001);
+        }
+
         [Fact]
         public void Create_a_cloned_table()
         {

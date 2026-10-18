@@ -636,6 +636,10 @@ namespace MigraDoc.Rendering
                 if (_table.Rows.Count > _startRow)
                     height = CalcMaxTopBorderWidth(_startRow);
             }
+            if (_startRow > 0 && _lastHeaderRow < 0 &&
+                _documentRenderer?.TableFragmentTopBorderReservation?.Invoke(_table, _startRow) is double requested &&
+                !double.IsNaN(requested) && !double.IsInfinity(requested) && requested > height.Point)
+                height = XUnitPt.FromPoint(requested);
             return height;
         }
 
