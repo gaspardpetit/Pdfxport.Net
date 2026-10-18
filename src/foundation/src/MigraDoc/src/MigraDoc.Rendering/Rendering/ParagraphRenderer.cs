@@ -665,7 +665,12 @@ namespace MigraDoc.Rendering
             //if (_paragraph.Document.Values.DefaultTabStop is not null)
             Debug.Assert(_paragraph.Document != null, "_paragraph.Document != null");
             if (!_paragraph.Document.Values.DefaultTabStop.IsValueNullOrEmpty())
-                defaultTabStop = _paragraph.Document.DefaultTabStop.Point;
+            {
+                var configuredInterval = _paragraph.Document.DefaultTabStop.Point;
+                // An interval smaller than the position tolerance cannot advance to a usable stop.
+                if (configuredInterval >= Tolerance.Point && !double.IsInfinity(configuredInterval))
+                    defaultTabStop = configuredInterval;
+            }
 
             var currTabPos = defaultTabStop;
             while (currTabPos + _formattingArea.X <= _formattingArea.Width - RightIndent)
