@@ -612,7 +612,8 @@ namespace PdfSharp.Drawing.Pdf
                 }
             }
 
-            var glyphCount = codePoints.Length;
+            var codePointCount = codePoints.Length;
+            var glyphCount = codePointsWithGlyphIndices.Length;
             // Check font whether colored glyphs are opt-in.
             bool isDefaultCase = font.PdfOptions.ColoredGlyphs == PdfFontColoredGlyphs.None;
         DefaultCase:
@@ -622,8 +623,8 @@ namespace PdfSharp.Drawing.Pdf
                 if (isAnsi)
                 {
                     // Use ANSI character encoding.
-                    byte[] bytes = new byte[glyphCount];
-                    for (int idx = 0; idx < glyphCount; idx++)
+                    byte[] bytes = new byte[codePointCount];
+                    for (int idx = 0; idx < codePointCount; idx++)
                     {
                         ref var item = ref codePoints[idx];
                         var ch = AnsiEncoding.UnicodeToAnsi((char)item);
