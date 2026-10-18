@@ -51,6 +51,28 @@ namespace PdfSharp.Tests.Drawing
             GlobalFontSettings.ResetFontManagement();
         }
 
+        [Theory]
+        [InlineData(2, 1)]
+        [InlineData(1, 2)]
+        public void Render_text_event_can_change_glyph_count(int inputCount, int outputCount)
+        {
+            var document = new PdfDocument();
+            document.RenderEvents.RenderTextEvent += (_, args) =>
+                args.CodePointGlyphIndexPairs = Enumerable.Repeat(args.CodePointGlyphIndexPairs[0], outputCount).ToArray();
+
+            var page = document.AddPage();
+            var font = new XFont("Arial", 12, XFontStyleEx.Regular, new XPdfFontOptions(PdfFontEncoding.Unicode));
+            using (var graphics = XGraphics.FromPdfPage(page))
+                graphics.DrawString(new string('A', inputCount), font, XBrushes.Black, 50, 100);
+
+            using var pdf = new MemoryStream();
+            document.Save(pdf, false);
+            var text = PdfFileHelper.GetPageContentStreamEnumerator(document, 0).Text;
+            text.MoveAndGetNext(true, out var textInfo).Should().BeTrue();
+            textInfo!.IsHex.Should().BeTrue();
+            PdfFileHelper.GetHexStringAsGlyphIndices(textInfo.Text).Should().HaveCount(outputCount);
+        }
+
         [Fact]
         public void PDF_with_Emojis()
         {
