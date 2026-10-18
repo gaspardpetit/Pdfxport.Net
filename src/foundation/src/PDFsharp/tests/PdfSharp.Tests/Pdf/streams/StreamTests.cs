@@ -2,6 +2,7 @@
 // See the LICENSE file in the solution root for more information.
 
 using FluentAssertions;
+using System.IO.Compression;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.Filters;
 using PdfSharp.Pdf.Internal;
@@ -15,6 +16,45 @@ namespace PdfSharp.Tests.Pdf
     [Collection("PDFsharp")]
     public class StreamTests
     {
+        [Theory]
+        [InlineData(PdfFlateEncodeMode.Default)]
+        [InlineData(PdfFlateEncodeMode.BestSpeed)]
+        [InlineData(PdfFlateEncodeMode.BestCompression)]
+        public void Flate_encoded_stream_is_valid_zlib(PdfFlateEncodeMode mode)
+        {
+            byte[] data = "PDFsharp compressed stream checksum"u8.ToArray();
+            byte[] compressed = new FlateDecode().Encode(data, mode);
+
+            // RFC 1950 requires an Adler-32 trailer over the uncompressed data.
+            compressed.AsSpan(compressed.Length - 4).ToArray()
+                .Should().Equal(0xEC, 0x47, 0x0D, 0x6D);
+
+            using var input = new MemoryStream(compressed);
+            using var zlib = new ZLibStream(input, CompressionMode.Decompress);
+            using var output = new MemoryStream();
+            zlib.CopyTo(output);
+
+            output.ToArray().Should().Equal(data);
+        }
+
+        [Fact]
+        public void Flate_encoded_empty_stream_has_adler32_trailer()
+        {
+            byte[] compressed = new FlateDecode().Encode([]);
+
+            compressed.AsSpan(compressed.Length - 4).ToArray()
+                .Should().Equal(0, 0, 0, 1);
+        }
+
+        [Fact]
+        public void Flate_encoded_long_stream_has_adler32_trailer()
+        {
+            byte[] compressed = new FlateDecode().Encode(Enumerable.Repeat((byte)'Z', 8192).ToArray());
+
+            compressed.AsSpan(compressed.Length - 4).ToArray()
+                .Should().Equal(0x4C, 0xF0, 0x40, 0xA6);
+        }
+
         [Fact]
         public void Create_a_raw_stream()
         {

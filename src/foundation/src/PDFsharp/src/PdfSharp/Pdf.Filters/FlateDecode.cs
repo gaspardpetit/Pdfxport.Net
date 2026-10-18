@@ -8,7 +8,7 @@ using PdfSharp.Logging;
 namespace PdfSharp.Pdf.Filters
 {
     /// <summary>
-    /// Implements the FlateDecode filter by wrapping SharpZipLib.
+    /// Implements the FlateDecode filter using zlib-wrapped DEFLATE streams.
     /// </summary>
     public class FlateDecode : Filter
     {
@@ -118,8 +118,34 @@ namespace PdfSharp.Pdf.Filters
             // Works with .NET 6 even without Close. But when adding support for .NET 4.6.2, we searched a while until we found that only the Close was needed.
             zip.Close();
 
+            uint checksum = CalculateAdler32(data);
+            ms.WriteByte((byte)(checksum >> 24));
+            ms.WriteByte((byte)(checksum >> 16));
+            ms.WriteByte((byte)(checksum >> 8));
+            ms.WriteByte((byte)checksum);
             ms.Capacity = (int)ms.Length;
             return ms.GetBuffer();
+        }
+
+        static uint CalculateAdler32(byte[] data)
+        {
+            const uint modulus = 65521;
+            uint s1 = 1;
+            uint s2 = 0;
+            int offset = 0;
+            while (offset < data.Length)
+            {
+                // Limit each sum so its 32-bit accumulator cannot overflow.
+                int end = offset + Math.Min(5552, data.Length - offset);
+                while (offset < end)
+                {
+                    s1 += data[offset++];
+                    s2 += s1;
+                }
+                s1 %= modulus;
+                s2 %= modulus;
+            }
+            return (s2 << 16) | s1;
         }
 
         /// <summary>
