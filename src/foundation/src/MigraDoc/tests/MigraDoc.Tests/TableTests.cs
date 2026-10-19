@@ -304,6 +304,9 @@ namespace MigraDoc.Tests
             (outer.Y + outer.Height).Should().BeGreaterThan(inner.Y + inner.Height);
         }
 
+        static void AssertDoubleRailGap(double firstRail, double secondRail, double strokeWidth) =>
+            (secondRail - firstRail).Should().BeApproximately(2 * strokeWidth, 0.01);
+
         [Fact]
         public void Uniform_three_by_three_double_grid_has_closed_cell_and_perimeter_paths()
         {
@@ -336,6 +339,26 @@ namespace MigraDoc.Tests
                 AssertEncloses(outer, inner);
             cells.Select(box => Math.Round(box.X, 2)).Distinct().Should().HaveCount(3);
             cells.Select(box => Math.Round(box.Y, 2)).Distinct().Should().HaveCount(3);
+            var grid = cells.OrderBy(box => box.Y).ThenBy(box => box.X).ToArray();
+            var left = grid.Min(box => box.X);
+            var top = grid.Min(box => box.Y);
+            var right = grid.Max(box => box.X + box.Width);
+            var bottom = grid.Max(box => box.Y + box.Height);
+            AssertDoubleRailGap(outer.X, left, 1);
+            AssertDoubleRailGap(outer.Y, top, 1);
+            AssertDoubleRailGap(right, outer.X + outer.Width, 1);
+            AssertDoubleRailGap(bottom, outer.Y + outer.Height, 1);
+            for (var row = 0; row < 3; row++)
+            {
+                var rowCells = grid.Skip(row * 3).Take(3).ToArray();
+                rowCells.Select(box => Math.Round(box.Y, 2)).Distinct().Should().HaveCount(1);
+                rowCells.Select(box => Math.Round(box.Y + box.Height, 2)).Distinct().Should().HaveCount(1);
+                for (var column = 0; column < 2; column++)
+                    AssertDoubleRailGap(rowCells[column].X + rowCells[column].Width,
+                        rowCells[column + 1].X, 1);
+            }
+            for (var row = 0; row < 2; row++)
+                AssertDoubleRailGap(grid[row * 3].Y + grid[row * 3].Height, grid[(row + 1) * 3].Y, 1);
         }
 
         [Fact]
@@ -359,6 +382,10 @@ namespace MigraDoc.Tests
             var innerBoxes = boxes.Where(box => box != outer).OrderBy(box => box.Y).ToArray();
             innerBoxes[0].Y.Should().BeLessThan(innerBoxes[1].Y);
             (innerBoxes[0].Y + innerBoxes[0].Height).Should().BeLessThan(innerBoxes[1].Y);
+            innerBoxes[0].X.Should().BeApproximately(innerBoxes[1].X, 0.01);
+            (innerBoxes[0].X + innerBoxes[0].Width).Should().BeApproximately(
+                innerBoxes[1].X + innerBoxes[1].Width, 0.01);
+            AssertDoubleRailGap(innerBoxes[0].Y + innerBoxes[0].Height, innerBoxes[1].Y, 0.5);
         }
 
         [Fact]
@@ -383,6 +410,10 @@ namespace MigraDoc.Tests
             foreach (var inner in innerBoxes)
                 AssertEncloses(outer, inner);
             (innerBoxes[0].X + innerBoxes[0].Width).Should().BeLessThan(innerBoxes[1].X);
+            innerBoxes[0].Y.Should().BeApproximately(innerBoxes[1].Y, 0.01);
+            (innerBoxes[0].Y + innerBoxes[0].Height).Should().BeApproximately(
+                innerBoxes[1].Y + innerBoxes[1].Height, 0.01);
+            AssertDoubleRailGap(innerBoxes[0].X + innerBoxes[0].Width, innerBoxes[1].X, 0.5);
         }
 
         [Fact]
