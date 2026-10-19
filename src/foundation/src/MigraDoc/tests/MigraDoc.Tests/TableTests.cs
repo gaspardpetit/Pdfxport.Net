@@ -297,12 +297,45 @@ namespace MigraDoc.Tests
             horizontal.Should().HaveCount(4);
             vertical[0].Top.Should().BeApproximately(horizontal[3].Y, 0.01);
             vertical[3].Top.Should().BeApproximately(horizontal[3].Y, 0.01);
-            horizontal[2].Left.Should().BeApproximately(vertical[1].X, 0.01);
-            horizontal[2].Right.Should().BeApproximately(vertical[2].X, 0.01);
-            horizontal[1].Left.Should().BeApproximately(vertical[1].X, 0.01);
-            horizontal[1].Right.Should().BeApproximately(vertical[2].X, 0.01);
+            horizontal[2].Left.Should().BeApproximately(vertical[1].X + 0.25, 0.01);
+            horizontal[2].Right.Should().BeApproximately(vertical[2].X - 0.25, 0.01);
+            horizontal[1].Left.Should().BeApproximately(vertical[1].X + 0.25, 0.01);
+            horizontal[1].Right.Should().BeApproximately(vertical[2].X - 0.25, 0.01);
             vertical[1].Bottom.Should().BeApproximately(horizontal[1].Y + 0.25, 0.01);
             vertical[2].Bottom.Should().BeApproximately(horizontal[1].Y + 0.25, 0.01);
+        }
+
+        [Fact]
+        public void Double_internal_row_border_stays_inside_outer_side_strokes()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("5cm");
+            table.Borders.Style = BorderStyle.Double;
+            table.Borders.Width = 0.5;
+            table.AddRow()[0].AddParagraph("First");
+            table.AddRow()[0].AddParagraph("Second");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+                .Cast<Match>().ToArray();
+            var verticalXs = strokes.Where(stroke => stroke.Groups["x1"].Value == stroke.Groups["x2"].Value)
+                .Select(stroke => double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture))
+                .Distinct().OrderBy(value => value).ToArray();
+            var horizontal = strokes.Where(stroke => stroke.Groups["y1"].Value == stroke.Groups["y2"].Value)
+                .Select(stroke => (
+                    Y: double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    Right: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Left: double.Parse(stroke.Groups["x2"].Value, CultureInfo.InvariantCulture)))
+                .OrderBy(stroke => stroke.Y).ToArray();
+            verticalXs.Should().HaveCount(4);
+            horizontal.Should().HaveCount(6);
+            foreach (var stroke in horizontal.Skip(2).Take(2))
+            {
+                stroke.Left.Should().BeApproximately(verticalXs[1] + 0.25, 0.01);
+                stroke.Right.Should().BeApproximately(verticalXs[2] - 0.25, 0.01);
+            }
         }
 
         [Fact]

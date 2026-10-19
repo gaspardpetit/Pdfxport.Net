@@ -174,7 +174,8 @@ namespace MigraDoc.Rendering
         /// <param name="top">The top position of the border.</param>
         /// <param name="width">The width on which to render the border.</param>
         internal void RenderHorizontally(BorderType type, XUnitPt left, XUnitPt top, XUnitPt width,
-            XUnitPt? innerStrokeLeft = null, XUnitPt? innerStrokeRight = null)
+            XUnitPt? innerStrokeLeft = null, XUnitPt? innerStrokeRight = null,
+            bool insetBothStrokes = false)
         {
             XUnitPt borderWidth = GetWidth(type);
             if (borderWidth == 0)
@@ -188,10 +189,10 @@ namespace MigraDoc.Rendering
                     var strokeWidth = borderWidth / 3;
                     var outerLeft = left;
                     var outerRight = left + width;
-                    var upperLeft = type == BorderType.Bottom ? innerStrokeLeft ?? outerLeft : outerLeft;
-                    var upperRight = type == BorderType.Bottom ? innerStrokeRight ?? outerRight : outerRight;
-                    var lowerLeft = type == BorderType.Top ? innerStrokeLeft ?? outerLeft : outerLeft;
-                    var lowerRight = type == BorderType.Top ? innerStrokeRight ?? outerRight : outerRight;
+                    var upperLeft = type == BorderType.Bottom || insetBothStrokes ? innerStrokeLeft ?? outerLeft : outerLeft;
+                    var upperRight = type == BorderType.Bottom || insetBothStrokes ? innerStrokeRight ?? outerRight : outerRight;
+                    var lowerLeft = type == BorderType.Top || insetBothStrokes ? innerStrokeLeft ?? outerLeft : outerLeft;
+                    var lowerRight = type == BorderType.Top || insetBothStrokes ? innerStrokeRight ?? outerRight : outerRight;
 #if PSGFX
                     _gfx.DrawLine(pen, new(upperRight, top + strokeWidth / 2),
                         new(upperLeft, top + strokeWidth / 2));

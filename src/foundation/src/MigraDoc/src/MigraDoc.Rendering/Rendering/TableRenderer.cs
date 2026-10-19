@@ -184,11 +184,13 @@ namespace MigraDoc.Rendering
                 ? innerStrokeBottom : null;
             XUnitPt? innerStrokeLeft = default;
             if (cell.Column?.Index == 0 && bordersRenderer.GetStyle(BorderType.Left) == BorderStyle.Double)
-                innerStrokeLeft = leftPos - leftWidth / 6;
+                innerStrokeLeft = leftPos;
             XUnitPt? innerStrokeRight = default;
             if (cell.Column?.Index + cell.MergeRight == _table.Columns.Count - 1 &&
                 bordersRenderer.GetStyle(BorderType.Right) == BorderStyle.Double)
-                innerStrokeRight = rightPos + rightWidth / 6;
+                innerStrokeRight = rightPos;
+            var internalTopEdge = cell.Row?.Index > 0;
+            var internalBottomEdge = cell.Row?.Index + cell.MergeDown < _table.Rows.Count - 1;
 
             if (cell.RoundedCorner != RoundedCorner.None)
             {
@@ -213,11 +215,13 @@ namespace MigraDoc.Rendering
 
                 if (cell.RoundedCorner != RoundedCorner.BottomLeft && cell.RoundedCorner != RoundedCorner.BottomRight)
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, leftPos - leftWidth, bottomPos,
-                        rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight);
+                        rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
+                        internalBottomEdge);
 
                 if (cell.RoundedCorner != RoundedCorner.TopLeft && cell.RoundedCorner != RoundedCorner.TopRight)
                     bordersRenderer.RenderHorizontally(BorderType.Top, leftPos - leftWidth, topPos - topWidth,
-                        rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight);
+                        rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
+                        internalTopEdge);
             }
             else
             {
@@ -236,10 +240,11 @@ namespace MigraDoc.Rendering
                 if (bottomPen == null || bottomPen.DashStyle != XDashStyle.Solid ||
                     !followingTopBorders.Contains(HorizontalBorderKey(cell, bordersRenderer, bottomPen, false)))
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, bottomLeft, bottomPos, bottomLength,
-                        innerStrokeLeft, innerStrokeRight);
+                        innerStrokeLeft, innerStrokeRight, internalBottomEdge);
                 if (cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false)
                     bordersRenderer.RenderHorizontally(BorderType.Top, leftPos - leftWidth, topPos - topWidth,
-                        rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight);
+                        rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
+                        internalTopEdge);
             }
 
             RenderDiagonalBorders(mergedBorders, innerRect);
