@@ -95,12 +95,14 @@ namespace MigraDoc.Rendering
 
         void RenderCell(Cell cell,
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color)> followingTopBorders,
-            HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color)> followingLeftBorders)
+            HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color)> followingLeftBorders,
+            bool renderBorders = true)
         {
             var innerRect = GetInnerRect(CalcStartingHeight(), cell);
             RenderShading(cell, innerRect);
             RenderContent(cell, innerRect);
-            RenderBorders(cell, innerRect, followingTopBorders, followingLeftBorders);
+            if (renderBorders)
+                RenderBorders(cell, innerRect, followingTopBorders, followingLeftBorders);
         }
 
         static void EqualizeRoundedCornerBorders(Cell cell)
@@ -391,6 +393,11 @@ namespace MigraDoc.Rendering
 
         void RenderCells(IReadOnlyList<Cell> cells, IReadOnlyList<Cell>? followingCells = null)
         {
+            // A uniform double grid has two closed outlines: one facing each cell
+            // and one around the outside of the table. Draw those as paths so the
+            // corners are joins rather than unrelated line caps.
+            XPen? gridPen = null;
+            var uniformDoubleGrid = followingCells == null && TryGetUniformDoubleGridPen(cells, out gridPen);
             var followingTopBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color)>();
             var followingLeftBorders = new HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color)>();
             foreach (var cell in cells.Concat(followingCells ?? Array.Empty<Cell>()))
@@ -413,7 +420,64 @@ namespace MigraDoc.Rendering
                 }
             }
             foreach (var cell in cells)
-                RenderCell(cell, followingTopBorders, followingLeftBorders);
+                RenderCell(cell, followingTopBorders, followingLeftBorders, !uniformDoubleGrid);
+            if (uniformDoubleGrid)
+                RenderUniformDoubleGrid(cells, gridPen!);
+        }
+
+        bool TryGetUniformDoubleGridPen(IReadOnlyList<Cell> cells, out XPen? pen)
+        {
+            pen = null;
+            if (cells.Count == 0 || _lastHeaderRow >= 0 || _startRow != 0 ||
+                _endRow != _table.Rows.Count - 1 || cells.Count != _mergedCells.Count)
+                return false;
+
+            foreach (var cell in cells)
+            {
+                if (cell.RoundedCorner != RoundedCorner.None)
+                    return false;
+                var renderer = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), _gfx);
+                foreach (var side in new[] { BorderType.Top, BorderType.Right, BorderType.Bottom, BorderType.Left })
+                {
+                    if (renderer.GetStyle(side) != BorderStyle.Double)
+                        return false;
+                    var edgePen = renderer.GetPen(side);
+                    if (edgePen == null || edgePen.DashStyle != XDashStyle.Solid ||
+                        pen != null && (edgePen.Width != pen.Width || edgePen.Color != pen.Color))
+                        return false;
+                    pen ??= edgePen;
+                }
+            }
+            return pen != null;
+        }
+
+        void RenderUniformDoubleGrid(IReadOnlyList<Cell> cells, XPen pen)
+        {
+            var halfStroke = XUnitPt.FromPoint(pen.Width / 2);
+            XUnitPt? outerLeft = null, outerTop = null, outerRight = null, outerBottom = null;
+            foreach (var cell in cells)
+            {
+                var inner = GetInnerRect(CalcStartingHeight(), cell);
+                var effectiveBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
+                var borders = new BordersRenderer(effectiveBorders, _gfx);
+                var left = inner.X - halfStroke;
+                var top = inner.Y - halfStroke;
+                var right = inner.X + inner.Width + halfStroke;
+                var bottom = inner.Y + inner.Height + halfStroke;
+                _gfx.DrawRectangle(pen, new XRect(left, top, right - left, bottom - top));
+
+                var cellOuterLeft = inner.X - borders.GetWidth(BorderType.Left) + halfStroke;
+                var cellOuterTop = inner.Y - borders.GetWidth(BorderType.Top) + halfStroke;
+                var cellOuterRight = inner.X + inner.Width + borders.GetWidth(BorderType.Right) - halfStroke;
+                var cellOuterBottom = inner.Y + inner.Height + borders.GetWidth(BorderType.Bottom) - halfStroke;
+                outerLeft = outerLeft == null || cellOuterLeft < outerLeft ? cellOuterLeft : outerLeft;
+                outerTop = outerTop == null || cellOuterTop < outerTop ? cellOuterTop : outerTop;
+                outerRight = outerRight == null || cellOuterRight > outerRight ? cellOuterRight : outerRight;
+                outerBottom = outerBottom == null || cellOuterBottom > outerBottom ? cellOuterBottom : outerBottom;
+                RenderDiagonalBorders(effectiveBorders, inner);
+            }
+            _gfx.DrawRectangle(pen, new XRect(outerLeft!.Value, outerTop!.Value,
+                outerRight!.Value - outerLeft.Value, outerBottom!.Value - outerTop.Value));
         }
 
         void InitFormat(Area area, FormatInfo? previousFormatInfo)

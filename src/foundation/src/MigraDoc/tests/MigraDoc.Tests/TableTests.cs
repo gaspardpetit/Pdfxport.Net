@@ -1,4 +1,4 @@
-﻿// MigraDoc - Creating Documents on the Fly
+// MigraDoc - Creating Documents on the Fly
 // See the LICENSE file in the solution root for more information.
 
 using System.Text;
@@ -272,37 +272,70 @@ namespace MigraDoc.Tests
             var document = new Document();
             var table = document.AddSection().AddTable();
             table.AddColumn("5cm");
-            var cell = table.AddRow()[0];
-            cell.AddParagraph("Cell");
-            cell.Borders.Style = BorderStyle.Double;
-            cell.Borders.Width = 0.5;
+            table.Borders.Style = BorderStyle.Double;
+            table.Borders.Width = 0.5;
+            table.AddRow()[0].AddParagraph("Cell");
 
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
-            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
-                .Cast<Match>().ToArray();
-            var vertical = strokes.Where(stroke => stroke.Groups["x1"].Value == stroke.Groups["x2"].Value)
-                .Select(stroke => (
-                    X: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
-                    Bottom: double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
-                    Top: double.Parse(stroke.Groups["y2"].Value, CultureInfo.InvariantCulture)))
-                .OrderBy(stroke => stroke.X).ToArray();
-            var horizontal = strokes.Where(stroke => stroke.Groups["y1"].Value == stroke.Groups["y2"].Value)
-                .Select(stroke => (
-                    Y: double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
-                    Right: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
-                    Left: double.Parse(stroke.Groups["x2"].Value, CultureInfo.InvariantCulture)))
-                .OrderBy(stroke => stroke.Y).ToArray();
-            vertical.Should().HaveCount(4);
-            horizontal.Should().HaveCount(4);
-            vertical[0].Top.Should().BeApproximately(horizontal[3].Y, 0.01);
-            vertical[3].Top.Should().BeApproximately(horizontal[3].Y, 0.01);
-            horizontal[2].Left.Should().BeApproximately(vertical[1].X + 0.25, 0.01);
-            horizontal[2].Right.Should().BeApproximately(vertical[2].X - 0.25, 0.01);
-            horizontal[1].Left.Should().BeApproximately(vertical[1].X + 0.25, 0.01);
-            horizontal[1].Right.Should().BeApproximately(vertical[2].X - 0.25, 0.01);
-            vertical[1].Bottom.Should().BeApproximately(horizontal[1].Y + 0.25, 0.01);
-            vertical[2].Bottom.Should().BeApproximately(horizontal[1].Y + 0.25, 0.01);
+            var boxes = DoubleBorderBoxes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0));
+            boxes.Should().HaveCount(2);
+            AssertEncloses(boxes.OrderByDescending(box => box.Width * box.Height).First(),
+                boxes.OrderBy(box => box.Width * box.Height).First());
+        }
+
+        static (double X, double Y, double Width, double Height)[] DoubleBorderBoxes(string content) =>
+            Regex.Matches(content, @"(?m)(?<x>-?[\d.]+) (?<y>-?[\d.]+) (?<width>[\d.]+) (?<height>[\d.]+) re\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    double.Parse(match.Groups["x"].Value, CultureInfo.InvariantCulture),
+                    double.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture),
+                    double.Parse(match.Groups["width"].Value, CultureInfo.InvariantCulture),
+                    double.Parse(match.Groups["height"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+
+        static void AssertEncloses(
+            (double X, double Y, double Width, double Height) outer,
+            (double X, double Y, double Width, double Height) inner)
+        {
+            outer.X.Should().BeLessThan(inner.X);
+            outer.Y.Should().BeLessThan(inner.Y);
+            (outer.X + outer.Width).Should().BeGreaterThan(inner.X + inner.Width);
+            (outer.Y + outer.Height).Should().BeGreaterThan(inner.Y + inner.Height);
+        }
+
+        [Fact]
+        public void Uniform_three_by_three_double_grid_has_closed_cell_and_perimeter_paths()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            for (var column = 0; column < 3; column++)
+                table.AddColumn("3.5cm");
+            table.Borders.Style = BorderStyle.Double;
+            table.Borders.Width = 1;
+            for (var row = 0; row < 3; row++)
+            {
+                var rowCells = table.AddRow();
+                rowCells.Height = "2cm";
+                for (var column = 0; column < 3; column++)
+                    rowCells[column].AddParagraph($"{row + 1},{column + 1}");
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var path = Environment.GetEnvironmentVariable("PDFXPORT_GRID_OUTPUT");
+            if (!string.IsNullOrEmpty(path))
+                renderer.PdfDocument.Save(path);
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var boxes = DoubleBorderBoxes(content);
+            boxes.Should().HaveCount(10);
+            var outer = boxes.OrderByDescending(box => box.Width * box.Height).First();
+            var cells = boxes.Where(box => box != outer).ToArray();
+            cells.Should().HaveCount(9);
+            foreach (var inner in cells)
+                AssertEncloses(outer, inner);
+            cells.Select(box => Math.Round(box.X, 2)).Distinct().Should().HaveCount(3);
+            cells.Select(box => Math.Round(box.Y, 2)).Distinct().Should().HaveCount(3);
         }
 
         [Fact]
@@ -318,24 +351,14 @@ namespace MigraDoc.Tests
 
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
-            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
-                .Cast<Match>().ToArray();
-            var verticalXs = strokes.Where(stroke => stroke.Groups["x1"].Value == stroke.Groups["x2"].Value)
-                .Select(stroke => double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture))
-                .Distinct().OrderBy(value => value).ToArray();
-            var horizontal = strokes.Where(stroke => stroke.Groups["y1"].Value == stroke.Groups["y2"].Value)
-                .Select(stroke => (
-                    Y: double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
-                    Right: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
-                    Left: double.Parse(stroke.Groups["x2"].Value, CultureInfo.InvariantCulture)))
-                .OrderBy(stroke => stroke.Y).ToArray();
-            verticalXs.Should().HaveCount(4);
-            horizontal.Should().HaveCount(6);
-            foreach (var stroke in horizontal.Skip(2).Take(2))
-            {
-                stroke.Left.Should().BeApproximately(verticalXs[1] + 0.25, 0.01);
-                stroke.Right.Should().BeApproximately(verticalXs[2] - 0.25, 0.01);
-            }
+            var boxes = DoubleBorderBoxes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0));
+            boxes.Should().HaveCount(3);
+            var outer = boxes.OrderByDescending(box => box.Width * box.Height).First();
+            foreach (var inner in boxes.Where(box => box != outer))
+                AssertEncloses(outer, inner);
+            var innerBoxes = boxes.Where(box => box != outer).OrderBy(box => box.Y).ToArray();
+            innerBoxes[0].Y.Should().BeLessThan(innerBoxes[1].Y);
+            (innerBoxes[0].Y + innerBoxes[0].Height).Should().BeLessThan(innerBoxes[1].Y);
         }
 
         [Fact]
@@ -353,34 +376,13 @@ namespace MigraDoc.Tests
 
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
-            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
-                .Cast<Match>().ToArray();
-            var verticalXs = strokes.Where(stroke => stroke.Groups["x1"].Value == stroke.Groups["x2"].Value)
-                .Select(stroke => double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture))
-                .Distinct().OrderBy(value => value).ToArray();
-            var horizontal = strokes.Where(stroke => stroke.Groups["y1"].Value == stroke.Groups["y2"].Value)
-                .Select(stroke => (
-                    Y: double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
-                    Right: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
-                    Left: double.Parse(stroke.Groups["x2"].Value, CultureInfo.InvariantCulture)))
-                .ToArray();
-            verticalXs.Should().HaveCount(6);
-            var levels = horizontal.GroupBy(stroke => stroke.Y).OrderBy(group => group.Key).ToArray();
-            levels.Should().HaveCount(4);
-            foreach (var group in levels.Skip(1).Take(2))
-            {
-                var segments = group.OrderBy(stroke => stroke.Left).ToArray();
-                segments.Should().HaveCount(2);
-                segments[0].Right.Should().BeApproximately(verticalXs[2] - 0.25, 0.01);
-                segments[1].Left.Should().BeApproximately(verticalXs[3] + 0.25, 0.01);
-            }
-            foreach (var group in new[] { levels[0], levels[3] })
-            {
-                var segments = group.OrderBy(stroke => stroke.Left).ToArray();
-                segments.Should().HaveCount(2);
-                segments[0].Right.Should().BeGreaterThan(verticalXs[3]);
-                segments[1].Left.Should().BeLessThan(verticalXs[2]);
-            }
+            var boxes = DoubleBorderBoxes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0));
+            boxes.Should().HaveCount(3);
+            var outer = boxes.OrderByDescending(box => box.Width * box.Height).First();
+            var innerBoxes = boxes.Where(box => box != outer).OrderBy(box => box.X).ToArray();
+            foreach (var inner in innerBoxes)
+                AssertEncloses(outer, inner);
+            (innerBoxes[0].X + innerBoxes[0].Width).Should().BeLessThan(innerBoxes[1].X);
         }
 
         [Fact]
@@ -440,28 +442,14 @@ namespace MigraDoc.Tests
 
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
-            var content = string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
-                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
-                .Select(reference => reference.Value)
-                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
-                .Where(stream => stream.Stream != null)
-                .Select(stream => Encoding.GetEncoding("ISO-8859-1").GetString(stream.Stream!.UnfilteredValue)));
-            var vertical = Regex.Matches(content,
-                    @"(?m)(?<x1>[\d.]+) (?<y1>[\d.]+) m\s+(?<x2>[\d.]+) (?<y2>[\d.]+) l\s+S")
-                .Cast<Match>()
-                .Where(stroke => stroke.Groups["x1"].Value == stroke.Groups["x2"].Value)
-                .Select(stroke => (
-                    X: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
-                    Top: Math.Min(double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
-                        double.Parse(stroke.Groups["y2"].Value, CultureInfo.InvariantCulture)),
-                    Bottom: Math.Max(double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
-                        double.Parse(stroke.Groups["y2"].Value, CultureInfo.InvariantCulture))))
-                .ToArray();
-            var middle = (vertical.Min(stroke => stroke.X) + vertical.Max(stroke => stroke.X)) / 2;
-            var internalEdges = vertical.Where(stroke => Math.Abs(stroke.X - middle) < 2).ToArray();
-            internalEdges.Should().NotBeEmpty();
-            internalEdges.Should().OnlyContain(stroke => stroke.Bottom <
-                vertical.Max(edge => edge.Bottom) - 1);
+            var boxes = DoubleBorderBoxes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0));
+            boxes.Should().HaveCount(4);
+            var outer = boxes.OrderByDescending(box => box.Width * box.Height).First();
+            foreach (var inner in boxes.Where(box => box != outer))
+                AssertEncloses(outer, inner);
+            var cellBoxes = boxes.Where(box => box != outer).OrderByDescending(box => box.Width).ToArray();
+            cellBoxes[0].Width.Should().BeGreaterThan(cellBoxes[1].Width);
+            cellBoxes[0].Width.Should().BeGreaterThan(cellBoxes[2].Width);
         }
 
         [Fact]
