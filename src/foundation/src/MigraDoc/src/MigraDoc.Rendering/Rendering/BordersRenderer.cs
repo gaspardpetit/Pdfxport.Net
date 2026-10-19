@@ -49,7 +49,7 @@ namespace MigraDoc.Rendering
 #endif
         }
 
-        BorderStyle GetStyle(BorderType type)
+        internal BorderStyle GetStyle(BorderType type)
         {
             var style = BorderStyle.Single;
 
@@ -128,7 +128,8 @@ namespace MigraDoc.Rendering
         /// <param name="left">The left position of the border.</param>
         /// <param name="top">The top position of the border.</param>
         /// <param name="height">The height on which to render the border.</param>
-        internal void RenderVertically(BorderType type, XUnitPt left, XUnitPt top, XUnitPt height)
+        internal void RenderVertically(BorderType type, XUnitPt left, XUnitPt top, XUnitPt height,
+            XUnitPt? outerStrokeTop = null)
         {
             XUnitPt borderWidth = GetWidth(type);
             if (borderWidth == 0)
@@ -140,15 +141,17 @@ namespace MigraDoc.Rendering
                 if (GetStyle(type) == BorderStyle.Double)
                 {
                     var strokeWidth = borderWidth / 3;
+                    var leftStrokeTop = type == BorderType.Left ? outerStrokeTop ?? top : top;
+                    var rightStrokeTop = type == BorderType.Right ? outerStrokeTop ?? top : top;
 #if PSGFX
                     _gfx.DrawLine(pen, new(left + strokeWidth / 2, top + height),
-                        new(left + strokeWidth / 2, top));
+                        new(left + strokeWidth / 2, leftStrokeTop));
                     _gfx.DrawLine(pen, new(left + borderWidth - strokeWidth / 2, top + height),
-                        new(left + borderWidth - strokeWidth / 2, top));
+                        new(left + borderWidth - strokeWidth / 2, rightStrokeTop));
 #else
-                    _gfx.DrawLine(pen, left + strokeWidth / 2, top + height, left + strokeWidth / 2, top);
+                    _gfx.DrawLine(pen, left + strokeWidth / 2, top + height, left + strokeWidth / 2, leftStrokeTop);
                     _gfx.DrawLine(pen, left + borderWidth - strokeWidth / 2, top + height,
-                        left + borderWidth - strokeWidth / 2, top);
+                        left + borderWidth - strokeWidth / 2, rightStrokeTop);
 #endif
                     return;
                 }

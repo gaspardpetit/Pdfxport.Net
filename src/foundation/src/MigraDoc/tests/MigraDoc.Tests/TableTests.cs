@@ -225,6 +225,45 @@ namespace MigraDoc.Tests
                 double.Parse(shading.Groups["height"].Value, CultureInfo.InvariantCulture);
             (shadingLeft - vertical[1]).Should().BeApproximately(0.25, 0.01);
             (horizontal[0] - shadingTop).Should().BeApproximately(0.25, 0.01);
+            var verticalTops = strokes.Where(stroke => stroke.Groups["x1"].Value ==
+                    stroke.Groups["x2"].Value)
+                .Select(stroke => (
+                    X: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Top: double.Parse(stroke.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .OrderBy(stroke => stroke.X).ToArray();
+            verticalTops[0].Top.Should().BeApproximately(horizontal[1], 0.01);
+            verticalTops[1].Top.Should().BeApproximately(shadingTop, 0.01);
+        }
+
+        [Fact]
+        public void Double_right_outer_stroke_meets_outer_top_border()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("5cm");
+            var cell = table.AddRow()[0];
+            cell.AddParagraph("Cell");
+            cell.Borders.Top.Style = BorderStyle.Double;
+            cell.Borders.Top.Width = 0.5;
+            cell.Borders.Right.Style = BorderStyle.Double;
+            cell.Borders.Right.Width = 0.5;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+                .Cast<Match>().ToArray();
+            var outerHorizontalTop = strokes.Where(stroke => stroke.Groups["y1"].Value ==
+                    stroke.Groups["y2"].Value)
+                .Max(stroke => double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture));
+            var verticalTops = strokes.Where(stroke => stroke.Groups["x1"].Value ==
+                    stroke.Groups["x2"].Value)
+                .Select(stroke => (
+                    X: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Top: double.Parse(stroke.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .OrderBy(stroke => stroke.X).ToArray();
+            verticalTops.Should().HaveCount(2);
+            verticalTops[1].Top.Should().BeApproximately(outerHorizontalTop, 0.01);
+            (verticalTops[1].Top - verticalTops[0].Top).Should().BeApproximately(1.25, 0.01);
         }
 
         [Fact]

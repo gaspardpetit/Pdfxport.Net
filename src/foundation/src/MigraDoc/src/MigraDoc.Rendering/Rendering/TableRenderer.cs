@@ -170,6 +170,12 @@ namespace MigraDoc.Rendering
             XUnitPt leftWidth = bordersRenderer.GetWidth(BorderType.Left);
             XUnitPt topWidth = bordersRenderer.GetWidth(BorderType.Top);
             XUnitPt rightWidth = bordersRenderer.GetWidth(BorderType.Right);
+            XUnitPt? outerStrokeTop = bordersRenderer.GetStyle(BorderType.Top) == BorderStyle.Double
+                ? topPos - topWidth + topWidth / 6
+                : default;
+            var leftOuterStrokeTop = cell.Column?.Index == 0 ? outerStrokeTop : default;
+            var rightOuterStrokeTop = cell.Column?.Index + cell.MergeRight == _table.Columns.Count - 1
+                ? outerStrokeTop : default;
 
             if (cell.RoundedCorner != RoundedCorner.None)
             {
@@ -185,10 +191,12 @@ namespace MigraDoc.Rendering
 
                 // Render horizontal and vertical borders only if touching no rounded corner.
                 if (cell.RoundedCorner != RoundedCorner.TopRight && cell.RoundedCorner != RoundedCorner.BottomRight)
-                    bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos, bottomPos + bottomWidth - topPos);
+                    bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos,
+                        bottomPos + bottomWidth - topPos, rightOuterStrokeTop);
 
                 if (cell.RoundedCorner != RoundedCorner.TopLeft && cell.RoundedCorner != RoundedCorner.BottomLeft)
-                    bordersRenderer.RenderVertically(BorderType.Left, leftPos - leftWidth, topPos, bottomPos + bottomWidth - topPos);
+                    bordersRenderer.RenderVertically(BorderType.Left, leftPos - leftWidth, topPos,
+                        bottomPos + bottomWidth - topPos, leftOuterStrokeTop);
 
                 if (cell.RoundedCorner != RoundedCorner.BottomLeft && cell.RoundedCorner != RoundedCorner.BottomRight)
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, leftPos - leftWidth, bottomPos, rightPos + rightWidth + leftWidth - leftPos);
@@ -203,9 +211,10 @@ namespace MigraDoc.Rendering
                 if (rightPen == null || rightPen.DashStyle != XDashStyle.Solid ||
                     !followingLeftBorders.Contains(VerticalBorderKey(cell, bordersRenderer, rightPen, false)))
                     bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos,
-                        bottomPos + bottomWidth - topPos);
+                        bottomPos + bottomWidth - topPos, rightOuterStrokeTop);
                 if (cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false)
-                    bordersRenderer.RenderVertically(BorderType.Left, leftPos - leftWidth, topPos, bottomPos + bottomWidth - topPos);
+                    bordersRenderer.RenderVertically(BorderType.Left, leftPos - leftWidth, topPos,
+                        bottomPos + bottomWidth - topPos, leftOuterStrokeTop);
                 var bottomLeft = leftPos - leftWidth;
                 var bottomLength = rightPos + rightWidth + leftWidth - leftPos;
                 var bottomPen = bordersRenderer.GetPen(BorderType.Bottom);
