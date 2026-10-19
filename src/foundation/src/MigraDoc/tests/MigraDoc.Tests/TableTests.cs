@@ -476,6 +476,47 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Mixed_single_double_triple_cells_keep_individual_closed_rail_boxes()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            for (var column = 0; column < 3; column++) table.AddColumn("4cm");
+            var row = table.AddRow();
+            row.Height = "2cm";
+            static void SetCellBorders(MigraDoc.DocumentObjectModel.Tables.Cell cell, BorderStyle style, int width)
+            {
+                foreach (var border in new[] { cell.Borders.Top, cell.Borders.Right,
+                             cell.Borders.Bottom, cell.Borders.Left })
+                {
+                    border.Style = style;
+                    border.Width = width;
+                }
+            }
+            SetCellBorders(row[0], BorderStyle.Single, 1);
+            SetCellBorders(row[1], BorderStyle.Double, 2);
+            SetCellBorders(row[2], BorderStyle.Triple, 3);
+            for (var column = 0; column < 3; column++) row[column].AddParagraph($"{column}");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var boxes = DoubleBorderBoxes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0));
+            boxes.Should().HaveCount(5);
+            var groups = boxes.GroupBy(box => Math.Round(box.X + box.Width / 2, 2))
+                .OrderBy(group => group.Key).ToArray();
+            groups.Should().HaveCount(2);
+            groups[0].Should().HaveCount(2);
+            groups[1].Should().HaveCount(3);
+            var doubleRails = groups[0].OrderBy(box => box.Width).ToArray();
+            AssertEncloses(doubleRails[1], doubleRails[0]);
+            (doubleRails[0].X - doubleRails[1].X).Should().BeApproximately(4, .02);
+            var tripleRails = groups[1].OrderBy(box => box.Width).ToArray();
+            AssertEncloses(tripleRails[2], tripleRails[1]);
+            AssertEncloses(tripleRails[1], tripleRails[0]);
+            (tripleRails[0].X - tripleRails[1].X).Should().BeApproximately(6, .02);
+            (tripleRails[1].X - tripleRails[2].X).Should().BeApproximately(6, .02);
+        }
+
+        [Fact]
         public void Uniform_three_by_three_double_grid_has_closed_cell_and_perimeter_paths()
         {
             var document = new Document();

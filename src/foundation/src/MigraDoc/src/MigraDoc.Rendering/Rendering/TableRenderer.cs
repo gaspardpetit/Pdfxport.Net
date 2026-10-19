@@ -489,15 +489,76 @@ namespace MigraDoc.Rendering
                     precedingBottomBorders.Add(HorizontalBorderKey(cell, borders, bottomPen, false));
                 }
             }
+            var closedCells = new List<(Cell Cell, BorderStyle Style, XPen Pen)>();
             foreach (var cell in cells)
+            {
+                XPen? closedPen = null;
+                var closedStyle = BorderStyle.None;
+                var closed = !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid &&
+                    TryGetClosedCellRailPen(cell, out closedPen, out closedStyle);
                 RenderCell(cell, followingTopBorders, precedingBottomBorders, followingLeftBorders,
-                    !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid);
+                    !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && !closed);
+                if (closed)
+                    closedCells.Add((cell, closedStyle, closedPen!));
+            }
+            foreach (var closed in closedCells)
+                RenderClosedMultiRailCell(closed.Cell, closed.Style, closed.Pen);
             if (uniformDoubleGrid)
                 RenderUniformDoubleGrid(cells, gridPen!);
             if (uniformTripleGrid)
                 RenderUniformTripleGrid(cells, triplePen!);
             if (uniformCompoundGrid)
                 RenderUniformCompoundGrid(cells, compoundPen!, compoundStyle);
+        }
+
+        bool TryGetClosedCellRailPen(Cell cell, out XPen? pen, out BorderStyle style)
+        {
+            pen = null;
+            style = BorderStyle.None;
+            if (cell.RoundedCorner != RoundedCorner.None)
+                return false;
+            var renderer = new BordersRenderer(cell.Borders, _gfx);
+            foreach (var side in new[] { BorderType.Top, BorderType.Right, BorderType.Bottom, BorderType.Left })
+            {
+                var edgeStyle = renderer.GetStyle(side);
+                if (edgeStyle is not (BorderStyle.Double or BorderStyle.Triple) ||
+                    style != BorderStyle.None && edgeStyle != style ||
+                    cell.Borders.GetBorder(side)?.Values.Visible == false)
+                    return false;
+                style = edgeStyle;
+                var edgePen = renderer.GetPen(side);
+                if (edgePen == null || edgePen.DashStyle != XDashStyle.Solid ||
+                    pen != null && (pen.Width != edgePen.Width || pen.Color != edgePen.Color))
+                    return false;
+                pen ??= edgePen;
+            }
+            return pen != null;
+        }
+
+        void RenderClosedMultiRailCell(Cell cell, BorderStyle style, XPen pen)
+        {
+            var inner = GetInnerRect(CalcStartingHeight(), cell);
+            var effectiveBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
+            var borders = new BordersRenderer(cell.Borders, _gfx);
+            var half = XUnitPt.FromPoint(pen.Width / 2);
+            var left = inner.X - half;
+            var top = inner.Y - half;
+            var right = inner.X + inner.Width + half;
+            var bottom = inner.Y + inner.Height + half;
+            _gfx.DrawRectangle(pen, new XRect(left, top, right - left, bottom - top));
+            if (style == BorderStyle.Triple)
+            {
+                var offset = XUnitPt.FromPoint(2 * pen.Width);
+                _gfx.DrawRectangle(pen, new XRect(left - offset, top - offset,
+                    right - left + 2 * offset, bottom - top + 2 * offset));
+            }
+            var outerLeft = inner.X - borders.GetWidth(BorderType.Left) + half;
+            var outerTop = inner.Y - borders.GetWidth(BorderType.Top) + half;
+            var outerRight = inner.X + inner.Width + borders.GetWidth(BorderType.Right) - half;
+            var outerBottom = inner.Y + inner.Height + borders.GetWidth(BorderType.Bottom) - half;
+            _gfx.DrawRectangle(pen, new XRect(outerLeft, outerTop,
+                outerRight - outerLeft, outerBottom - outerTop));
+            RenderDiagonalBorders(effectiveBorders, inner);
         }
 
         static (double First, double Middle, double Gap, bool ThreeRails)? CompoundProfile(BorderStyle style) => style switch
