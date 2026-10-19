@@ -1253,6 +1253,27 @@ namespace MigraDoc.Rendering
             if (font.Subscript || font.Superscript)
                 xFont = FontHandler.ToSubSuperFont(xFont);
 
+            var layout = _documentRenderer.TabLeaderLayout?.Invoke(_paragraph, tabOffset.Leader, xFont);
+            if (layout is { } adjustment &&
+                leaderWidth.Point + adjustment.CharacterSpacing > 0 &&
+                tabOffset.Offset.Point - adjustment.RightInset >= leaderWidth.Point)
+            {
+                var pitch = leaderWidth.Point + adjustment.CharacterSpacing;
+                var available = tabOffset.Offset.Point - adjustment.RightInset;
+                var count = (int)Math.Floor((available - leaderWidth.Point) / pitch) + 1;
+                var first = _currentXPosition.Point + available - leaderWidth.Point - (count - 1) * pitch;
+                while (count > 0 && first < _currentXPosition.Point + adjustment.LeftInset)
+                {
+                    first += pitch;
+                    count--;
+                }
+                if (CurrentBrush != null)
+                    for (var index = 0; index < count; index++)
+                        _gfx.DrawString(leaderString, xFont, CurrentBrush,
+                            first + index * pitch, CurrentBaselinePosition);
+                return;
+            }
+
             if (CurrentBrush != null)
                 _gfx.DrawString(drawString, xFont, CurrentBrush, _currentXPosition, CurrentBaselinePosition);
         }

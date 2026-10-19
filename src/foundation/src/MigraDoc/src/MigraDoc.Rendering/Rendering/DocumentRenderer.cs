@@ -68,6 +68,12 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, IReadOnlyList<XFont>, double?>? ExactParagraphBaselineOffset { get; set; }
 
         /// <summary>
+        /// Optionally adjusts the spacing and insets of tab leader characters in points.
+        /// Returning null retains the default rendering.
+        /// </summary>
+        public Func<Paragraph, TabLeader, XFont, (double CharacterSpacing, double LeftInset, double RightInset)?>? TabLeaderLayout { get; set; }
+
+        /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
         /// The rendered border width is unchanged.
         /// </summary>
