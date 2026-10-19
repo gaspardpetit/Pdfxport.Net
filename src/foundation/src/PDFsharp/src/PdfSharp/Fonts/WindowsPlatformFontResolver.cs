@@ -75,6 +75,16 @@ namespace PdfSharp.Fonts
             new("Verdana Italic", TypefaceInfo.FontSimulation.None, "verdanai"),
             new("Verdana Bold Italic", TypefaceInfo.FontSimulation.None, "verdanaz"),
 
+            new("DejaVu Sans", TypefaceInfo.FontSimulation.None, "DejaVuSans"),
+            new("DejaVu Sans Bold", TypefaceInfo.FontSimulation.None, "DejaVuSans-Bold"),
+            new("DejaVu Sans Italic", TypefaceInfo.FontSimulation.None, "DejaVuSans-Oblique"),
+            new("DejaVu Sans Bold Italic", TypefaceInfo.FontSimulation.None, "DejaVuSans-BoldOblique"),
+
+            new("Segoe UI", TypefaceInfo.FontSimulation.None, "segoeui"),
+            new("Segoe UI Bold", TypefaceInfo.FontSimulation.None, "segoeuib"),
+            new("Segoe UI Italic", TypefaceInfo.FontSimulation.None, "segoeuii"),
+            new("Segoe UI Bold Italic", TypefaceInfo.FontSimulation.None, "segoeuiz"),
+
             new("Lucida Console", TypefaceInfo.FontSimulation.None, "lucon"),
             new("Lucida Console Bold", TypefaceInfo.FontSimulation.Bold, "lucon"),
             new("Lucida Console Italic", TypefaceInfo.FontSimulation.Italic, "lucon"),
