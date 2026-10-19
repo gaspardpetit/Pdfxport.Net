@@ -96,6 +96,13 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, int, double, double?>? TopBorderDistanceAtAreaStart { get; set; }
 
         /// <summary>
+        /// Adds a paint-only baseline offset, in points, for a paragraph. Receives the resolved
+        /// fonts on its first rendered line. Null or a non-finite result preserves the baseline.
+        /// This offset is added after the exact-spacing baseline adjustment when present.
+        /// </summary>
+        public Func<Paragraph, IReadOnlyList<XFont>, double?>? ParagraphPaintBaselineOffset { get; set; }
+
+        /// <summary>
         /// Optionally adjusts the spacing and insets of tab leader characters in points.
         /// Returning null retains the default rendering.
         /// </summary>
