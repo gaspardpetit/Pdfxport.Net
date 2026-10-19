@@ -35,6 +35,12 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? LineEndOverhang { get; set; }
 
         /// <summary>
+        /// Adds the permitted overhang to the fit allowance for a final word,
+        /// preserving its full measured width for rendering.
+        /// </summary>
+        public bool AdditiveTerminalLineEndOverhang { get; set; }
+
+        /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
         /// The rendered border width is unchanged.
         /// </summary>

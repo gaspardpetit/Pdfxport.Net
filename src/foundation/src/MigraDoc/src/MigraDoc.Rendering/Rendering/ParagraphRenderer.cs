@@ -1964,6 +1964,14 @@ namespace MigraDoc.Rendering
                 _currentXPosition > StartXPosition + Tolerance)
             {
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+                var followingLeaf = _currentLeaf?.GetNextLeaf();
+                while (followingLeaf != null && IsBlank(followingLeaf.Current))
+                    followingLeaf = followingLeaf.GetNextLeaf();
+                if (_documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null &&
+                    _currentXPosition + width > right &&
+                    overhang(_paragraph, word, CurrentFont) is double additiveAllowance &&
+                    additiveAllowance > 0 && double.IsFinite(additiveAllowance))
+                    return FormatAsWord(width, fittingRect, additiveAllowance);
                 if (_currentXPosition + width > right &&
                     overhang(_paragraph, word, CurrentFont) is double allowance &&
                     allowance > 0 && !double.IsInfinity(allowance) &&
@@ -1982,7 +1990,7 @@ namespace MigraDoc.Rendering
             _phase == Phase.Rendering && _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
             !_lastTabPassed;
 
-        FormatResult FormatAsWord(XUnitPt width, Rectangle fittingRect)
+        FormatResult FormatAsWord(XUnitPt width, Rectangle fittingRect, double overhangAllowance = 0)
         {
             _savedWordWidth = width;
 
@@ -2000,7 +2008,7 @@ namespace MigraDoc.Rendering
                 : 0;
             if (overrun > 0)
             {
-                if (!TryMoveToSecondary(width) && overrun > shrinkAllowance)
+                if (!TryMoveToSecondary(width) && overrun > shrinkAllowance + overhangAllowance)
                     return FormatResult.NewLine;
             }
 

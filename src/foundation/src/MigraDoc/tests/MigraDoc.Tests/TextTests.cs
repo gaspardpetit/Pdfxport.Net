@@ -66,6 +66,43 @@ namespace MigraDoc.Tests
             SameLine(5).Should().BeTrue();
         }
 
+        [Fact]
+        public void AdditiveTerminalOverhangCombinesWithJustifiedSpaceContraction()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            var lineWidth = measure.MeasureString("Alpha", font).Width +
+                measure.MeasureString(" ", font).Width +
+                measure.MeasureString("Bravo.", font).Width - 1.6;
+
+            bool SameLine(bool additive)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(lineWidth + 40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(20);
+                section.PageSetup.RightMargin = Unit.FromPoint(20);
+                section.AddParagraph("Alpha Bravo.").Format.Alignment = ParagraphAlignment.Justify;
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = _ => 0.75;
+                renderer.DocumentRenderer.LineEndOverhang = (_, word, _) => word == "Bravo." ? 1 : null;
+                renderer.DocumentRenderer.AdditiveTerminalLineEndOverhang = additive;
+                renderer.RenderDocument();
+                var text = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                var positions = new List<(string Value, double Y)>();
+                while (text.Text.MoveAndGetNext(true, out var item))
+                    positions.Add((item!.Text, item.Y));
+                return positions.First(item => item.Value.Contains("Alpha", StringComparison.Ordinal)).Y ==
+                    positions.First(item => item.Value.Contains("Bravo.", StringComparison.Ordinal)).Y;
+            }
+
+            SameLine(false).Should().BeFalse();
+            SameLine(true).Should().BeTrue();
+        }
+
         [Theory]
         [InlineData(TextOrientation.Horizontal)]
         [InlineData(TextOrientation.Upward)]
