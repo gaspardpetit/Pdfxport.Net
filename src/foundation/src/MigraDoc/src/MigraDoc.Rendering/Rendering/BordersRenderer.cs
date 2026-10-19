@@ -163,7 +163,8 @@ namespace MigraDoc.Rendering
 #else
                 _gfx.DrawLine(pen, left, top + height, left, top);
 #endif
-                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap && height.Point > 0)
+                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap or
+                    BorderStyle.DashDot or BorderStyle.DashDotDot && height.Point > 0)
                 {
                     var endpointLength = XUnitPt.FromPoint(Math.Min(0.5, height.Point / 2));
                     var endpointPen = new XPen(pen.Color, pen.Width);
@@ -227,7 +228,8 @@ namespace MigraDoc.Rendering
 #else
                 _gfx.DrawLine(pen, left + width, top, left, top);
 #endif
-                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap && width.Point > 0)
+                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap or
+                    BorderStyle.DashDot or BorderStyle.DashDotDot && width.Point > 0)
                 {
                     var endpointLength = XUnitPt.FromPoint(Math.Min(0.5, width.Point / 2));
                     var endpointPen = new XPen(pen.Color, pen.Width);

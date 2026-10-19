@@ -246,7 +246,8 @@ namespace MigraDoc.Rendering
                         innerStrokeLeft, innerStrokeRight, internalBottomEdge);
                 var topPen = bordersRenderer.GetPen(BorderType.Top);
                 if (cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false &&
-                    (topPen == null || bordersRenderer.GetStyle(BorderType.Top) is not (BorderStyle.Dot or BorderStyle.DashSmallGap) ||
+                    (topPen == null || bordersRenderer.GetStyle(BorderType.Top) is not
+                        (BorderStyle.Dot or BorderStyle.DashSmallGap or BorderStyle.DashDot or BorderStyle.DashDotDot) ||
                      !CoveredByNarrowerEdges(HorizontalBorderKey(cell, bordersRenderer, topPen, true), precedingBottomBorders, true)))
                     bordersRenderer.RenderHorizontally(BorderType.Top, leftPos - leftWidth, topPos - topWidth,
                         rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
@@ -281,7 +282,8 @@ namespace MigraDoc.Rendering
         }
 
         static bool IsSharedEdgeStyle(BorderStyle style, XPen pen) =>
-            pen.DashStyle == XDashStyle.Solid || style is BorderStyle.Dot or BorderStyle.DashSmallGap;
+            pen.DashStyle == XDashStyle.Solid || style is BorderStyle.Dot or BorderStyle.DashSmallGap or
+                BorderStyle.DashDot or BorderStyle.DashDotDot;
 
         static bool CoveredByNarrowerEdges(
             (int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style) target,
@@ -290,7 +292,8 @@ namespace MigraDoc.Rendering
         {
             if (!requireNarrower && candidates.Contains(target))
                 return true;
-            if (target.Style is not (BorderStyle.Dot or BorderStyle.DashSmallGap))
+            if (target.Style is not (BorderStyle.Dot or BorderStyle.DashSmallGap or
+                BorderStyle.DashDot or BorderStyle.DashDotDot))
                 return false;
 
             // Prefer the finer cell segmentation so each dash pattern restarts at

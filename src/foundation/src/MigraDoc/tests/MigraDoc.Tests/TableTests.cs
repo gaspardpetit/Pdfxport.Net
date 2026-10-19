@@ -182,6 +182,10 @@ namespace MigraDoc.Tests
         [InlineData(true, BorderStyle.Dot, 3)]
         [InlineData(false, BorderStyle.DashSmallGap, 3)]
         [InlineData(true, BorderStyle.DashSmallGap, 3)]
+        [InlineData(false, BorderStyle.DashDot, 3)]
+        [InlineData(true, BorderStyle.DashDot, 3)]
+        [InlineData(false, BorderStyle.DashDotDot, 3)]
+        [InlineData(true, BorderStyle.DashDotDot, 3)]
         [InlineData(false, BorderStyle.Single, 1)]
         [InlineData(true, BorderStyle.Single, 1)]
         public void DottedAndDashedTableEdgesHaveVisibleEndpointStrokes(bool vertical, BorderStyle style, int expectedStrokes)
@@ -202,10 +206,14 @@ namespace MigraDoc.Tests
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
             if (style == BorderStyle.DashSmallGap)
                 content.Should().MatchRegex(@"\[3(?:\.0)? 1(?:\.0)?\]0 d");
+            if (style == BorderStyle.DashDot)
+                content.Should().MatchRegex(@"\[3(?:\.0)? 1(?:\.0)? 1(?:\.0)? 1(?:\.0)?\]0 d");
+            if (style == BorderStyle.DashDotDot)
+                content.Should().MatchRegex(@"\[3(?:\.0)? 1(?:\.0)? 1(?:\.0)? 1(?:\.0)? 1(?:\.0)? 1(?:\.0)?\]0 d");
             var strokes = BorderStrokes(content)
                 .Cast<Match>().ToArray();
             strokes.Should().HaveCount(expectedStrokes);
-            if (style is BorderStyle.Dot or BorderStyle.DashSmallGap)
+            if (style is BorderStyle.Dot or BorderStyle.DashSmallGap or BorderStyle.DashDot or BorderStyle.DashDotDot)
             {
                 var positions = strokes.Select(stroke => (
                     Start: double.Parse(stroke.Groups[vertical ? "y1" : "x1"].Value,
@@ -226,6 +234,10 @@ namespace MigraDoc.Tests
         [InlineData(BorderStyle.DashSmallGap, false)]
         [InlineData(BorderStyle.Dot, true)]
         [InlineData(BorderStyle.DashSmallGap, true)]
+        [InlineData(BorderStyle.DashDot, false)]
+        [InlineData(BorderStyle.DashDot, true)]
+        [InlineData(BorderStyle.DashDotDot, false)]
+        [InlineData(BorderStyle.DashDotDot, true)]
         public void MergedCellSharedPatternedEdgeIsPaintedOnce(BorderStyle style, bool upperMerged)
         {
             var document = new Document();
