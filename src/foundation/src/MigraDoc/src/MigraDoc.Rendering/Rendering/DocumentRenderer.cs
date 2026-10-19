@@ -80,6 +80,10 @@ namespace MigraDoc.Rendering
         /// widths of zero or less are ignored.
         /// </summary>
         public Func<Paragraph, string, XFont, double?>? TextWidthAdjustment { get; set; }
+        /// <summary>
+        /// Optional vertical paint offset in points for an inline image; positive values move it down.
+        /// </summary>
+        public Func<Image, double?>? InlineImageVerticalOffset { get; set; }
 
         /// <summary>
         /// Prepares this instance for rendering.
