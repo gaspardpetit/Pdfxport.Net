@@ -81,6 +81,12 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? LeadingKerningAfterBlank { get; set; }
 
         /// <summary>
+        /// Selects a paint-only baseline offset in points for a resolved font in an exact-spaced paragraph.
+        /// Null or a non-finite value leaves its baseline unchanged.
+        /// </summary>
+        public Func<Paragraph, XFont, double?>? ExactFontBaselineOffset { get; set; }
+
+        /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
         /// The rendered border width is unchanged.
         /// </summary>
