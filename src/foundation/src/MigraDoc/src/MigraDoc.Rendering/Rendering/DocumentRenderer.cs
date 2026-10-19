@@ -28,6 +28,15 @@ namespace MigraDoc.Rendering
     /// <param name="document">The MigraDoc document to render.</param>
     public class DocumentRenderer(Document document)
     {
+        /// <summary>Optional underline stroke width as a fraction of font size. The default is 1/16.</summary>
+        public double? UnderlineStrokeWidthFactor { get; set; }
+
+        /// <summary>Optional underline offset as a fraction of font descent. The default is 0.33.</summary>
+        public double? UnderlineVerticalOffsetFactor { get; set; }
+
+        /// <summary>Optional font-specific underline factors; null uses the renderer-wide factors.</summary>
+        public Func<Font, (double StrokeWidthFactor, double VerticalOffsetFactor)?>? UnderlineGeometry { get; set; }
+
         /// <summary>
         /// Returns the permitted line-end overhang in points for a word in a paragraph,
         /// or null to use ordinary wrapping.
