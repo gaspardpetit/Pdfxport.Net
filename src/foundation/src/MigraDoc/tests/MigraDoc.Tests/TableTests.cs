@@ -221,6 +221,84 @@ namespace MigraDoc.Tests
             }
         }
 
+        [Theory]
+        [InlineData(BorderStyle.Dot, false)]
+        [InlineData(BorderStyle.DashSmallGap, false)]
+        [InlineData(BorderStyle.Dot, true)]
+        [InlineData(BorderStyle.DashSmallGap, true)]
+        public void MergedCellSharedPatternedEdgeIsPaintedOnce(BorderStyle style, bool upperMerged)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var table = document.AddSection().AddTable();
+            for (var column = 0; column < 3; column++)
+                table.AddColumn(Unit.FromPoint(60));
+            var upper = table.AddRow();
+            var lower = table.AddRow();
+            if (upperMerged)
+                upper[0].MergeRight = 1;
+            else
+                lower[0].MergeRight = 1;
+            var cells = upperMerged
+                ? new[] { upper[0], upper[2], lower[0], lower[1], lower[2] }
+                : new[] { upper[0], upper[1], upper[2], lower[0], lower[2] };
+            foreach (var cell in cells)
+            {
+                cell.AddParagraph("Cell");
+                cell.Borders.Color = Colors.Black;
+                cell.Borders.Width = 0.5;
+                cell.Borders.Style = style;
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var horizontalRows = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+                .Cast<Match>()
+                .Where(stroke => stroke.Groups["y1"].Value == stroke.Groups["y2"].Value &&
+                    Math.Abs(double.Parse(stroke.Groups["x2"].Value,
+                        System.Globalization.CultureInfo.InvariantCulture) -
+                        double.Parse(stroke.Groups["x1"].Value,
+                            System.Globalization.CultureInfo.InvariantCulture)) > 10)
+                .GroupBy(stroke => stroke.Groups["y1"].Value)
+                .OrderBy(row => double.Parse(row.Key, System.Globalization.CultureInfo.InvariantCulture))
+                .Select(row => row.Count()).ToArray();
+            horizontalRows.OrderBy(count => count).Should().Equal(
+                upperMerged ? new[] { 2, 3, 3 } : new[] { 2, 2, 3 });
+        }
+
+        [Fact]
+        public void DashedBordersWithDifferentEndpointsOnSharedEdgeRemainDistinct()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var table = document.AddSection().AddTable();
+            table.AddColumn(Unit.FromPoint(83));
+            var upper = table.AddRow()[0];
+            var lower = table.AddRow()[0];
+            upper.AddParagraph("Upper");
+            lower.AddParagraph("Lower");
+            upper.Borders.Bottom.Color = Colors.Red;
+            upper.Borders.Bottom.Width = 0.5;
+            upper.Borders.Bottom.Style = BorderStyle.DashSmallGap;
+            lower.Borders.Top.Color = Colors.Red;
+            lower.Borders.Top.Width = 0.5;
+            lower.Borders.Top.Style = BorderStyle.DashSmallGap;
+            upper.Borders.Left.Color = Colors.White;
+            upper.Borders.Left.Width = 4;
+            lower.Borders.Left.Color = Colors.White;
+            lower.Borders.Left.Width = 16;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var longHorizontalStrokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+                .Cast<Match>().Where(stroke => stroke.Groups["y1"].Value == stroke.Groups["y2"].Value &&
+                    Math.Abs(double.Parse(stroke.Groups["x2"].Value,
+                        System.Globalization.CultureInfo.InvariantCulture) -
+                        double.Parse(stroke.Groups["x1"].Value,
+                            System.Globalization.CultureInfo.InvariantCulture)) > 10);
+            longHorizontalStrokes.Should().HaveCount(2);
+        }
+
         [Fact]
         public void Double_cell_borders_render_two_strokes_per_edge()
         {
