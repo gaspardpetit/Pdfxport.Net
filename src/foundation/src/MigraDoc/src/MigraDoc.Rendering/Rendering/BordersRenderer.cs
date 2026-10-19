@@ -70,6 +70,12 @@ namespace MigraDoc.Rendering
             {
                 BorderStyle.Double => width * 3,
                 BorderStyle.Triple => width * 5,
+                BorderStyle.ThinThickSmallGap or BorderStyle.ThickThinSmallGap => width * 1.75,
+                BorderStyle.ThinThickThinSmallGap => width * 2.5,
+                BorderStyle.ThinThickMediumGap or BorderStyle.ThickThinMediumGap => width * 2,
+                BorderStyle.ThinThickThinMediumGap => width * 3,
+                BorderStyle.ThinThickLargeGap or BorderStyle.ThickThinLargeGap => width * 2.125,
+                BorderStyle.ThinThickThinLargeGap => width * 3.5,
                 _ => width
             };
         }

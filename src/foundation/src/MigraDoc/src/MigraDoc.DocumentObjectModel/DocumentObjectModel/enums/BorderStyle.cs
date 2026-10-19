@@ -47,6 +47,16 @@ namespace MigraDoc.DocumentObjectModel
 
         Triple,
 
+        ThinThickSmallGap,
+        ThickThinSmallGap,
+        ThinThickThinSmallGap,
+        ThinThickMediumGap,
+        ThickThinMediumGap,
+        ThinThickThinMediumGap,
+        ThinThickLargeGap,
+        ThickThinLargeGap,
+        ThinThickThinLargeGap,
+
         /* --- unsupported ---
           Triple                = 8,
           ThinThickSmallGap     = 9,
