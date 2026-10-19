@@ -1319,7 +1319,19 @@ namespace MigraDoc.Rendering
                 xFont = FontHandler.ToSubSuperFont(xFont);
 
             if (CurrentBrush != null)
-                _gfx.DrawString(word, xFont, CurrentBrush, _currentXPosition, CurrentBaselinePosition);
+            {
+                var kerning = GetTrailingGlyphKerning(word, CurrentFont);
+                if (kerning != 0)
+                {
+                    var prefix = word[..^1];
+                    _gfx.DrawString(prefix, xFont, CurrentBrush, _currentXPosition, CurrentBaselinePosition);
+                    _gfx.DrawString(word[^1..], xFont, CurrentBrush,
+                        _currentXPosition + _gfx.MeasureString(prefix, xFont, StringFormat).Width + kerning,
+                        CurrentBaselinePosition);
+                }
+                else
+                    _gfx.DrawString(word, xFont, CurrentBrush, _currentXPosition, CurrentBaselinePosition);
+            }
             XUnitPt wordWidth = MeasureString(word);
             RenderUnderline(wordWidth, true);
             RealizeHyperlink(wordWidth);
@@ -2203,6 +2215,8 @@ namespace MigraDoc.Rendering
             if (font.Subscript || font.Superscript)
                 width *= FontHandler.GetSubSuperScaling(xFont);
 
+            width += GetTrailingGlyphKerning(word, xFont);
+
             if (_phase == Phase.Formatting)
             {
                 var adjustment = _documentRenderer.TextWidthAdjustment?.Invoke(_paragraph, word, xFont);
@@ -2212,6 +2226,17 @@ namespace MigraDoc.Rendering
             }
 
             return width;
+        }
+
+        double GetTrailingGlyphKerning(string word, XFont xFont)
+        {
+            if (word.Length < 2 || char.IsLowSurrogate(word[^1]) ||
+                _documentRenderer.TrailingGlyphKerning?.Invoke(_paragraph, word, xFont) is not double adjustment ||
+                double.IsNaN(adjustment) || double.IsInfinity(adjustment))
+                return 0;
+            var font = CurrentDomFont;
+            return font.Subscript || font.Superscript
+                ? adjustment * FontHandler.GetSubSuperScaling(xFont) : adjustment;
         }
 
         XUnitPt GetSpaceWidth(Character character)
