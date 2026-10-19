@@ -2829,6 +2829,9 @@ namespace MigraDoc.Rendering
                 inherentLineSpace = singleLineSpace;
                 inherentLineSpace = Math.Max(inherentLineSpace, _currentVerticalInfo.InherentLineSpace);
                 lineHeight = inherentLineSpace;
+                var bottomSpace = _paragraph.Format.AtLeastBottomLineSpace.Point;
+                if (!double.IsNaN(bottomSpace) && !double.IsInfinity(bottomSpace) && bottomSpace > 0)
+                    lineHeight += bottomSpace;
             }
             else
             {
