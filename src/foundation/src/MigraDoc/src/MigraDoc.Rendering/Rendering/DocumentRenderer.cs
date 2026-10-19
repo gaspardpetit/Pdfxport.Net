@@ -29,6 +29,12 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Adjusts the spacing before a word's final glyph in points during both layout and painting.
+        /// Null or a non-finite value leaves the word unchanged.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? TrailingGlyphKerning { get; set; }
+
+        /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
         /// The rendered border width is unchanged.
         /// </summary>
