@@ -819,6 +819,10 @@ namespace MigraDoc.Rendering
                         !double.IsNaN(offset) && !double.IsInfinity(offset))
                         _exactParagraphBaselineOffset = offset;
                 }
+                if (_paragraph.Format.LineSpacingRule == LineSpacingRule.AtLeast &&
+                    _paragraph.Format.AtLeastBaselineOffset is { } atLeastOffset &&
+                    double.IsFinite(atLeastOffset.Point))
+                    _exactParagraphBaselineOffset = atLeastOffset.Point;
                 _baselineOffsetInitialized = true;
             }
             _currentBlankCount = lineInfo.BlankCount;

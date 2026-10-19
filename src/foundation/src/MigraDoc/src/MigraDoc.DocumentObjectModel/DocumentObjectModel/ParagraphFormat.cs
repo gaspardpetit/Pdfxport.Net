@@ -209,6 +209,16 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Offsets the painted text baseline of a paragraph using AtLeast line spacing.
+        /// Layout, line fitting, and following paragraphs retain their positions.
+        /// </summary>
+        public Unit AtLeastBaselineOffset
+        {
+            get => Values.AtLeastBaselineOffset ?? Unit.Empty;
+            set => Values.AtLeastBaselineOffset = value;
+        }
+
+        /// <summary>
         /// Gets or sets the rule which is used to define the line spacing.
         /// </summary>
         public LineSpacingRule LineSpacingRule
@@ -376,6 +386,10 @@ namespace MigraDoc.DocumentObjectModel
                 (refFormat == null || Values.AtLeastBottomLineSpace != refFormat.Values.AtLeastBottomLineSpace))
                 serializer.WriteSimpleAttribute("AtLeastBottomLineSpace", AtLeastBottomLineSpace);
 
+            if (!Values.AtLeastBaselineOffset.IsValueNullOrEmpty() &&
+                (refFormat == null || Values.AtLeastBaselineOffset != refFormat.Values.AtLeastBaselineOffset))
+                serializer.WriteSimpleAttribute("AtLeastBaselineOffset", AtLeastBaselineOffset);
+
             if (Values.KeepTogether.HasValue && (refFormat == null || Values.KeepTogether != refFormat.Values.KeepTogether))
                 serializer.WriteSimpleAttribute("KeepTogether", KeepTogether);
 
@@ -491,6 +505,9 @@ namespace MigraDoc.DocumentObjectModel
 
             /// <summary>Additional space below AtLeast-spaced lines.</summary>
             public Unit? AtLeastBottomLineSpace { get; set; }
+
+            /// <summary>Paint-only baseline offset for AtLeast-spaced paragraphs.</summary>
+            public Unit? AtLeastBaselineOffset { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
