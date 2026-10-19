@@ -267,6 +267,45 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Double_table_perimeter_has_separate_inner_and_outer_corners()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("5cm");
+            var cell = table.AddRow()[0];
+            cell.AddParagraph("Cell");
+            cell.Borders.Style = BorderStyle.Double;
+            cell.Borders.Width = 0.5;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+                .Cast<Match>().ToArray();
+            var vertical = strokes.Where(stroke => stroke.Groups["x1"].Value == stroke.Groups["x2"].Value)
+                .Select(stroke => (
+                    X: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Bottom: double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    Top: double.Parse(stroke.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .OrderBy(stroke => stroke.X).ToArray();
+            var horizontal = strokes.Where(stroke => stroke.Groups["y1"].Value == stroke.Groups["y2"].Value)
+                .Select(stroke => (
+                    Y: double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    Right: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Left: double.Parse(stroke.Groups["x2"].Value, CultureInfo.InvariantCulture)))
+                .OrderBy(stroke => stroke.Y).ToArray();
+            vertical.Should().HaveCount(4);
+            horizontal.Should().HaveCount(4);
+            vertical[0].Top.Should().BeApproximately(horizontal[3].Y, 0.01);
+            vertical[3].Top.Should().BeApproximately(horizontal[3].Y, 0.01);
+            horizontal[2].Left.Should().BeApproximately(vertical[1].X, 0.01);
+            horizontal[2].Right.Should().BeApproximately(vertical[2].X, 0.01);
+            horizontal[1].Left.Should().BeApproximately(vertical[1].X, 0.01);
+            horizontal[1].Right.Should().BeApproximately(vertical[2].X, 0.01);
+            vertical[1].Bottom.Should().BeApproximately(horizontal[1].Y + 0.25, 0.01);
+            vertical[2].Bottom.Should().BeApproximately(horizontal[1].Y + 0.25, 0.01);
+        }
+
+        [Fact]
         public void Partial_double_table_borders_preserve_single_side_strokes()
         {
             var document = new Document();

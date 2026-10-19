@@ -129,7 +129,7 @@ namespace MigraDoc.Rendering
         /// <param name="top">The top position of the border.</param>
         /// <param name="height">The height on which to render the border.</param>
         internal void RenderVertically(BorderType type, XUnitPt left, XUnitPt top, XUnitPt height,
-            XUnitPt? outerStrokeTop = null)
+            XUnitPt? outerStrokeTop = null, XUnitPt? innerStrokeBottom = null)
         {
             XUnitPt borderWidth = GetWidth(type);
             if (borderWidth == 0)
@@ -143,14 +143,16 @@ namespace MigraDoc.Rendering
                     var strokeWidth = borderWidth / 3;
                     var leftStrokeTop = type == BorderType.Left ? outerStrokeTop ?? top : top;
                     var rightStrokeTop = type == BorderType.Right ? outerStrokeTop ?? top : top;
+                    var leftStrokeBottom = type == BorderType.Right ? innerStrokeBottom ?? top + height : top + height;
+                    var rightStrokeBottom = type == BorderType.Left ? innerStrokeBottom ?? top + height : top + height;
 #if PSGFX
-                    _gfx.DrawLine(pen, new(left + strokeWidth / 2, top + height),
+                    _gfx.DrawLine(pen, new(left + strokeWidth / 2, leftStrokeBottom),
                         new(left + strokeWidth / 2, leftStrokeTop));
-                    _gfx.DrawLine(pen, new(left + borderWidth - strokeWidth / 2, top + height),
+                    _gfx.DrawLine(pen, new(left + borderWidth - strokeWidth / 2, rightStrokeBottom),
                         new(left + borderWidth - strokeWidth / 2, rightStrokeTop));
 #else
-                    _gfx.DrawLine(pen, left + strokeWidth / 2, top + height, left + strokeWidth / 2, leftStrokeTop);
-                    _gfx.DrawLine(pen, left + borderWidth - strokeWidth / 2, top + height,
+                    _gfx.DrawLine(pen, left + strokeWidth / 2, leftStrokeBottom, left + strokeWidth / 2, leftStrokeTop);
+                    _gfx.DrawLine(pen, left + borderWidth - strokeWidth / 2, rightStrokeBottom,
                         left + borderWidth - strokeWidth / 2, rightStrokeTop);
 #endif
                     return;
@@ -171,7 +173,8 @@ namespace MigraDoc.Rendering
         /// <param name="left">The left position of the border.</param>
         /// <param name="top">The top position of the border.</param>
         /// <param name="width">The width on which to render the border.</param>
-        internal void RenderHorizontally(BorderType type, XUnitPt left, XUnitPt top, XUnitPt width)
+        internal void RenderHorizontally(BorderType type, XUnitPt left, XUnitPt top, XUnitPt width,
+            XUnitPt? innerStrokeLeft = null, XUnitPt? innerStrokeRight = null)
         {
             XUnitPt borderWidth = GetWidth(type);
             if (borderWidth == 0)
@@ -183,15 +186,21 @@ namespace MigraDoc.Rendering
                 if (GetStyle(type) == BorderStyle.Double)
                 {
                     var strokeWidth = borderWidth / 3;
+                    var outerLeft = left;
+                    var outerRight = left + width;
+                    var upperLeft = type == BorderType.Bottom ? innerStrokeLeft ?? outerLeft : outerLeft;
+                    var upperRight = type == BorderType.Bottom ? innerStrokeRight ?? outerRight : outerRight;
+                    var lowerLeft = type == BorderType.Top ? innerStrokeLeft ?? outerLeft : outerLeft;
+                    var lowerRight = type == BorderType.Top ? innerStrokeRight ?? outerRight : outerRight;
 #if PSGFX
-                    _gfx.DrawLine(pen, new(left + width, top + strokeWidth / 2),
-                        new(left, top + strokeWidth / 2));
-                    _gfx.DrawLine(pen, new(left + width, top + borderWidth - strokeWidth / 2),
-                        new(left, top + borderWidth - strokeWidth / 2));
+                    _gfx.DrawLine(pen, new(upperRight, top + strokeWidth / 2),
+                        new(upperLeft, top + strokeWidth / 2));
+                    _gfx.DrawLine(pen, new(lowerRight, top + borderWidth - strokeWidth / 2),
+                        new(lowerLeft, top + borderWidth - strokeWidth / 2));
 #else
-                    _gfx.DrawLine(pen, left + width, top + strokeWidth / 2, left, top + strokeWidth / 2);
-                    _gfx.DrawLine(pen, left + width, top + borderWidth - strokeWidth / 2,
-                        left, top + borderWidth - strokeWidth / 2);
+                    _gfx.DrawLine(pen, upperRight, top + strokeWidth / 2, upperLeft, top + strokeWidth / 2);
+                    _gfx.DrawLine(pen, lowerRight, top + borderWidth - strokeWidth / 2,
+                        lowerLeft, top + borderWidth - strokeWidth / 2);
 #endif
                     return;
                 }
