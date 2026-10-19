@@ -113,8 +113,7 @@ namespace PdfSharp.Internal.Imaging
                     ii.BitCount = bitCount;
                     ii.PixelWidth = width;
                     ii.PixelHeight = Math.Abs(height);
-                    // Implement flipped images when we encounter files that require this.
-                    var flippedImage = height < 0;
+                    ii.TopDown = height < 0;
                     if (planes == 1 && bitCount == 24)
                     {
                         // RGB24
@@ -272,13 +271,13 @@ namespace PdfSharp.Internal.Imaging
 
                 for (int y = 0; y < height; ++y)
                 {
-                    // Handle flipped images if we find files that require it.
-                    int nOffsetWrite = 3 * (height - 1 - y) * width;
+                    int outputRow = Image.TopDown ? y : height - 1 - y;
+                    int nOffsetWrite = 3 * outputRow * width;
                     int nOffsetWriteAlpha = 0;
                     if (hasAlpha)
                     {
-                        mask!.StartLine(y); // NRT
-                        nOffsetWriteAlpha = (height - 1 - y) * width;
+                        mask!.StartLine(Image.TopDown ? height - 1 - y : y); // NRT
+                        nOffsetWriteAlpha = outputRow * width;
                     }
 
                     for (int x = 0; x < width; ++x)
@@ -442,8 +441,8 @@ namespace PdfSharp.Internal.Imaging
                     int bytesPerLine = (width * bits + 7) / 8;
                     for (int y = 0; y < height; ++y)
                     {
-                        mask?.StartLine(y);
-                        int bytesOffsetWrite = (height - 1 - y) * ((width * bits + 7) / 8);
+                        mask?.StartLine(Image.TopDown ? height - 1 - y : y);
+                        int bytesOffsetWrite = (Image.TopDown ? y : height - 1 - y) * bytesPerLine;
                         for (int x = 0; x < bytesPerLine; ++x)
                         {
                             if (isGray)

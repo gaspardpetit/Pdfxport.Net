@@ -309,6 +309,11 @@ namespace PdfSharp.Internal.Imaging
     public class ImportedBmpImage : ImportedRasterImage
     {
         /// <summary>
+        /// Indicates that the BMP stores its first row at the top of the image.
+        /// </summary>
+        internal bool TopDown { get; set; }
+
+        /// <summary>
         /// Gets a value indicating if the image is bitonal.
         /// </summary>
         public int Bitonal { get; internal set; }
