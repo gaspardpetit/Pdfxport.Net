@@ -339,6 +339,42 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Double_horizontal_strokes_stop_at_internal_column_sides()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("5cm");
+            table.AddColumn("5cm");
+            table.Borders.Style = BorderStyle.Double;
+            table.Borders.Width = 0.5;
+            var row = table.AddRow();
+            row[0].AddParagraph("Left");
+            row[1].AddParagraph("Right");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+                .Cast<Match>().ToArray();
+            var verticalXs = strokes.Where(stroke => stroke.Groups["x1"].Value == stroke.Groups["x2"].Value)
+                .Select(stroke => double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture))
+                .Distinct().OrderBy(value => value).ToArray();
+            var horizontal = strokes.Where(stroke => stroke.Groups["y1"].Value == stroke.Groups["y2"].Value)
+                .Select(stroke => (
+                    Y: double.Parse(stroke.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    Right: double.Parse(stroke.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Left: double.Parse(stroke.Groups["x2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            verticalXs.Should().HaveCount(6);
+            foreach (var group in horizontal.GroupBy(stroke => stroke.Y))
+            {
+                var segments = group.OrderBy(stroke => stroke.Left).ToArray();
+                segments.Should().HaveCount(2);
+                segments[0].Right.Should().BeApproximately(verticalXs[2] - 0.25, 0.01);
+                segments[1].Left.Should().BeApproximately(verticalXs[3] + 0.25, 0.01);
+            }
+        }
+
+        [Fact]
         public void Partial_double_table_borders_preserve_single_side_strokes()
         {
             var document = new Document();

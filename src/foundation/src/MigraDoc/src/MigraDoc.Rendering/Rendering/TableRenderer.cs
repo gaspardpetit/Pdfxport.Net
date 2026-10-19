@@ -183,14 +183,15 @@ namespace MigraDoc.Rendering
             var rightInnerStrokeBottom = cell.Column?.Index + cell.MergeRight == _table.Columns.Count - 1
                 ? innerStrokeBottom : null;
             XUnitPt? innerStrokeLeft = default;
-            if (cell.Column?.Index == 0 && bordersRenderer.GetStyle(BorderType.Left) == BorderStyle.Double)
+            if (bordersRenderer.GetStyle(BorderType.Left) == BorderStyle.Double)
                 innerStrokeLeft = leftPos;
             XUnitPt? innerStrokeRight = default;
-            if (cell.Column?.Index + cell.MergeRight == _table.Columns.Count - 1 &&
-                bordersRenderer.GetStyle(BorderType.Right) == BorderStyle.Double)
+            if (bordersRenderer.GetStyle(BorderType.Right) == BorderStyle.Double)
                 innerStrokeRight = rightPos;
             var internalTopEdge = cell.Row?.Index > 0;
             var internalBottomEdge = cell.Row?.Index + cell.MergeDown < _table.Rows.Count - 1;
+            var internalLeftEdge = cell.Column?.Index > 0;
+            var internalRightEdge = cell.Column?.Index + cell.MergeRight < _table.Columns.Count - 1;
 
             if (cell.RoundedCorner != RoundedCorner.None)
             {
@@ -216,12 +217,12 @@ namespace MigraDoc.Rendering
                 if (cell.RoundedCorner != RoundedCorner.BottomLeft && cell.RoundedCorner != RoundedCorner.BottomRight)
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, leftPos - leftWidth, bottomPos,
                         rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
-                        internalBottomEdge);
+                        internalBottomEdge, internalLeftEdge, internalRightEdge);
 
                 if (cell.RoundedCorner != RoundedCorner.TopLeft && cell.RoundedCorner != RoundedCorner.TopRight)
                     bordersRenderer.RenderHorizontally(BorderType.Top, leftPos - leftWidth, topPos - topWidth,
                         rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
-                        internalTopEdge);
+                        internalTopEdge, internalLeftEdge, internalRightEdge);
             }
             else
             {
@@ -240,11 +241,11 @@ namespace MigraDoc.Rendering
                 if (bottomPen == null || bottomPen.DashStyle != XDashStyle.Solid ||
                     !followingTopBorders.Contains(HorizontalBorderKey(cell, bordersRenderer, bottomPen, false)))
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, bottomLeft, bottomPos, bottomLength,
-                        innerStrokeLeft, innerStrokeRight, internalBottomEdge);
+                        innerStrokeLeft, innerStrokeRight, internalBottomEdge, internalLeftEdge, internalRightEdge);
                 if (cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false)
                     bordersRenderer.RenderHorizontally(BorderType.Top, leftPos - leftWidth, topPos - topWidth,
                         rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
-                        internalTopEdge);
+                        internalTopEdge, internalLeftEdge, internalRightEdge);
             }
 
             RenderDiagonalBorders(mergedBorders, innerRect);
