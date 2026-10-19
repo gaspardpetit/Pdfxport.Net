@@ -910,6 +910,36 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void JustifiedRenderWordWidthAdjustmentAppliesWithinWrappedIntervals()
+        {
+            static double[] RightIntervalPositions(string content)
+            {
+                var horizontal = 0.0;
+                var vertical = 0.0;
+                var positions = new List<double>();
+                foreach (var line in content.Split('\n'))
+                {
+                    if (line.Trim() == "BT")
+                        horizontal = vertical = 0;
+                    var move = Regex.Match(line, @"^(?<dx>-?\d+(?:\.\d+)?) (?<dy>-?\d+(?:\.\d+)?) Td$");
+                    if (!move.Success) continue;
+                    horizontal += double.Parse(move.Groups["dx"].Value, CultureInfo.InvariantCulture);
+                    vertical += double.Parse(move.Groups["dy"].Value, CultureInfo.InvariantCulture);
+                    if (vertical is > 550 and < 620 && horizontal is > 301 and < 540)
+                        positions.Add(horizontal);
+                }
+                return positions.ToArray();
+            }
+
+            var normal = RightIntervalPositions(RenderSideWrappedImage(WrapStyle.BothSides, justify: true));
+            var adjusted = RightIntervalPositions(RenderSideWrappedImage(WrapStyle.BothSides,
+                justify: true, wordWidthAdjustment: -4));
+            adjusted.Length.Should().Be(normal.Length);
+            adjusted.Zip(normal, (after, before) => Math.Abs(after - before))
+                .Should().Contain(change => change > 0.1);
+        }
+
+        [Fact]
         public void PositionedImageDoesNotExcludeTextOnFollowingPage()
         {
             var content = RenderSideWrappedImage(WrapStyle.Right, pageIndex: 1,
@@ -1093,7 +1123,7 @@ namespace MigraDoc.Tests
             Func<double, double, double?>? contourLineFontBandHeight = null,
             Func<double, double, double?>? lineFitHeight = null,
             bool mixedFont = false, double pageHeight = 792,
-            bool oneAndHalfSpacing = false)
+            bool oneAndHalfSpacing = false, double? wordWidthAdjustment = null)
         {
             var document = new Document();
             document.Styles.Normal.Font.Name = "Arial";
@@ -1148,6 +1178,9 @@ namespace MigraDoc.Tests
                 paragraph.Format.LineSpacingRule = LineSpacingRule.OnePtFive;
 
             var renderer = new PdfDocumentRenderer { Document = document };
+            if (wordWidthAdjustment != null)
+                renderer.DocumentRenderer.JustifiedRenderWordWidthAdjustment = (_, word, _) =>
+                    word == "Words" ? wordWidthAdjustment : null;
             if (contour != null)
                 renderer.DocumentRenderer.WrapContour = shape => shape == image ? contour : null;
             if (contourBandHeight != null)
