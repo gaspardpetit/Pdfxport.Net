@@ -62,6 +62,12 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? TrailingGlyphKerning { get; set; }
 
         /// <summary>
+        /// Adjusts the spacing before a word's final glyph during painting only.
+        /// The adjustment does not affect line fitting. Null or non-finite values are ignored.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? RenderOnlyTrailingGlyphKerning { get; set; }
+
+        /// <summary>
         /// Selects a paint-only baseline offset in points for an exact-spaced paragraph.
         /// Receives the fonts on the first rendered line. Null or a non-finite value leaves the baseline unchanged.
         /// </summary>

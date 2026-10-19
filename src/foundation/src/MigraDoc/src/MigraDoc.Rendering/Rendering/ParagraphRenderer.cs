@@ -1369,7 +1369,8 @@ namespace MigraDoc.Rendering
 
             if (CurrentBrush != null)
             {
-                var kerning = GetTrailingGlyphKerning(word, CurrentFont);
+                var kerning = GetTrailingGlyphKerning(word, CurrentFont) +
+                    GetRenderOnlyTrailingGlyphKerning(word, CurrentFont);
                 if (kerning != 0)
                 {
                     var prefix = word[..^1];
@@ -2338,6 +2339,8 @@ namespace MigraDoc.Rendering
                 width *= FontHandler.GetSubSuperScaling(xFont);
 
             width += GetTrailingGlyphKerning(word, xFont);
+            if (_phase == Phase.Rendering)
+                width += GetRenderOnlyTrailingGlyphKerning(word, xFont);
 
             if (_phase == Phase.Formatting)
             {
@@ -2355,6 +2358,17 @@ namespace MigraDoc.Rendering
             if (word.Length < 2 || char.IsLowSurrogate(word[^1]) ||
                 _documentRenderer.TrailingGlyphKerning?.Invoke(_paragraph, word, xFont) is not double adjustment ||
                 double.IsNaN(adjustment) || double.IsInfinity(adjustment))
+                return 0;
+            var font = CurrentDomFont;
+            return font.Subscript || font.Superscript
+                ? adjustment * FontHandler.GetSubSuperScaling(xFont) : adjustment;
+        }
+
+        double GetRenderOnlyTrailingGlyphKerning(string word, XFont xFont)
+        {
+            if (_phase != Phase.Rendering || word.Length < 2 || char.IsLowSurrogate(word[^1]) ||
+                _documentRenderer.RenderOnlyTrailingGlyphKerning?.Invoke(_paragraph, word, xFont)
+                    is not double adjustment || !double.IsFinite(adjustment))
                 return 0;
             var font = CurrentDomFont;
             return font.Subscript || font.Superscript
