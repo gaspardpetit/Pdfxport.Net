@@ -83,6 +83,13 @@ namespace MigraDoc.Rendering
             MinimumLineMetricsForFont { get; set; }
 
         /// <summary>
+        /// Replaces the distance above a paragraph's top border at the start of a formatting area,
+        /// in points. Receives the physical page number and area Y coordinate. Null, negative, or
+        /// non-finite values preserve the paragraph's configured distance and border stroke width.
+        /// </summary>
+        public Func<Paragraph, int, double, double?>? TopBorderDistanceAtAreaStart { get; set; }
+
+        /// <summary>
         /// Optionally adjusts the spacing and insets of tab leader characters in points.
         /// Returning null retains the default rendering.
         /// </summary>

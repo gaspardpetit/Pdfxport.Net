@@ -1548,7 +1548,7 @@ namespace MigraDoc.Rendering
 
             LineInfo lineInfo = parFormatInfo.GetFirstLineInfo();
             Area contentArea = _renderInfo.LayoutInfo.ContentArea;
-            _currentYPosition = contentArea.Y + TopBorderOffset;
+            _currentYPosition = contentArea.Y + TopBorderOffset(contentArea.Y);
             // StL: GetFittingRect liefert manchmal null
             var rect = contentArea.GetFittingRect(_currentYPosition, lineInfo.Vertical.Height);
             if (rect != null)
@@ -1587,7 +1587,7 @@ namespace MigraDoc.Rendering
             _startLeaf = _currentLeaf;
             _currentLineNaturalFontHeight = 0;
             _currentVerticalInfo = CalcCurrentVerticalInfo();
-            _currentYPosition = area.Y + TopBorderOffset;
+            _currentYPosition = area.Y + TopBorderOffset(area.Y);
             _formattingArea = area;
             if (area is SideExclusionArea sideExclusion)
                 sideExclusion.NaturalFontHeight = _currentLineNaturalFontHeight;
@@ -2713,7 +2713,7 @@ namespace MigraDoc.Rendering
                     _currentVerticalInfo.Height = XUnitPt.FromPoint(height);
             }
 
-            XUnitPt topBorderOffset = TopBorderOffset;
+            XUnitPt topBorderOffset = TopBorderOffset(_formattingArea.Y);
             var contentArea = _renderInfo.LayoutInfo.ContentArea;
             if (topBorderOffset > 0) // May only occur for the first line.
                 contentArea = _formattingArea.GetFittingRect(_formattingArea.Y, topBorderOffset);
@@ -2792,22 +2792,22 @@ namespace MigraDoc.Rendering
         /// <summary>
         /// Gets the top border offset for the first line, else 0.
         /// </summary>
-        XUnitPt TopBorderOffset
+        XUnitPt TopBorderOffset(XUnitPt areaY)
         {
-            get
+            XUnitPt offset = 0;
+            if (_isFirstLine && _paragraph.Format.Values.Borders is not null &&
+                !_paragraph.Format.Values.Borders.IsNull())
             {
-                XUnitPt offset = 0;
-                if (_isFirstLine && _paragraph.Format.Values.Borders is not null && !_paragraph.Format.Values.Borders.IsNull())
-                {
-                    offset += _paragraph.Format.Borders.DistanceFromTop.Point;
-                    if (_paragraph.Format.Values.Borders is not null && !_paragraph.Format.Values.Borders.IsNull())
-                    {
-                        var bordersRenderer = new BordersRenderer(_paragraph.Format.Borders, _gfx);
-                        offset += bordersRenderer.GetWidth(BorderType.Top);
-                    }
-                }
-                return offset;
+                var distance = _paragraph.Format.Borders.DistanceFromTop.Point;
+                var replacement = _documentRenderer.TopBorderDistanceAtAreaStart?.Invoke(
+                    _paragraph, _fieldInfos?.PhysicalPageNr ?? 0, areaY.Point);
+                if (replacement is double candidate && double.IsFinite(candidate) && candidate >= 0)
+                    distance = candidate;
+                offset += distance;
+                var bordersRenderer = new BordersRenderer(_paragraph.Format.Borders, _gfx);
+                offset += bordersRenderer.GetWidth(BorderType.Top);
             }
+            return offset;
         }
 
         /// <summary>
