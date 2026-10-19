@@ -2785,16 +2785,23 @@ namespace MigraDoc.Rendering
 
         void RenderUnderline(XUnitPt width, bool isWord)
         {
-            var pen = GetUnderlinePen(isWord);
+            var font = CurrentDomFont;
+            var geometry = _documentRenderer.UnderlineGeometry?.Invoke(font);
+            var pen = GetUnderlinePen(isWord, font, geometry?.StrokeWidthFactor);
+            var offsetFactor = geometry?.VerticalOffsetFactor ??
+                _documentRenderer.UnderlineVerticalOffsetFactor ?? 0.33;
 
-            bool penChanged = UnderlinePenChanged(pen);
+            bool penChanged = UnderlinePenChanged(pen, offsetFactor);
             if (penChanged)
             {
                 if (_currentUnderlinePen != null)
                     EndUnderline(_currentUnderlinePen, _currentXPosition);
 
                 if (pen != null)
+                {
                     StartUnderline(_currentXPosition);
+                    _currentUnderlineOffsetFactor = offsetFactor;
+                }
 
                 _currentUnderlinePen = pen;
             }
@@ -2817,7 +2824,7 @@ namespace MigraDoc.Rendering
         void EndUnderline(XPen pen, XUnitPt xPosition)
         {
             XUnitPt yPosition = CurrentBaselinePosition;
-            yPosition += 0.33 * _currentVerticalInfo.Descent;
+            yPosition += _currentUnderlineOffsetFactor * _currentVerticalInfo.Descent;
 #if PSGFX
             _gfx.DrawLine(pen, new(_underlineStartPos, yPosition), new(xPosition, yPosition));
 #else
@@ -2827,8 +2834,9 @@ namespace MigraDoc.Rendering
 
         XPen? _currentUnderlinePen;
         XUnitPt _underlineStartPos;
+        double _currentUnderlineOffsetFactor;
 
-        bool UnderlinePenChanged(XPen? pen)
+        bool UnderlinePenChanged(XPen? pen, double offsetFactor)
         {
             if (pen == null && _currentUnderlinePen == null)
                 return false;
@@ -2848,6 +2856,9 @@ namespace MigraDoc.Rendering
 
             if (pen is null)
                 NRT.ThrowOnNull();
+
+            if (offsetFactor != _currentUnderlineOffsetFactor)
+                return true;
 
             // ReSharper disable once CompareOfFloatsByEqualityOperator
             return pen.Width != _currentUnderlinePen.Width;
@@ -2872,9 +2883,8 @@ namespace MigraDoc.Rendering
             }
         }
 
-        XPen? GetUnderlinePen(bool isWord)
+        XPen? GetUnderlinePen(bool isWord, Font font, double? strokeWidthFactor)
         {
-            var font = CurrentDomFont;
             var underlineType = font.Underline;
             if (underlineType == Underline.None)
                 return null;
@@ -2882,18 +2892,21 @@ namespace MigraDoc.Rendering
             if (underlineType == Underline.Words && !isWord)
                 return null;
 
+            var underlineWidth = font.Size.Point * (strokeWidthFactor ??
+                _documentRenderer.UnderlineStrokeWidthFactor ?? 1.0 / 16);
 #if noCMYK
-            XPen pen = new XPen(XColor.FromArgb(font.Color.Argb), font.Size / 16);
+            XPen pen = new XPen(XColor.FromArgb(font.Color.Argb), underlineWidth);
 #else
             Debug.Assert(_paragraph.Document != null, "_paragraph.Document != null");
 #if PSGFX
             var xxx = ColorHelper.ToXColor(font.Color, _paragraph.Document.UseCmykColor);
-            var pen = new XPen(new XSolidBrush(xxx), (float_)font.Size.Point / 16);
+            var pen = new XPen(new XSolidBrush(xxx), (float_)underlineWidth);
 #else
-            var pen = new XPen(ColorHelper.ToXColor(font.Color, _paragraph.Document.UseCmykColor), font.Size.Point / 16);
+            var pen = new XPen(ColorHelper.ToXColor(font.Color, _paragraph.Document.UseCmykColor), underlineWidth);
 #endif
 #endif
-            if (!isWord && underlineType == Underline.Single && _currentUnderlinePen != null &&
+            if (!isWord && underlineType == Underline.Single && strokeWidthFactor == null &&
+                _documentRenderer.UnderlineStrokeWidthFactor == null && _currentUnderlinePen != null &&
                 pen.Color == _currentUnderlinePen.Color)
                 pen.Width = _currentUnderlinePen.Width;
             pen.DashStyle = font.Underline switch
