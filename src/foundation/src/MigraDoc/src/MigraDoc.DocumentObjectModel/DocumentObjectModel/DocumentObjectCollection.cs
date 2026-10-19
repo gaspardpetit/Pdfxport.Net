@@ -101,6 +101,11 @@ namespace MigraDoc.DocumentObjectModel
         {
             SetParentOf(val);
             ((IList<DocumentObject?>)this).Insert(index, val);
+            if (val is Row insertedRow)
+            {
+                UpdateRowCachedValues(insertedRow);
+                insertedRow.ResetCachedValues();
+            }
             // Call ResetCachedValues for all objects moved by the Insert operation.
             int count = ((IList<DocumentObject?>)this).Count;
             for (int idx = index + 1; idx < count; idx++)
