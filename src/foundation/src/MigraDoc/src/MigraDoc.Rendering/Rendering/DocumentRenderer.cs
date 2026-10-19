@@ -74,6 +74,13 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, TabLeader, XFont, (double CharacterSpacing, double LeftInset, double RightInset)?>? TabLeaderLayout { get; set; }
 
         /// <summary>
+        /// Adjusts the next word's leading position after a breakable blank, in points.
+        /// The adjustment affects line fitting and painting but never applies at a line start.
+        /// Null or a non-finite value leaves the default spacing unchanged.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? LeadingKerningAfterBlank { get; set; }
+
+        /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
         /// The rendered border width is unchanged.
         /// </summary>

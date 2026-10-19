@@ -1357,6 +1357,7 @@ namespace MigraDoc.Rendering
 
         void RenderWord(string word)
         {
+            _currentXPosition += GetLeadingKerningAfterBlank(word);
             Font font = CurrentDomFont;
             XFont xFont = CurrentFont;
             if (font.Subscript || font.Superscript)
@@ -2020,7 +2021,8 @@ namespace MigraDoc.Rendering
         /// </summary>
         FormatResult FormatWord(string word, Rectangle fittingRect)
         {
-            XUnitPt width = MeasureString(word);
+            XUnitPt wordWidth = MeasureString(word);
+            XUnitPt width = wordWidth + GetLeadingKerningAfterBlank(word);
             if (_phase == Phase.Formatting && word.Contains('\u00a0') &&
                 _paragraph.Format.MoveOversizedNoBreakGroupToNextLine &&
                 _currentXPosition > StartXPosition + Tolerance &&
@@ -2115,14 +2117,22 @@ namespace MigraDoc.Rendering
                     _currentXPosition + width > right &&
                     overhang(_paragraph, word, CurrentFont) is double additiveAllowance &&
                     additiveAllowance > 0 && double.IsFinite(additiveAllowance))
-                    return FormatAsWord(width, fittingRect, additiveAllowance);
+                {
+                    var additiveResult = FormatAsWord(width, fittingRect, additiveAllowance);
+                    if (additiveResult == FormatResult.NewLine)
+                        _savedWordWidth = wordWidth;
+                    return additiveResult;
+                }
                 if (_currentXPosition + width > right &&
                     overhang(_paragraph, word, CurrentFont) is double allowance &&
                     allowance > 0 && !double.IsInfinity(allowance) &&
                     _currentXPosition + width - allowance <= right)
                     width = right - _currentXPosition;
             }
-            return FormatAsWord(width, fittingRect);
+            var result = FormatAsWord(width, fittingRect);
+            if (result == FormatResult.NewLine)
+                _savedWordWidth = wordWidth;
+            return result;
         }
 
         XUnitPt _savedWordWidth = 0;
@@ -2341,6 +2351,16 @@ namespace MigraDoc.Rendering
             var font = CurrentDomFont;
             return font.Subscript || font.Superscript
                 ? adjustment * FontHandler.GetSubSuperScaling(xFont) : adjustment;
+        }
+
+        double GetLeadingKerningAfterBlank(string word)
+        {
+            if (word.Length == 0 || _currentXPosition <= StartXPosition + Tolerance ||
+                _currentLeaf?.GetPreviousLeaf() is not { } previous || !IsBlank(previous.Current) ||
+                _documentRenderer.LeadingKerningAfterBlank?.Invoke(_paragraph, word, CurrentFont)
+                    is not double adjustment || double.IsNaN(adjustment) || double.IsInfinity(adjustment))
+                return 0;
+            return adjustment;
         }
 
         XUnitPt GetSpaceWidth(Character character)
