@@ -49,7 +49,7 @@ namespace MigraDoc.Rendering
 #endif
         }
 
-        BorderStyle GetStyle(BorderType type)
+        internal BorderStyle GetStyle(BorderType type)
         {
             var style = BorderStyle.Single;
 
@@ -64,6 +64,12 @@ namespace MigraDoc.Rendering
         }
 
         internal XUnitPt GetWidth(BorderType type)
+        {
+            var width = GetStrokeWidth(type);
+            return GetStyle(type) == BorderStyle.Double ? width * 3 : width;
+        }
+
+        XUnitPt GetStrokeWidth(BorderType type)
         {
             if (_borders == null!)
                 return 0;
@@ -122,20 +128,42 @@ namespace MigraDoc.Rendering
         /// <param name="left">The left position of the border.</param>
         /// <param name="top">The top position of the border.</param>
         /// <param name="height">The height on which to render the border.</param>
-        internal void RenderVertically(BorderType type, XUnitPt left, XUnitPt top, XUnitPt height)
+        internal void RenderVertically(BorderType type, XUnitPt left, XUnitPt top, XUnitPt height,
+            XUnitPt? outerStrokeTop = null, XUnitPt? innerStrokeBottom = null)
         {
             XUnitPt borderWidth = GetWidth(type);
             if (borderWidth == 0)
                 return;
 
-            left += borderWidth / 2;
             var pen = GetPen(type);
             if (pen != null)
+            {
+                if (GetStyle(type) == BorderStyle.Double)
+                {
+                    var strokeWidth = borderWidth / 3;
+                    var leftStrokeTop = type == BorderType.Left ? outerStrokeTop ?? top : top;
+                    var rightStrokeTop = type == BorderType.Right ? outerStrokeTop ?? top : top;
+                    var leftStrokeBottom = type == BorderType.Right ? innerStrokeBottom ?? top + height : top + height;
+                    var rightStrokeBottom = type == BorderType.Left ? innerStrokeBottom ?? top + height : top + height;
+#if PSGFX
+                    _gfx.DrawLine(pen, new(left + strokeWidth / 2, leftStrokeBottom),
+                        new(left + strokeWidth / 2, leftStrokeTop));
+                    _gfx.DrawLine(pen, new(left + borderWidth - strokeWidth / 2, rightStrokeBottom),
+                        new(left + borderWidth - strokeWidth / 2, rightStrokeTop));
+#else
+                    _gfx.DrawLine(pen, left + strokeWidth / 2, leftStrokeBottom, left + strokeWidth / 2, leftStrokeTop);
+                    _gfx.DrawLine(pen, left + borderWidth - strokeWidth / 2, rightStrokeBottom,
+                        left + borderWidth - strokeWidth / 2, rightStrokeTop);
+#endif
+                    return;
+                }
+                left += borderWidth / 2;
 #if PSGFX
                 _gfx.DrawLine(pen, new(left, top + height), new(left, top));
 #else
                 _gfx.DrawLine(pen, left, top + height, left, top);
 #endif
+            }
         }
 
         /// <summary>
@@ -145,20 +173,49 @@ namespace MigraDoc.Rendering
         /// <param name="left">The left position of the border.</param>
         /// <param name="top">The top position of the border.</param>
         /// <param name="width">The width on which to render the border.</param>
-        internal void RenderHorizontally(BorderType type, XUnitPt left, XUnitPt top, XUnitPt width)
+        internal void RenderHorizontally(BorderType type, XUnitPt left, XUnitPt top, XUnitPt width,
+            XUnitPt? innerStrokeLeft = null, XUnitPt? innerStrokeRight = null,
+            bool insetBothStrokes = false)
         {
             XUnitPt borderWidth = GetWidth(type);
             if (borderWidth == 0)
                 return;
 
-            top += borderWidth / 2;
             var pen = GetPen(type);
             if (pen != null)
+            {
+                if (GetStyle(type) == BorderStyle.Double)
+                {
+                    var strokeWidth = borderWidth / 3;
+                    var outerLeft = left;
+                    var outerRight = left + width;
+                    var upperLeft = type == BorderType.Bottom || insetBothStrokes
+                        ? innerStrokeLeft ?? outerLeft : outerLeft;
+                    var upperRight = type == BorderType.Bottom || insetBothStrokes
+                        ? innerStrokeRight ?? outerRight : outerRight;
+                    var lowerLeft = type == BorderType.Top || insetBothStrokes
+                        ? innerStrokeLeft ?? outerLeft : outerLeft;
+                    var lowerRight = type == BorderType.Top || insetBothStrokes
+                        ? innerStrokeRight ?? outerRight : outerRight;
+#if PSGFX
+                    _gfx.DrawLine(pen, new(upperRight, top + strokeWidth / 2),
+                        new(upperLeft, top + strokeWidth / 2));
+                    _gfx.DrawLine(pen, new(lowerRight, top + borderWidth - strokeWidth / 2),
+                        new(lowerLeft, top + borderWidth - strokeWidth / 2));
+#else
+                    _gfx.DrawLine(pen, upperRight, top + strokeWidth / 2, upperLeft, top + strokeWidth / 2);
+                    _gfx.DrawLine(pen, lowerRight, top + borderWidth - strokeWidth / 2,
+                        lowerLeft, top + borderWidth - strokeWidth / 2);
+#endif
+                    return;
+                }
+                top += borderWidth / 2;
 #if PSGFX
                 _gfx.DrawLine(pen, new(left + width, top), new(left, top));
 #else
                 _gfx.DrawLine(pen, left + width, top, left, top);
 #endif
+            }
         }
 
         internal void RenderDiagonally(BorderType type, XUnitPt left, XUnitPt top, XUnitPt width, XUnitPt height)
@@ -189,15 +246,40 @@ namespace MigraDoc.Rendering
             XGraphicsState state = _gfx.Save();
             _gfx.IntersectClip(new XRect(left, top, width, height));
 
+            var pen = GetPen(type);
+            if (pen != null && GetStyle(type) == BorderStyle.Double)
+            {
+                var length = Math.Sqrt(width.Point * width.Point + height.Point * height.Point);
+                if (length > 0)
+                {
+                    var shiftX = XUnitPt.FromPoint(height.Point / length * GetStrokeWidth(type).Point);
+                    var shiftY = XUnitPt.FromPoint(width.Point / length * GetStrokeWidth(type).Point);
+                    if (type == BorderType.DiagonalDown)
+                    {
+                        _gfx.DrawLine(pen, left - shiftX / 2, top + shiftY / 2,
+                            left + width - shiftX / 2, top + height + shiftY / 2);
+                        _gfx.DrawLine(pen, left + shiftX / 2, top - shiftY / 2,
+                            left + width + shiftX / 2, top + height - shiftY / 2);
+                    }
+                    else if (type == BorderType.DiagonalUp)
+                    {
+                        _gfx.DrawLine(pen, left - shiftX / 2, top + height - shiftY / 2,
+                            left + width - shiftX / 2, top - shiftY / 2);
+                        _gfx.DrawLine(pen, left + shiftX / 2, top + height + shiftY / 2,
+                            left + width + shiftX / 2, top + shiftY / 2);
+                    }
+                }
+                _gfx.Restore(state);
+                return;
+            }
+
             if (type == BorderType.DiagonalDown)
             {
-                var pen = GetPen(type);
                 if (pen != null)
                     _gfx.DrawLine(pen, left, top, left + width, top + height);
             }
             else if (type == BorderType.DiagonalUp)
             {
-                var pen = GetPen(type);
                 if (pen != null)
                     _gfx.DrawLine(pen, left, top + height, left + width, top);
             }
@@ -230,41 +312,52 @@ namespace MigraDoc.Rendering
             XUnitPt ellipseWidth = width * 2 + borderWidth;
             XUnitPt ellipseHeight = height * 2 + borderWidth;
 
-            switch (roundedCorner)
+            void DrawRoundedArc(XRect rectangle)
             {
+                switch (roundedCorner)
+                {
 #if PSGFX
-                case RoundedCorner.TopLeft:
-                    //_gfx.DrawArc(borderPen, new XRect(x, y, ellipseWidth, ellipseHeight), 180, 90);
-                    break;
-                case RoundedCorner.TopRight:
-                    //_gfx.DrawArc(borderPen, new XRect(x - width, y, ellipseWidth, ellipseHeight), 270, 90);
-                    break;
-                case RoundedCorner.BottomRight:
-                    //_gfx.DrawArc(borderPen, new XRect(x - width, y - height, ellipseWidth, ellipseHeight), 0, 90);
-                    break;
-                case RoundedCorner.BottomLeft:
-                    //_gfx.DrawArc(borderPen, new XRect(x, y - height, ellipseWidth, ellipseHeight), 90, 90);
-                    break;
+                    case RoundedCorner.TopLeft:
+                    case RoundedCorner.TopRight:
+                    case RoundedCorner.BottomRight:
+                    case RoundedCorner.BottomLeft:
+                        break;
 #else
-                case RoundedCorner.TopLeft:
-                    _gfx.DrawArc(borderPen, new XRect(x, y, ellipseWidth, ellipseHeight), 180, 90);
-                    break;
-                case RoundedCorner.TopRight:
-                    _gfx.DrawArc(borderPen, new XRect(x - width, y, ellipseWidth, ellipseHeight), 270, 90);
-                    break;
-                case RoundedCorner.BottomRight:
-                    _gfx.DrawArc(borderPen, new XRect(x - width, y - height, ellipseWidth, ellipseHeight), 0, 90);
-                    break;
-                case RoundedCorner.BottomLeft:
-                    _gfx.DrawArc(borderPen, new XRect(x, y - height, ellipseWidth, ellipseHeight), 90, 90);
-                    break;
+                    case RoundedCorner.TopLeft:
+                        _gfx.DrawArc(borderPen, rectangle, 180, 90);
+                        break;
+                    case RoundedCorner.TopRight:
+                        _gfx.DrawArc(borderPen, new XRect(rectangle.X - width, rectangle.Y,
+                            rectangle.Width, rectangle.Height), 270, 90);
+                        break;
+                    case RoundedCorner.BottomRight:
+                        _gfx.DrawArc(borderPen, new XRect(rectangle.X - width, rectangle.Y - height,
+                            rectangle.Width, rectangle.Height), 0, 90);
+                        break;
+                    case RoundedCorner.BottomLeft:
+                        _gfx.DrawArc(borderPen, new XRect(rectangle.X, rectangle.Y - height,
+                            rectangle.Width, rectangle.Height), 90, 90);
+                        break;
 #endif
+                }
             }
+
+            var ellipse = new XRect(x, y, ellipseWidth, ellipseHeight);
+            if (GetStyle(borderType) == BorderStyle.Double)
+            {
+                var strokeWidth = GetStrokeWidth(borderType);
+                DrawRoundedArc(new XRect(x - strokeWidth, y - strokeWidth,
+                    ellipseWidth + 2 * strokeWidth, ellipseHeight + 2 * strokeWidth));
+                DrawRoundedArc(new XRect(x + strokeWidth, y + strokeWidth,
+                    ellipseWidth - 2 * strokeWidth, ellipseHeight - 2 * strokeWidth));
+            }
+            else
+                DrawRoundedArc(ellipse);
         }
 
         internal XPen? GetPen(BorderType type)
         {
-            var borderWidth = GetWidth(type);
+            var borderWidth = GetStrokeWidth(type);
             if (borderWidth == 0)
                 return null;
 

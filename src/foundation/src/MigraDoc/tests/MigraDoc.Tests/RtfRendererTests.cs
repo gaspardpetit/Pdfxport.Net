@@ -44,6 +44,20 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Double_border_uses_RTF_double_border_control_word()
+        {
+            var document = new Document();
+            var paragraph = document.AddSection().AddParagraph("Double border");
+            paragraph.Format.Borders.Top.Style = BorderStyle.Double;
+            paragraph.Format.Borders.Top.Width = 0.5;
+            var filename = IOUtility.GetTempFullFileName("DoubleBorder", null) + ".rtf";
+
+            new RtfDocumentRenderer().Render(document, filename, Environment.CurrentDirectory);
+
+            File.ReadAllText(filename).Should().Contain("\\brdrdb");
+        }
+
+        [Fact]
         public void Create_Hello_World_RtfRendererTests()
         {
             // Create a MigraDoc document.
