@@ -294,6 +294,17 @@ namespace MigraDoc.Rendering
             => FormattedDocument.GetFormattedFooter(page)?.GetRenderInfos() ?? [];
 
         /// <summary>
+        /// Gets nested render information for a continuation fragment of a paginated text frame.
+        /// Returns null for a non-frame object or the first fragment.
+        /// </summary>
+        public RenderInfo[]? GetTextFrameContinuationRenderInfos(RenderInfo renderInfo)
+        {
+            if (renderInfo.FormatInfo is not TextFrameFormatInfo { FragmentIndex: > 0 } frameInfo)
+                return null;
+            return frameInfo.FormattedTextFrame?.GetRenderInfos(frameInfo.FragmentIndex);
+        }
+
+        /// <summary>
         /// Renders a single object to the specified graphics object at the given point.
         /// </summary>
         /// <param name="graphics">The graphics object to render on.</param>
