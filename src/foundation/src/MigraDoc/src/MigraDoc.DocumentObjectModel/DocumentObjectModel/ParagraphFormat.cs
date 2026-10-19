@@ -199,6 +199,16 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Adds space below each line's baseline when <see cref="LineSpacingRule"/> is AtLeast.
+        /// The added space does not change the line's inherent baseline height.
+        /// </summary>
+        public Unit AtLeastBottomLineSpace
+        {
+            get => Values.AtLeastBottomLineSpace ?? Unit.Empty;
+            set => Values.AtLeastBottomLineSpace = value;
+        }
+
+        /// <summary>
         /// Gets or sets the rule which is used to define the line spacing.
         /// </summary>
         public LineSpacingRule LineSpacingRule
@@ -362,6 +372,10 @@ namespace MigraDoc.DocumentObjectModel
             if (!Values.LineSpacing.IsValueNullOrEmpty() && (refFormat == null || Values.LineSpacing != refFormat.Values.LineSpacing))
                 serializer.WriteSimpleAttribute("LineSpacing", LineSpacing);
 
+            if (!Values.AtLeastBottomLineSpace.IsValueNullOrEmpty() &&
+                (refFormat == null || Values.AtLeastBottomLineSpace != refFormat.Values.AtLeastBottomLineSpace))
+                serializer.WriteSimpleAttribute("AtLeastBottomLineSpace", AtLeastBottomLineSpace);
+
             if (Values.KeepTogether.HasValue && (refFormat == null || Values.KeepTogether != refFormat.Values.KeepTogether))
                 serializer.WriteSimpleAttribute("KeepTogether", KeepTogether);
 
@@ -474,6 +488,9 @@ namespace MigraDoc.DocumentObjectModel
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public Unit? LineSpacing { get; set; }
+
+            /// <summary>Additional space below AtLeast-spaced lines.</summary>
+            public Unit? AtLeastBottomLineSpace { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
