@@ -24,6 +24,49 @@ namespace MigraDoc.Tests
     [Collection("PDFsharp")]
     public class TextTests : IDisposable
     {
+        [Fact]
+        public void OversizedNoBreakGroupSettingMovesGroupAndSurvivesDdl()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            var lineWidth = measure.MeasureString("= LN(10)\u00a0!Sy", font).Width + 1;
+
+            double[] Render(bool moveGroup)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(lineWidth + 20);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph("= LN(10)\u00a0!S\u200By\u200Bn\u200Bt\u200Ba\u200Bx Error, 10");
+                paragraph.Format.MoveOversizedNoBreakGroupToNextLine = moveGroup;
+                var clone = (Document)document.Clone();
+                clone.Sections[0].Elements.OfType<Paragraph>().Single().Format
+                    .MoveOversizedNoBreakGroupToNextLine.Should().Be(moveGroup);
+                var ddl = MigraDoc.DocumentObjectModel.IO.DdlWriter.WriteToString(document);
+                var restored = MigraDoc.DocumentObjectModel.IO.DdlReader.DocumentFromString(ddl);
+                restored.Sections[0].Elements.OfType<Paragraph>().Single().Format
+                    .MoveOversizedNoBreakGroupToNextLine.Should().Be(moveGroup);
+                var renderer = new PdfDocumentRenderer { Document = restored };
+                renderer.RenderDocument();
+                var positions = new List<double>();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                while (stream.Text.MoveAndGetNext(true, out var text))
+                    positions.Add(text!.Y);
+                return positions.ToArray();
+            }
+
+            var baseline = Render(false);
+            var adjusted = Render(true);
+            baseline.Should().HaveCountGreaterThan(2);
+            adjusted.Should().HaveCount(baseline.Length);
+            baseline[0].Should().Be(baseline[1]);
+            adjusted[0].Should().NotBe(adjusted[1]);
+        }
+
         [Theory]
         [InlineData("authors.\u201d")]
         [InlineData("authors.\u2019")]
