@@ -273,6 +273,20 @@ namespace MigraDoc.Rendering
             => FormattedDocument.GetRenderInfos(page);
 
         /// <summary>
+        /// Gets render information for the header selected for the physical page.
+        /// Returns an empty array when the page has no header.
+        /// </summary>
+        public RenderInfo[] GetHeaderRenderInfos(int page)
+            => FormattedDocument.GetFormattedHeader(page)?.GetRenderInfos() ?? [];
+
+        /// <summary>
+        /// Gets render information for the footer selected for the physical page.
+        /// Returns an empty array when the page has no footer.
+        /// </summary>
+        public RenderInfo[] GetFooterRenderInfos(int page)
+            => FormattedDocument.GetFormattedFooter(page)?.GetRenderInfos() ?? [];
+
+        /// <summary>
         /// Renders a single object to the specified graphics object at the given point.
         /// </summary>
         /// <param name="graphics">The graphics object to render on.</param>
