@@ -365,12 +365,21 @@ namespace MigraDoc.Tests
                     Left: double.Parse(stroke.Groups["x2"].Value, CultureInfo.InvariantCulture)))
                 .ToArray();
             verticalXs.Should().HaveCount(6);
-            foreach (var group in horizontal.GroupBy(stroke => stroke.Y))
+            var levels = horizontal.GroupBy(stroke => stroke.Y).OrderBy(group => group.Key).ToArray();
+            levels.Should().HaveCount(4);
+            foreach (var group in levels.Skip(1).Take(2))
             {
                 var segments = group.OrderBy(stroke => stroke.Left).ToArray();
                 segments.Should().HaveCount(2);
                 segments[0].Right.Should().BeApproximately(verticalXs[2] - 0.25, 0.01);
                 segments[1].Left.Should().BeApproximately(verticalXs[3] + 0.25, 0.01);
+            }
+            foreach (var group in new[] { levels[0], levels[3] })
+            {
+                var segments = group.OrderBy(stroke => stroke.Left).ToArray();
+                segments.Should().HaveCount(2);
+                segments[0].Right.Should().BeGreaterThan(verticalXs[3]);
+                segments[1].Left.Should().BeLessThan(verticalXs[2]);
             }
         }
 
