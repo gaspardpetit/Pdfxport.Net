@@ -66,7 +66,12 @@ namespace MigraDoc.Rendering
         internal XUnitPt GetWidth(BorderType type)
         {
             var width = GetStrokeWidth(type);
-            return GetStyle(type) == BorderStyle.Double ? width * 3 : width;
+            return GetStyle(type) switch
+            {
+                BorderStyle.Double => width * 3,
+                BorderStyle.Triple => width * 5,
+                _ => width
+            };
         }
 
         XUnitPt GetStrokeWidth(BorderType type)

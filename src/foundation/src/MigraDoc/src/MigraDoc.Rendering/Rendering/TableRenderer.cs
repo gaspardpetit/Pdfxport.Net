@@ -445,6 +445,8 @@ namespace MigraDoc.Rendering
             // corners are joins rather than unrelated line caps.
             XPen? gridPen = null;
             var uniformDoubleGrid = followingCells == null && TryGetUniformDoubleGridPen(cells, out gridPen);
+            XPen? triplePen = null;
+            var uniformTripleGrid = followingCells == null && TryGetUniformTripleGridPen(cells, out triplePen);
             var followingTopBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
             var precedingBottomBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
             var followingLeftBorders = new HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
@@ -474,9 +476,69 @@ namespace MigraDoc.Rendering
                 }
             }
             foreach (var cell in cells)
-                RenderCell(cell, followingTopBorders, precedingBottomBorders, followingLeftBorders, !uniformDoubleGrid);
+                RenderCell(cell, followingTopBorders, precedingBottomBorders, followingLeftBorders,
+                    !uniformDoubleGrid && !uniformTripleGrid);
             if (uniformDoubleGrid)
                 RenderUniformDoubleGrid(cells, gridPen!);
+            if (uniformTripleGrid)
+                RenderUniformTripleGrid(cells, triplePen!);
+        }
+
+        bool TryGetUniformTripleGridPen(IReadOnlyList<Cell> cells, out XPen? pen)
+        {
+            pen = null;
+            if (cells.Count == 0 || _lastHeaderRow >= 0 || _startRow != 0 ||
+                _endRow != _table.Rows.Count - 1 || cells.Count != _mergedCells.Count)
+                return false;
+            foreach (var cell in cells)
+            {
+                if (cell.RoundedCorner != RoundedCorner.None)
+                    return false;
+                var renderer = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), _gfx);
+                foreach (var side in new[] { BorderType.Top, BorderType.Right, BorderType.Bottom, BorderType.Left })
+                {
+                    if (renderer.GetStyle(side) != BorderStyle.Triple)
+                        return false;
+                    var edgePen = renderer.GetPen(side);
+                    if (edgePen == null || edgePen.DashStyle != XDashStyle.Solid ||
+                        pen != null && (edgePen.Width != pen.Width || edgePen.Color != pen.Color))
+                        return false;
+                    pen ??= edgePen;
+                }
+            }
+            return pen != null;
+        }
+
+        void RenderUniformTripleGrid(IReadOnlyList<Cell> cells, XPen pen)
+        {
+            var halfStroke = XUnitPt.FromPoint(pen.Width / 2);
+            var middleOffset = XUnitPt.FromPoint(2 * pen.Width);
+            XUnitPt? outerLeft = null, outerTop = null, outerRight = null, outerBottom = null;
+            foreach (var cell in cells)
+            {
+                var inner = GetInnerRect(CalcStartingHeight(), cell);
+                var effectiveBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
+                var borders = new BordersRenderer(effectiveBorders, _gfx);
+                var left = inner.X - halfStroke;
+                var top = inner.Y - halfStroke;
+                var right = inner.X + inner.Width + halfStroke;
+                var bottom = inner.Y + inner.Height + halfStroke;
+                _gfx.DrawRectangle(pen, new XRect(left, top, right - left, bottom - top));
+                _gfx.DrawRectangle(pen, new XRect(left - middleOffset, top - middleOffset,
+                    right - left + 2 * middleOffset, bottom - top + 2 * middleOffset));
+
+                var cellOuterLeft = inner.X - borders.GetWidth(BorderType.Left) + halfStroke;
+                var cellOuterTop = inner.Y - borders.GetWidth(BorderType.Top) + halfStroke;
+                var cellOuterRight = inner.X + inner.Width + borders.GetWidth(BorderType.Right) - halfStroke;
+                var cellOuterBottom = inner.Y + inner.Height + borders.GetWidth(BorderType.Bottom) - halfStroke;
+                outerLeft = outerLeft == null || cellOuterLeft < outerLeft ? cellOuterLeft : outerLeft;
+                outerTop = outerTop == null || cellOuterTop < outerTop ? cellOuterTop : outerTop;
+                outerRight = outerRight == null || cellOuterRight > outerRight ? cellOuterRight : outerRight;
+                outerBottom = outerBottom == null || cellOuterBottom > outerBottom ? cellOuterBottom : outerBottom;
+                RenderDiagonalBorders(effectiveBorders, inner);
+            }
+            _gfx.DrawRectangle(pen, new XRect(outerLeft!.Value, outerTop!.Value,
+                outerRight!.Value - outerLeft.Value, outerBottom!.Value - outerTop.Value));
         }
 
         bool TryGetUniformDoubleGridPen(IReadOnlyList<Cell> cells, out XPen? pen)
