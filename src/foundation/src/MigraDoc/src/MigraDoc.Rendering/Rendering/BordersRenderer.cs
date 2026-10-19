@@ -163,6 +163,18 @@ namespace MigraDoc.Rendering
 #else
                 _gfx.DrawLine(pen, left, top + height, left, top);
 #endif
+                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap && height.Point > 0)
+                {
+                    var endpointLength = XUnitPt.FromPoint(Math.Min(0.5, height.Point / 2));
+                    var endpointPen = new XPen(pen.Color, pen.Width);
+#if PSGFX
+                    _gfx.DrawLine(endpointPen, new(left, top), new(left, top + endpointLength));
+                    _gfx.DrawLine(endpointPen, new(left, top + height - endpointLength), new(left, top + height));
+#else
+                    _gfx.DrawLine(endpointPen, left, top, left, top + endpointLength);
+                    _gfx.DrawLine(endpointPen, left, top + height - endpointLength, left, top + height);
+#endif
+                }
             }
         }
 
@@ -215,6 +227,18 @@ namespace MigraDoc.Rendering
 #else
                 _gfx.DrawLine(pen, left + width, top, left, top);
 #endif
+                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap && width.Point > 0)
+                {
+                    var endpointLength = XUnitPt.FromPoint(Math.Min(0.5, width.Point / 2));
+                    var endpointPen = new XPen(pen.Color, pen.Width);
+#if PSGFX
+                    _gfx.DrawLine(endpointPen, new(left, top), new(left + endpointLength, top));
+                    _gfx.DrawLine(endpointPen, new(left + width - endpointLength, top), new(left + width, top));
+#else
+                    _gfx.DrawLine(endpointPen, left, top, left + endpointLength, top);
+                    _gfx.DrawLine(endpointPen, left + width - endpointLength, top, left + width, top);
+#endif
+                }
             }
         }
 
@@ -379,7 +403,7 @@ namespace MigraDoc.Rendering
                     break;
 
                 case BorderStyle.DashSmallGap:
-                    //pen.DashPattern = [5, 1];
+                    //pen.DashPattern = [3, 1];
                     break;
 
                 case BorderStyle.Dot:
@@ -404,7 +428,7 @@ namespace MigraDoc.Rendering
                     break;
 
                 case BorderStyle.DashSmallGap:
-                    pen.DashPattern = [5, 1];
+                    pen.DashPattern = [3, 1];
                     break;
 
                 case BorderStyle.Dot:
