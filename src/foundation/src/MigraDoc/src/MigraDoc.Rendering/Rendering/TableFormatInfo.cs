@@ -44,11 +44,20 @@ namespace MigraDoc.Rendering
 
         internal int LastHeaderRow = -1;
         /// <summary>
+        /// Gets the index of the last repeated header row, or -1 when no header row repeats.
+        /// </summary>
+        public int LastHeaderRowIndex => LastHeaderRow;
+        /// <summary>
         /// The formatted cells.
         /// </summary>
         public Dictionary<Cell, FormattedCell>? FormattedCells; //Sorted_List formattedCells;
         internal MergedCellList? MergedCells;
         internal Dictionary<int, XUnitPt>? BottomBorderMap; //Sorted_List bottomBorderMap;
+        /// <summary>
+        /// Gets the vertical row boundaries measured from the beginning of the table.
+        /// Null before the table has been formatted.
+        /// </summary>
+        public IReadOnlyDictionary<int, XUnitPt>? RowBoundaries => BottomBorderMap;
         //internal Dictionary<int, int>? ConnectedRowsMap; //Sorted_List connectedRowsMap;
         internal int[]? ConnectedRowsMap; //Sorted_List connectedRowsMap;
         internal int[]? MinMergedCellRowMap;
