@@ -622,9 +622,9 @@ namespace MigraDoc.Tests
                 frame.Height = Unit.FromPoint(90);
                 frame.AddParagraph("Centered frame text");
                 frame.LineFormat.Visible = true;
+                frame.CenterContentVertically = centered;
+                ((TextFrame)frame.Clone()).CenterContentVertically.Should().Be(centered);
                 var renderer = new PdfDocumentRenderer { Document = document };
-                if (centered)
-                    renderer.DocumentRenderer.CenterTextFrameContentVertically = candidate => ReferenceEquals(candidate, frame);
                 renderer.RenderDocument();
                 return (PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0),
                     renderer.PdfDocument.PageCount);
