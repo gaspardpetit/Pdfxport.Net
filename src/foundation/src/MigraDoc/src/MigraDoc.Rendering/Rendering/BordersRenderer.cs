@@ -224,10 +224,10 @@ namespace MigraDoc.Rendering
 #else
                 _gfx.DrawLine(pen, left, top + height, left, top);
 #endif
-                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap or
+                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashLargeGap or BorderStyle.DashSmallGap or
                     BorderStyle.DashDot or BorderStyle.DashDotDot && height.Point > 0)
                 {
-                    var endpointLength = XUnitPt.FromPoint(Math.Min(0.5, height.Point / 2));
+                    var endpointLength = XUnitPt.FromPoint(Math.Min(pen.Width, height.Point / 2));
                     var endpointPen = new XPen(pen.Color, pen.Width);
 #if PSGFX
                     _gfx.DrawLine(endpointPen, new(left, top), new(left, top + endpointLength));
@@ -322,10 +322,10 @@ namespace MigraDoc.Rendering
 #else
                 _gfx.DrawLine(pen, left + width, top, left, top);
 #endif
-                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap or
+                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashLargeGap or BorderStyle.DashSmallGap or
                     BorderStyle.DashDot or BorderStyle.DashDotDot && width.Point > 0)
                 {
-                    var endpointLength = XUnitPt.FromPoint(Math.Min(0.5, width.Point / 2));
+                    var endpointLength = XUnitPt.FromPoint(Math.Min(pen.Width, width.Point / 2));
                     var endpointPen = new XPen(pen.Color, pen.Width);
 #if PSGFX
                     _gfx.DrawLine(endpointPen, new(left, top), new(left + endpointLength, top));
@@ -389,9 +389,9 @@ namespace MigraDoc.Rendering
 
         void RenderHatch(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, XPen source)
         {
-            var railPen = new XPen(source.Color, Math.Max(0.2, source.Width * 0.12));
+            var railPen = new XPen(source.Color, Math.Max(0.35, source.Width * 0.35));
             var cross = source.Width;
-            var pitch = Math.Max(0.55, source.Width * 0.32);
+            var pitch = Math.Max(0.8, source.Width * 0.6);
             for (var start = 0.0; start < length.Point; start += pitch)
             {
                 if (vertical)
@@ -421,7 +421,7 @@ namespace MigraDoc.Rendering
             bool vertical, bool emboss, XPen source)
         {
             static XColor Scale(XColor color, double factor) => XColor.FromArgb(
-                (int)color.A,
+                (int)Math.Round(color.A * 255),
                 Math.Min(255, (int)Math.Round(color.R * factor)),
                 Math.Min(255, (int)Math.Round(color.G * factor)),
                 Math.Min(255, (int)Math.Round(color.B * factor)));
