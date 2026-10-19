@@ -389,9 +389,13 @@ namespace MigraDoc.Rendering
 
         void RenderHatch(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, XPen source)
         {
-            var railPen = new XPen(source.Color, Math.Max(0.35, source.Width * 0.35));
+            var tint = XColor.FromArgb(255,
+                (int)Math.Round(((double)source.Color.R + 255) / 2),
+                (int)Math.Round(((double)source.Color.G + 255) / 2),
+                (int)Math.Round(((double)source.Color.B + 255) / 2));
+            var railPen = new XPen(tint, Math.Max(0.35, source.Width * 0.35));
             var cross = source.Width;
-            var pitch = Math.Max(0.8, source.Width * 0.6);
+            var pitch = Math.Max(0.8, source.Width * 0.8);
             for (var start = 0.0; start < length.Point; start += pitch)
             {
                 if (vertical)
