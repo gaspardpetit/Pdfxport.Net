@@ -64,7 +64,10 @@ namespace MigraDoc.Rendering
             return new Rectangle(_xOffset, _yOffset, width, height);
         }
 
-        internal XUnitPt ContentHeight => _contentHeight;
+        /// <summary>
+        /// Gets the measured height of the formatted cell content.
+        /// </summary>
+        public XUnitPt ContentHeight => _contentHeight;
 
         internal XUnitPt InnerHeight
         {
@@ -139,7 +142,11 @@ namespace MigraDoc.Rendering
 
         XUnitPt _contentHeight = 0;
 
-        internal RenderInfo[]? GetRenderInfos()
+        /// <summary>
+        /// Gets the render information for the formatted cell content.
+        /// Returns null before the cell has been formatted.
+        /// </summary>
+        public RenderInfo[]? GetRenderInfos()
         {
             if (_renderInfos != null)
                 return _renderInfos.ToArray();
