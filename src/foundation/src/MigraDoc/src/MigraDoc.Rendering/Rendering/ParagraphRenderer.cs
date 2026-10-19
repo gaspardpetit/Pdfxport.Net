@@ -2689,6 +2689,30 @@ namespace MigraDoc.Rendering
         {
             PopSavedBlankWidth();
 
+            if (_currentLeaf == null && _paragraph.Format.LineSpacingRule == LineSpacingRule.Exactly &&
+                _renderInfo.FormatInfo is ParagraphFormatInfo paragraphInfo &&
+                (paragraphInfo.LineCount >= 2 || !paragraphInfo.IsStarting) &&
+                _documentRenderer.ExactFinalLineHeight is { } finalLineHeight)
+            {
+                var fonts = new List<XFont>();
+                try
+                {
+                    for (var leaf = _startLeaf; leaf != null; leaf = leaf.GetNextLeaf())
+                    {
+                        _currentLeaf = leaf;
+                        if (leaf.Current is Text text && !IsBlank(text))
+                            fonts.Add(CurrentFont);
+                    }
+                }
+                finally
+                {
+                    _currentLeaf = null;
+                }
+                if (fonts.Count > 0 && finalLineHeight(_paragraph, fonts) is double height &&
+                    double.IsFinite(height) && height > 0 && height < _currentVerticalInfo.Height.Point)
+                    _currentVerticalInfo.Height = XUnitPt.FromPoint(height);
+            }
+
             XUnitPt topBorderOffset = TopBorderOffset;
             var contentArea = _renderInfo.LayoutInfo.ContentArea;
             if (topBorderOffset > 0) // May only occur for the first line.

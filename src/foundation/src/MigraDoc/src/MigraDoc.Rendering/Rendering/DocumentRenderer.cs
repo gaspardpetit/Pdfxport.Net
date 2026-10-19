@@ -68,6 +68,13 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, IReadOnlyList<XFont>, double?>? ExactParagraphBaselineOffset { get; set; }
 
         /// <summary>
+        /// Selects a shorter layout height, in points, for the final line of an exact-spaced
+        /// multi-line paragraph fragment. Receives the fonts used by that line. Null or an
+        /// invalid height preserves the formatted line height.
+        /// </summary>
+        public Func<Paragraph, IReadOnlyList<XFont>, double?>? ExactFinalLineHeight { get; set; }
+
+        /// <summary>
         /// Optionally adjusts the spacing and insets of tab leader characters in points.
         /// Returning null retains the default rendering.
         /// </summary>
