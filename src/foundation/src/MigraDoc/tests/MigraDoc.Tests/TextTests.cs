@@ -10,6 +10,7 @@ using MigraDoc.DocumentObjectModel.Fields;
 using MigraDoc.DocumentObjectModel.Shapes;
 using MigraDoc.Rendering;
 using MigraDoc.RtfRendering;
+using PdfSharp.Drawing;
 using PdfSharp.Diagnostics;
 using PdfSharp.Fonts;
 using PdfSharp.Logging;
@@ -23,6 +24,48 @@ namespace MigraDoc.Tests
     [Collection("PDFsharp")]
     public class TextTests : IDisposable
     {
+        [Theory]
+        [InlineData("authors.\u201d")]
+        [InlineData("authors.\u2019")]
+        [InlineData("authors.)")]
+        [InlineData("authors.]")]
+        public void LineEndOverhangKeepsClosingMarkWithPrecedingWords(string closingText)
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            var textWidth = measure.MeasureString("of", font).Width +
+                measure.MeasureString(" ", font).Width +
+                measure.MeasureString(closingText, font).Width;
+
+            bool SameLine(double? allowance)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(textWidth + 37);
+                section.PageSetup.PageHeight = Unit.FromPoint(200);
+                section.PageSetup.LeftMargin = Unit.FromPoint(20);
+                section.PageSetup.RightMargin = Unit.FromPoint(20);
+                section.AddParagraph("of " + closingText).Format.Alignment = ParagraphAlignment.Justify;
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (allowance is double amount)
+                    renderer.DocumentRenderer.LineEndOverhang = (_, _, _) => amount;
+                renderer.RenderDocument();
+                var text = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                var positions = new List<(string Value, double Y)>();
+                while (text.Text.MoveAndGetNext(true, out var item))
+                    positions.Add((item!.Text, item.Y));
+                return positions.First(item => item.Value.StartsWith("of", StringComparison.Ordinal)).Y ==
+                    positions.First(item => item.Value.Contains("authors.", StringComparison.Ordinal)).Y;
+            }
+
+            SameLine(null).Should().BeFalse();
+            SameLine(1).Should().BeFalse();
+            SameLine(5).Should().BeTrue();
+        }
+
         [Theory]
         [InlineData(TextOrientation.Horizontal)]
         [InlineData(TextOrientation.Upward)]

@@ -29,6 +29,12 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Returns the permitted line-end overhang in points for a word in a paragraph,
+        /// or null to use ordinary wrapping.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? LineEndOverhang { get; set; }
+
+        /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
         /// The rendered border width is unchanged.
         /// </summary>

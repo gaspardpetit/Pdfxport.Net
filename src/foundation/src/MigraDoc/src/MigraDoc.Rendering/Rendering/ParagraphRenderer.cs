@@ -1936,6 +1936,40 @@ namespace MigraDoc.Rendering
         FormatResult FormatWord(string word, Rectangle fittingRect)
         {
             XUnitPt width = MeasureString(word);
+            if (_phase == Phase.Formatting && _documentRenderer.LineEndOverhang is { } overhangForNext &&
+                _currentXPosition > StartXPosition + Tolerance &&
+                _currentLeaf?.GetNextLeaf() is { Current: Text { Content: { Length: 1 } nextText } } nextLeaf)
+            {
+                var original = _currentLeaf;
+                XUnitPt nextWidth;
+                double? allowance = null;
+                var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+                try
+                {
+                    _currentLeaf = nextLeaf;
+                    nextWidth = MeasureString(nextText);
+                    if (_currentXPosition + width + nextWidth > right)
+                        allowance = overhangForNext(_paragraph, nextText, CurrentFont);
+                }
+                finally
+                {
+                    _currentLeaf = original;
+                }
+                if (allowance is > 0 && !double.IsInfinity(allowance.Value) &&
+                    _currentXPosition + width + nextWidth - allowance.Value > right &&
+                    width + nextWidth - allowance.Value <= right - StartXPosition)
+                    return FormatResult.NewLine;
+            }
+            if (_phase == Phase.Formatting && _documentRenderer.LineEndOverhang is { } overhang &&
+                _currentXPosition > StartXPosition + Tolerance)
+            {
+                var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+                if (_currentXPosition + width > right &&
+                    overhang(_paragraph, word, CurrentFont) is double allowance &&
+                    allowance > 0 && !double.IsInfinity(allowance) &&
+                    _currentXPosition + width - allowance <= right)
+                    width = right - _currentXPosition;
+            }
             return FormatAsWord(width, fittingRect);
         }
 
