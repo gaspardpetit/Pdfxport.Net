@@ -515,6 +515,8 @@ namespace MigraDoc.Rendering
             foreach (var closed in closedCells.OrderBy(item =>
                          item.Pen.Width * ClosedRailWidthMultiplier(item.Style)))
                 RenderClosedMultiRailCell(closed.Cell, closed.Style, closed.Pen);
+            if (!uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && followingCells == null)
+                RenderFourWayRailJunctions(cells);
             if (uniformDoubleGrid)
                 RenderUniformDoubleGrid(cells, gridPen!);
             if (uniformTripleGrid)
@@ -602,6 +604,160 @@ namespace MigraDoc.Rendering
             var profile = CompoundProfile(style)!.Value;
             return profile.First + profile.Middle + profile.Gap * (profile.ThreeRails ? 2 : 1) +
                 (profile.ThreeRails ? profile.First : 0);
+        }
+
+        sealed class JunctionArm
+        {
+            public BorderStyle Style { get; init; }
+            public XPen Pen { get; init; } = null!;
+            public double[] Positions { get; init; } = null!;
+            public double[] Widths { get; init; } = null!;
+            public double BorderWidth { get; init; }
+        }
+
+        JunctionArm? GetJunctionArm(Cell cell, BorderType side)
+        {
+            if (cell.RoundedCorner != RoundedCorner.None || cell.MergeRight != 0 || cell.MergeDown != 0 ||
+                cell.Borders.GetBorder(side)?.Values.Visible == false)
+                return null;
+            var renderer = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), _gfx);
+            var style = renderer.GetStyle(side);
+            var pen = renderer.GetPen(side);
+            if (pen == null)
+                return null;
+            double[] widths;
+            double gap;
+            if (style is BorderStyle.Double or BorderStyle.Triple)
+            {
+                widths = Enumerable.Repeat(pen.Width, style == BorderStyle.Triple ? 3 : 2).ToArray();
+                gap = pen.Width;
+            }
+            else if (CompoundProfile(style) is { } profile)
+            {
+                widths = profile.ThreeRails
+                    ? new[] { pen.Width * profile.First, pen.Width * profile.Middle,
+                        pen.Width * profile.First }
+                    : new[] { pen.Width * profile.First, pen.Width * profile.Middle };
+                gap = pen.Width * profile.Gap;
+            }
+            else
+            {
+                // A single or decorative edge can still own this arm.  Keep it
+                // in the four-neighbor comparison even though the multi-rail
+                // junction painter cannot redraw its pattern.
+                widths = new[] { pen.Width };
+                gap = 0;
+            }
+
+            var inner = GetInnerRect(CalcStartingHeight(), cell);
+            var borderWidth = renderer.GetWidth(side).Point;
+            var start = side switch
+            {
+                BorderType.Left => inner.X.Point - borderWidth,
+                BorderType.Right => inner.X.Point + inner.Width.Point,
+                BorderType.Top => inner.Y.Point - borderWidth,
+                BorderType.Bottom => inner.Y.Point + inner.Height.Point,
+                _ => throw new ArgumentOutOfRangeException(nameof(side))
+            };
+            var positions = new double[widths.Length];
+            var offset = 0.0;
+            for (var index = 0; index < widths.Length; index++)
+            {
+                positions[index] = start + offset + widths[index] / 2;
+                offset += widths[index] + gap;
+            }
+            return new JunctionArm { Style = style, Pen = pen, Positions = positions,
+                Widths = widths, BorderWidth = borderWidth };
+        }
+
+        JunctionArm? SelectJunctionArm(Cell first, BorderType firstSide,
+            Cell second, BorderType secondSide)
+        {
+            var a = GetJunctionArm(first, firstSide);
+            var b = GetJunctionArm(second, secondSide);
+            if (a == null) return b;
+            if (b == null) return a;
+            return b.BorderWidth >= a.BorderWidth ? b : a;
+        }
+
+        void RenderFourWayRailJunctions(IReadOnlyList<Cell> cells)
+        {
+            var grid = cells.Where(cell => cell.MergeRight == 0 && cell.MergeDown == 0 &&
+                    cell.RoundedCorner == RoundedCorner.None)
+                .ToDictionary(cell => (cell.Row!.Index, cell.Column!.Index));
+            for (var row = 1; row < _table.Rows.Count; row++)
+            for (var column = 1; column < _table.Columns.Count; column++)
+            {
+                if (!grid.TryGetValue((row - 1, column - 1), out var nw) ||
+                    !grid.TryGetValue((row - 1, column), out var ne) ||
+                    !grid.TryGetValue((row, column - 1), out var sw) ||
+                    !grid.TryGetValue((row, column), out var se))
+                    continue;
+                var north = SelectJunctionArm(nw, BorderType.Right, ne, BorderType.Left);
+                var south = SelectJunctionArm(sw, BorderType.Right, se, BorderType.Left);
+                var west = SelectJunctionArm(nw, BorderType.Bottom, sw, BorderType.Top);
+                var east = SelectJunctionArm(ne, BorderType.Bottom, se, BorderType.Top);
+                if (north == null || south == null || west == null || east == null ||
+                    north.Style != south.Style || north.Style != west.Style || north.Style != east.Style ||
+                    north.Pen.DashStyle != XDashStyle.Solid ||
+                    north.Pen.Width != south.Pen.Width || north.Pen.Width != west.Pen.Width ||
+                    north.Pen.Width != east.Pen.Width || north.Pen.Color != south.Pen.Color ||
+                    north.Pen.Color != west.Pen.Color || north.Pen.Color != east.Pen.Color)
+                    continue;
+                var count = north.Positions.Length;
+                if (count != south.Positions.Length || count != west.Positions.Length ||
+                    count != east.Positions.Length || count is not (2 or 3))
+                    continue;
+                if (Enumerable.Range(0, count).Any(index =>
+                        Math.Abs(north.Positions[index] - south.Positions[index]) > 1 ||
+                        Math.Abs(west.Positions[index] - east.Positions[index]) > 1))
+                    continue;
+                RenderFourWayRailJunction(north, south, west, east);
+            }
+        }
+
+        void RenderFourWayRailJunction(JunctionArm north, JunctionArm south,
+            JunctionArm west, JunctionArm east)
+        {
+            var last = north.Positions.Length - 1;
+            var stroke = new[] { north, south, west, east }.SelectMany(arm => arm.Widths).Max();
+            var x0 = Math.Min(north.Positions[0], south.Positions[0]) - stroke;
+            var x1 = Math.Max(north.Positions[last], south.Positions[last]) + stroke;
+            var y0 = Math.Min(west.Positions[0], east.Positions[0]) - stroke;
+            var y1 = Math.Max(west.Positions[last], east.Positions[last]) + stroke;
+            _gfx.DrawRectangle(XBrushes.White, new XRect(x0, y0, x1 - x0, y1 - y0));
+
+            // The outer rails turn around the four cells.  An odd profile has
+            // a middle rail, which continues through both directions.
+            DrawJunctionCorner(north, 0, west, 0, x0, y0, true, true);
+            DrawJunctionCorner(north, last, east, 0, x1, y0, false, true);
+            DrawJunctionCorner(south, 0, west, last, x0, y1, true, false);
+            DrawJunctionCorner(south, last, east, last, x1, y1, false, false);
+            if (last == 2)
+            {
+                var vertical = new XPen(north.Pen.Color, north.Widths[1]);
+                var horizontal = new XPen(west.Pen.Color, west.Widths[1]);
+                DrawCompoundRail(vertical, (north.Positions[1] + south.Positions[1]) / 2,
+                    y0 - stroke, (north.Positions[1] + south.Positions[1]) / 2, y1 + stroke);
+                DrawCompoundRail(horizontal, x0 - stroke,
+                    (west.Positions[1] + east.Positions[1]) / 2, x1 + stroke,
+                    (west.Positions[1] + east.Positions[1]) / 2);
+            }
+        }
+
+        void DrawJunctionCorner(JunctionArm vertical, int verticalIndex,
+            JunctionArm horizontal, int horizontalIndex, double xBoundary, double yBoundary,
+            bool left, bool top)
+        {
+            var x = vertical.Positions[verticalIndex];
+            var y = horizontal.Positions[horizontalIndex];
+            var verticalPen = new XPen(vertical.Pen.Color, vertical.Widths[verticalIndex]);
+            var horizontalPen = new XPen(horizontal.Pen.Color, horizontal.Widths[horizontalIndex]);
+            DrawCompoundRail(verticalPen, x, top ? yBoundary - verticalPen.Width : y - horizontalPen.Width / 2,
+                x, top ? y + horizontalPen.Width / 2 : yBoundary + verticalPen.Width);
+            DrawCompoundRail(horizontalPen,
+                left ? xBoundary - horizontalPen.Width : x - verticalPen.Width / 2, y,
+                left ? x + verticalPen.Width / 2 : xBoundary + horizontalPen.Width, y);
         }
 
         void RenderClosedCompoundCell(Cell cell, XPen pen,

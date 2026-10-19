@@ -550,6 +550,130 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Four_neighbor_triple_junction_continues_middle_rails_and_turns_outer_rails()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    var triple = rowIndex != column;
+                    row[column].Borders.Style = triple ? BorderStyle.Triple : BorderStyle.Single;
+                    row[column].Borders.Width = triple ? 3 : 1;
+                    row[column].AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var fills = Regex.Matches(content,
+                @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$");
+            fills.Should().NotBeEmpty();
+            var junction = content.Substring(fills[^1].Index + fills[^1].Length);
+            var lines = Regex.Matches(junction,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            var vertical = lines.Where(line => Math.Abs(line.X1 - line.X2) < .01).ToArray();
+            var horizontal = lines.Where(line => Math.Abs(line.Y1 - line.Y2) < .01).ToArray();
+            vertical.Should().HaveCount(5);
+            horizontal.Should().HaveCount(5);
+            var centerX = vertical.Select(line => line.X1).Distinct().OrderBy(x => x).ElementAt(1);
+            var centerY = horizontal.Select(line => line.Y1).Distinct().OrderBy(y => y).ElementAt(1);
+            var middleVertical = vertical.Single(line => Math.Abs(line.X1 - centerX) < .01);
+            var middleHorizontal = horizontal.Single(line => Math.Abs(line.Y1 - centerY) < .01);
+            Math.Abs(middleVertical.Y2 - middleVertical.Y1).Should().BeGreaterThan(
+                vertical.Where(line => line != middleVertical).Max(line => Math.Abs(line.Y2 - line.Y1)));
+            Math.Abs(middleHorizontal.X2 - middleHorizontal.X1).Should().BeGreaterThan(
+                horizontal.Where(line => line != middleHorizontal).Max(line => Math.Abs(line.X2 - line.X1)));
+            Math.Min(middleHorizontal.X1, middleHorizontal.X2).Should().BeLessThan(centerX);
+            Math.Max(middleHorizontal.X1, middleHorizontal.X2).Should().BeGreaterThan(centerX);
+            Math.Min(middleVertical.Y1, middleVertical.Y2).Should().BeLessThan(centerY);
+            Math.Max(middleVertical.Y1, middleVertical.Y2).Should().BeGreaterThan(centerY);
+        }
+
+        [Fact]
+        public void Four_neighbor_junction_respects_a_wider_single_border_on_one_arm()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    var triple = rowIndex != column;
+                    row[column].Borders.Style = triple ? BorderStyle.Triple : BorderStyle.Single;
+                    row[column].Borders.Width = triple ? 3 : rowIndex == 0 ? 20 : 1;
+                    row[column].AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            // Two triple cells each clear four border bands.  The wider single
+            // border owns the north/west arms, so no ninth junction clearing
+            // rectangle may be added on top of it.
+            Regex.Matches(content, @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$")
+                .Should().HaveCount(8);
+        }
+
+        [Fact]
+        public void Four_neighbor_double_junction_turns_both_rails_around_cell_corners()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    var isDouble = rowIndex != column;
+                    row[column].Borders.Style = isDouble ? BorderStyle.Double : BorderStyle.Single;
+                    row[column].Borders.Width = isDouble ? 2 : 1;
+                    row[column].AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var fills = Regex.Matches(content,
+                @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$");
+            fills.Should().NotBeEmpty();
+            var junction = content.Substring(fills[^1].Index + fills[^1].Length);
+            var lines = Regex.Matches(junction,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            lines.Count(line => Math.Abs(line.X1 - line.X2) < .01).Should().Be(4);
+            lines.Count(line => Math.Abs(line.Y1 - line.Y2) < .01).Should().Be(4);
+        }
+
+        [Fact]
         public void Mixed_single_double_triple_cells_keep_individual_closed_rail_boxes()
         {
             var document = new Document();
