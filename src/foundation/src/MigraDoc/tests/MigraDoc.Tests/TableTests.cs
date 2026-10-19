@@ -471,8 +471,82 @@ namespace MigraDoc.Tests
                 .Where(line => Math.Abs(line.X1 - line.X2) < 0.01 &&
                     Math.Abs(line.Y1 - line.Y2) > 20)
                 .OrderBy(line => line.X1).ToArray();
-            vertical.Should().HaveCount(6);
-            (vertical[3].X1 - vertical[2].X1).Should().BeApproximately(2.125, .02);
+            // Both cells contribute a complete pair of rails.  The later
+            // cell clears the shared band and paints its own pair there.
+            vertical.Should().HaveCount(8);
+            (vertical[1].X1 - vertical[0].X1).Should().BeApproximately(2.125, .02);
+            (vertical[3].X1 - vertical[2].X1).Should().BeApproximately(.625, .02);
+            (vertical[5].X1 - vertical[4].X1).Should().BeApproximately(.625, .02);
+            (vertical[7].X1 - vertical[6].X1).Should().BeApproximately(2.125, .02);
+
+            var horizontal = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .Where(line => Math.Abs(line.Y1 - line.Y2) < .01 &&
+                    Math.Abs(line.X1 - line.X2) > 20).ToArray();
+            horizontal.Should().HaveCount(8);
+            foreach (var rail in vertical)
+            {
+                foreach (var endpoint in new[] { rail.Y1, rail.Y2 })
+                    horizontal.Should().Contain(line => Math.Abs(line.Y1 - endpoint) <= 1.01 &&
+                        Math.Min(line.X1, line.X2) <= rail.X1 + .01 &&
+                        Math.Max(line.X1, line.X2) >= rail.X1 - .01);
+            }
+        }
+
+        [Fact]
+        public void Mixed_two_and_three_rail_compound_cells_join_every_rail_at_corners()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            foreach (var styles in new[]
+                     {
+                         new[] { BorderStyle.ThinThickSmallGap, BorderStyle.ThinThickThinSmallGap },
+                         new[] { BorderStyle.ThinThickThinLargeGap, BorderStyle.ThickThinMediumGap }
+                     })
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    row[column].Borders.Style = styles[column];
+                    row[column].Borders.Width = 2;
+                    row[column].AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var segments = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            var vertical = segments.Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                Math.Abs(line.Y1 - line.Y2) > 20).ToArray();
+            var horizontal = segments.Where(line => Math.Abs(line.Y1 - line.Y2) < .01 &&
+                Math.Abs(line.X1 - line.X2) > 20).ToArray();
+            vertical.Should().HaveCount(20);
+            horizontal.Should().HaveCount(20);
+            foreach (var rail in vertical)
+            {
+                foreach (var endpoint in new[] { rail.Y1, rail.Y2 })
+                    horizontal.Should().Contain(line => Math.Abs(line.Y1 - endpoint) <= 1.01 &&
+                        Math.Min(line.X1, line.X2) <= rail.X1 + .01 &&
+                        Math.Max(line.X1, line.X2) >= rail.X1 - .01);
+            }
         }
 
         [Fact]
@@ -514,6 +588,35 @@ namespace MigraDoc.Tests
             AssertEncloses(tripleRails[1], tripleRails[0]);
             (tripleRails[0].X - tripleRails[1].X).Should().BeApproximately(6, .02);
             (tripleRails[1].X - tripleRails[2].X).Should().BeApproximately(6, .02);
+
+            var whiteBands = Regex.Matches(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0),
+                    @"(?m)(?<x>-?[\d.]+) (?<y>-?[\d.]+) (?<width>[\d.]+) (?<height>[\d.]+) re\s+f$")
+                .Cast<Match>()
+                .Select(match => (
+                    X: double.Parse(match.Groups["x"].Value, CultureInfo.InvariantCulture),
+                    Y: double.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture),
+                    Width: double.Parse(match.Groups["width"].Value, CultureInfo.InvariantCulture),
+                    Height: double.Parse(match.Groups["height"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            whiteBands.Should().HaveCount(8);
+            foreach (var group in new[] { doubleRails, tripleRails })
+            {
+                var outer = group[^1];
+                var inner = group[0];
+                var centerX = inner.X + inner.Width / 2;
+                var centerY = inner.Y + inner.Height / 2;
+                var topGap = (outer.Y + inner.Y) / 2;
+                var leftGap = (outer.X + inner.X) / 2;
+                whiteBands.Should().Contain(box => box.X < centerX && box.X + box.Width > centerX &&
+                    box.Y < topGap && box.Y + box.Height > topGap);
+                whiteBands.Should().Contain(box => box.Y < centerY && box.Y + box.Height > centerY &&
+                    box.X < leftGap && box.X + box.Width > leftGap);
+            }
+            var weakerRightRail = doubleRails[1].X + doubleRails[1].Width;
+            var sharedMidpointY = doubleRails[0].Y + doubleRails[0].Height / 2;
+            whiteBands.Should().Contain(box => box.X < weakerRightRail &&
+                box.X + box.Width > weakerRightRail && box.Y < sharedMidpointY &&
+                box.Y + box.Height > sharedMidpointY);
         }
 
         [Fact]

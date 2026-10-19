@@ -512,7 +512,8 @@ namespace MigraDoc.Rendering
                 if (closed)
                     closedCells.Add((cell, closedStyle, closedPen!));
             }
-            foreach (var closed in closedCells)
+            foreach (var closed in closedCells.OrderBy(item =>
+                         item.Pen.Width * ClosedRailWidthMultiplier(item.Style)))
                 RenderClosedMultiRailCell(closed.Cell, closed.Style, closed.Pen);
             if (uniformDoubleGrid)
                 RenderUniformDoubleGrid(cells, gridPen!);
@@ -532,7 +533,8 @@ namespace MigraDoc.Rendering
             foreach (var side in new[] { BorderType.Top, BorderType.Right, BorderType.Bottom, BorderType.Left })
             {
                 var edgeStyle = renderer.GetStyle(side);
-                if (edgeStyle is not (BorderStyle.Double or BorderStyle.Triple) ||
+                if (edgeStyle is not (BorderStyle.Double or BorderStyle.Triple) &&
+                    CompoundProfile(edgeStyle) == null ||
                     style != BorderStyle.None && edgeStyle != style ||
                     cell.Borders.GetBorder(side)?.Values.Visible == false)
                     return false;
@@ -548,6 +550,11 @@ namespace MigraDoc.Rendering
 
         void RenderClosedMultiRailCell(Cell cell, BorderStyle style, XPen pen)
         {
+            if (CompoundProfile(style) is { } profile)
+            {
+                RenderClosedCompoundCell(cell, pen, profile);
+                return;
+            }
             var inner = GetInnerRect(CalcStartingHeight(), cell);
             var effectiveBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
             var borders = new BordersRenderer(cell.Borders, _gfx);
@@ -556,6 +563,24 @@ namespace MigraDoc.Rendering
             var top = inner.Y - half;
             var right = inner.X + inner.Width + half;
             var bottom = inner.Y + inner.Height + half;
+            var outerLeft = inner.X - borders.GetWidth(BorderType.Left) + half;
+            var outerTop = inner.Y - borders.GetWidth(BorderType.Top) + half;
+            var outerRight = inner.X + inner.Width + borders.GetWidth(BorderType.Right) - half;
+            var outerBottom = inner.Y + inner.Height + borders.GetWidth(BorderType.Bottom) - half;
+
+            // Keep the gaps in a dominant cell's border clear.  Otherwise a
+            // neighboring single or narrower multi-rail border remains visible
+            // through them at a four-way junction.  These strips cover only the
+            // border band, leaving the cell's shaded content area intact.
+            _gfx.DrawRectangle(XBrushes.White, new XRect(outerLeft - half, outerTop - half,
+                left - outerLeft + pen.Width, outerBottom - outerTop + pen.Width));
+            _gfx.DrawRectangle(XBrushes.White, new XRect(right - half, outerTop - half,
+                outerRight - right + pen.Width, outerBottom - outerTop + pen.Width));
+            _gfx.DrawRectangle(XBrushes.White, new XRect(left + half, outerTop - half,
+                right - left - pen.Width, top - outerTop + pen.Width));
+            _gfx.DrawRectangle(XBrushes.White, new XRect(left + half, bottom - half,
+                right - left - pen.Width, outerBottom - bottom + pen.Width));
+
             _gfx.DrawRectangle(pen, new XRect(left, top, right - left, bottom - top));
             if (style == BorderStyle.Triple)
             {
@@ -563,13 +588,93 @@ namespace MigraDoc.Rendering
                 _gfx.DrawRectangle(pen, new XRect(left - offset, top - offset,
                     right - left + 2 * offset, bottom - top + 2 * offset));
             }
-            var outerLeft = inner.X - borders.GetWidth(BorderType.Left) + half;
-            var outerTop = inner.Y - borders.GetWidth(BorderType.Top) + half;
-            var outerRight = inner.X + inner.Width + borders.GetWidth(BorderType.Right) - half;
-            var outerBottom = inner.Y + inner.Height + borders.GetWidth(BorderType.Bottom) - half;
             _gfx.DrawRectangle(pen, new XRect(outerLeft, outerTop,
                 outerRight - outerLeft, outerBottom - outerTop));
             RenderDiagonalBorders(effectiveBorders, inner);
+        }
+
+        static double ClosedRailWidthMultiplier(BorderStyle style)
+        {
+            if (style == BorderStyle.Double)
+                return 3;
+            if (style == BorderStyle.Triple)
+                return 5;
+            var profile = CompoundProfile(style)!.Value;
+            return profile.First + profile.Middle + profile.Gap * (profile.ThreeRails ? 2 : 1) +
+                (profile.ThreeRails ? profile.First : 0);
+        }
+
+        void RenderClosedCompoundCell(Cell cell, XPen pen,
+            (double First, double Middle, double Gap, bool ThreeRails) profile)
+        {
+            var inner = GetInnerRect(CalcStartingHeight(), cell);
+            var effectiveBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
+            var borders = new BordersRenderer(cell.Borders, _gfx);
+            var widths = profile.ThreeRails
+                ? new[] { pen.Width * profile.First, pen.Width * profile.Middle,
+                    pen.Width * profile.First }
+                : new[] { pen.Width * profile.First, pen.Width * profile.Middle };
+            var total = widths.Sum() + pen.Width * profile.Gap * (widths.Length - 1);
+            var centers = new double[widths.Length];
+            var position = 0.0;
+            for (var index = 0; index < widths.Length; index++)
+            {
+                centers[index] = position + widths[index] / 2;
+                position += widths[index] + pen.Width * profile.Gap;
+            }
+
+            var left = inner.X.Point - borders.GetWidth(BorderType.Left).Point;
+            var top = inner.Y.Point - borders.GetWidth(BorderType.Top).Point;
+            var right = inner.X.Point + inner.Width.Point;
+            var bottom = inner.Y.Point + inner.Height.Point;
+            var outerRight = right + borders.GetWidth(BorderType.Right).Point;
+            var outerBottom = bottom + borders.GetWidth(BorderType.Bottom).Point;
+            // Clear the full compound band before drawing.  Its gaps remain
+            // empty when a narrower neighboring border meets this cell.
+            _gfx.DrawRectangle(XBrushes.White, new XRect(left, top,
+                XUnitPt.FromPoint(total), XUnitPt.FromPoint(outerBottom - top)));
+            _gfx.DrawRectangle(XBrushes.White, new XRect(XUnitPt.FromPoint(right), top,
+                XUnitPt.FromPoint(total), XUnitPt.FromPoint(outerBottom - top)));
+            _gfx.DrawRectangle(XBrushes.White, new XRect(inner.X, top, inner.Width,
+                XUnitPt.FromPoint(total)));
+            _gfx.DrawRectangle(XBrushes.White, new XRect(inner.X, XUnitPt.FromPoint(bottom),
+                inner.Width, XUnitPt.FromPoint(total)));
+
+            var last = widths.Length - 1;
+            for (var rail = 0; rail <= last; rail++)
+            {
+                var opposite = last - rail;
+                var railPen = new XPen(pen.Color, widths[rail]);
+                var topY = top + centers[rail];
+                var bottomY = bottom + centers[rail];
+                var leftX = left + centers[rail];
+                var rightX = right + centers[rail];
+                // The profile is ordered outer-to-inner on top/left and
+                // inner-to-outer on bottom/right.  Reverse its index at the
+                // latter corners so each rail joins its matching perimeter.
+                DrawCompoundRail(railPen,
+                    left + centers[rail] - widths[rail] / 2, topY,
+                    right + centers[opposite] + widths[opposite] / 2, topY);
+                DrawCompoundRail(railPen,
+                    left + centers[opposite] - widths[opposite] / 2, bottomY,
+                    right + centers[rail] + widths[rail] / 2, bottomY);
+                DrawCompoundRail(railPen,
+                    leftX, top + centers[rail] - widths[rail] / 2,
+                    leftX, bottom + centers[opposite] + widths[opposite] / 2);
+                DrawCompoundRail(railPen,
+                    rightX, top + centers[opposite] - widths[opposite] / 2,
+                    rightX, bottom + centers[rail] + widths[rail] / 2);
+            }
+            RenderDiagonalBorders(effectiveBorders, inner);
+        }
+
+        void DrawCompoundRail(XPen pen, double x1, double y1, double x2, double y2)
+        {
+#if PSGFX
+            _gfx.DrawLine(pen, new XPoint(x1, y1), new XPoint(x2, y2));
+#else
+            _gfx.DrawLine(pen, x1, y1, x2, y2);
+#endif
         }
 
         static (double First, double Middle, double Gap, bool ThreeRails)? CompoundProfile(BorderStyle style) => style switch
