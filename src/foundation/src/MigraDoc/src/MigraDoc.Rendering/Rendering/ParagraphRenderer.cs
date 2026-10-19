@@ -1488,6 +1488,10 @@ namespace MigraDoc.Rendering
             {
                 VerticalLineInfo verticalInfo = _currentVerticalInfo;
                 XUnitPt position = _currentYPosition + _exactParagraphBaselineOffset;
+                if (_paragraph.Format.LineSpacingRule == LineSpacingRule.Exactly &&
+                    _documentRenderer.ExactFontBaselineOffset?.Invoke(_paragraph, CurrentFont) is double offset &&
+                    !double.IsNaN(offset) && !double.IsInfinity(offset))
+                    position += offset;
 
                 Font font = CurrentDomFont;
                 XFont xFont = CurrentFont;
