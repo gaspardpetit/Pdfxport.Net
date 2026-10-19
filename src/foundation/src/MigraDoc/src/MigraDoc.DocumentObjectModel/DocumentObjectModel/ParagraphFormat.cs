@@ -162,6 +162,16 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Moves an oversized group containing a nonbreaking space to the next line
+        /// before using its internal emergency break opportunities.
+        /// </summary>
+        public bool MoveOversizedNoBreakGroupToNextLine
+        {
+            get => Values.MoveOversizedNoBreakGroupToNextLine ?? false;
+            set => Values.MoveOversizedNoBreakGroupToNextLine = value;
+        }
+
+        /// <summary>
         /// Gets or sets a value indicating whether this and the next paragraph stay on the same page.
         /// </summary>
         public bool KeepWithNext
@@ -355,6 +365,12 @@ namespace MigraDoc.DocumentObjectModel
             if (Values.KeepTogether.HasValue && (refFormat == null || Values.KeepTogether != refFormat.Values.KeepTogether))
                 serializer.WriteSimpleAttribute("KeepTogether", KeepTogether);
 
+            if (Values.MoveOversizedNoBreakGroupToNextLine.HasValue &&
+                (refFormat == null || Values.MoveOversizedNoBreakGroupToNextLine !=
+                    refFormat.Values.MoveOversizedNoBreakGroupToNextLine))
+                serializer.WriteSimpleAttribute("MoveOversizedNoBreakGroupToNextLine",
+                    MoveOversizedNoBreakGroupToNextLine);
+
             if (Values.KeepWithNext.HasValue && (refFormat == null || Values.KeepWithNext != refFormat.Values.KeepWithNext))
                 serializer.WriteSimpleAttribute("KeepWithNext", KeepWithNext);
 
@@ -435,6 +451,11 @@ namespace MigraDoc.DocumentObjectModel
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public bool? KeepTogether { get; set; }
+
+            /// <summary>
+            /// Moves an oversized nonbreaking group before emergency wrapping.
+            /// </summary>
+            public bool? MoveOversizedNoBreakGroupToNextLine { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
