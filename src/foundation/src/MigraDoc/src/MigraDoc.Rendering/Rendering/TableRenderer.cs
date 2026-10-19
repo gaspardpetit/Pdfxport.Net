@@ -230,8 +230,13 @@ namespace MigraDoc.Rendering
             {
                 // Simple case: no rounded borders.
                 var rightPen = bordersRenderer.GetPen(BorderType.Right);
-                if (rightPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Right), rightPen) ||
-                    !followingLeftBorders.Contains(VerticalBorderKey(cell, bordersRenderer, rightPen, false)))
+                var rightKey = rightPen == null ? default : VerticalBorderKey(cell, bordersRenderer, rightPen, false);
+                var followingOwnsRight = rightPen != null && CompoundProfile(rightKey.Style) != null &&
+                    followingLeftBorders.Any(edge => edge.Boundary == rightKey.Boundary &&
+                        edge.Start == rightKey.Start && edge.End == rightKey.End);
+                if (!followingOwnsRight &&
+                    (rightPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Right), rightPen) ||
+                     !followingLeftBorders.Contains(rightKey)))
                     bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos,
                         bottomPos + bottomWidth - topPos, rightOuterStrokeTop, rightInnerStrokeBottom);
                 if (cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false)
@@ -240,8 +245,13 @@ namespace MigraDoc.Rendering
                 var bottomLeft = leftPos - leftWidth;
                 var bottomLength = rightPos + rightWidth + leftWidth - leftPos;
                 var bottomPen = bordersRenderer.GetPen(BorderType.Bottom);
-                if (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom), bottomPen) ||
-                    !CoveredByNarrowerEdges(HorizontalBorderKey(cell, bordersRenderer, bottomPen, false), followingTopBorders, false))
+                var bottomKey = bottomPen == null ? default : HorizontalBorderKey(cell, bordersRenderer, bottomPen, false);
+                var followingOwnsBottom = bottomPen != null && CompoundProfile(bottomKey.Style) != null &&
+                    followingTopBorders.Any(edge => edge.Boundary == bottomKey.Boundary &&
+                        edge.Start == bottomKey.Start && edge.End == bottomKey.End);
+                if (!followingOwnsBottom &&
+                    (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom), bottomPen) ||
+                     !CoveredByNarrowerEdges(bottomKey, followingTopBorders, false)))
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, bottomLeft, bottomPos, bottomLength,
                         innerStrokeLeft, innerStrokeRight, internalBottomEdge);
                 var topPen = bordersRenderer.GetPen(BorderType.Top);

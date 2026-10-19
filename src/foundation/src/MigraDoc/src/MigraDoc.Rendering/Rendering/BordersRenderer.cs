@@ -80,6 +80,21 @@ namespace MigraDoc.Rendering
             };
         }
 
+        static (double[] Widths, double Gap)? CompoundRails(BorderStyle style) => style switch
+        {
+            BorderStyle.Triple => (new[] { 1.0, 1.0, 1.0 }, 1.0),
+            BorderStyle.ThinThickSmallGap => (new[] { 1.0, 0.375 }, 0.375),
+            BorderStyle.ThickThinSmallGap => (new[] { 0.375, 1.0 }, 0.375),
+            BorderStyle.ThinThickThinSmallGap => (new[] { 0.375, 1.0, 0.375 }, 0.375),
+            BorderStyle.ThinThickMediumGap => (new[] { 1.0, 0.5 }, 0.5),
+            BorderStyle.ThickThinMediumGap => (new[] { 0.5, 1.0 }, 0.5),
+            BorderStyle.ThinThickThinMediumGap => (new[] { 0.5, 1.0, 0.5 }, 0.5),
+            BorderStyle.ThinThickLargeGap => (new[] { 0.75, 0.375 }, 1.0),
+            BorderStyle.ThickThinLargeGap => (new[] { 0.375, 0.75 }, 1.0),
+            BorderStyle.ThinThickThinLargeGap => (new[] { 0.375, 0.75, 0.375 }, 1.0),
+            _ => null
+        };
+
         XUnitPt GetStrokeWidth(BorderType type)
         {
             if (_borders == null!)
@@ -168,6 +183,23 @@ namespace MigraDoc.Rendering
 #endif
                     return;
                 }
+                if (CompoundRails(GetStyle(type)) is { } rails)
+                {
+                    var position = left;
+                    for (var rail = 0; rail < rails.Widths.Length; rail++)
+                    {
+                        var railWidth = pen.Width * rails.Widths[rail];
+                        position += XUnitPt.FromPoint(railWidth / 2);
+                        var railPen = new XPen(pen.Color, railWidth);
+#if PSGFX
+                        _gfx.DrawLine(railPen, new(position, top + height), new(position, top));
+#else
+                        _gfx.DrawLine(railPen, position, top + height, position, top);
+#endif
+                        position += XUnitPt.FromPoint(railWidth / 2 + pen.Width * rails.Gap);
+                    }
+                    return;
+                }
                 left += borderWidth / 2;
 #if PSGFX
                 _gfx.DrawLine(pen, new(left, top + height), new(left, top));
@@ -231,6 +263,23 @@ namespace MigraDoc.Rendering
                     _gfx.DrawLine(pen, lowerRight, top + borderWidth - strokeWidth / 2,
                         lowerLeft, top + borderWidth - strokeWidth / 2);
 #endif
+                    return;
+                }
+                if (CompoundRails(GetStyle(type)) is { } rails)
+                {
+                    var position = top;
+                    for (var rail = 0; rail < rails.Widths.Length; rail++)
+                    {
+                        var railWidth = pen.Width * rails.Widths[rail];
+                        position += XUnitPt.FromPoint(railWidth / 2);
+                        var railPen = new XPen(pen.Color, railWidth);
+#if PSGFX
+                        _gfx.DrawLine(railPen, new(left + width, position), new(left, position));
+#else
+                        _gfx.DrawLine(railPen, left + width, position, left, position);
+#endif
+                        position += XUnitPt.FromPoint(railWidth / 2 + pen.Width * rails.Gap);
+                    }
                     return;
                 }
                 top += borderWidth / 2;

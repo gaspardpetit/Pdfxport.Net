@@ -442,6 +442,40 @@ namespace MigraDoc.Tests
             (secondRail - firstRail).Should().BeApproximately(2 * strokeWidth, 0.01);
 
         [Fact]
+        public void Mixed_compound_cells_assign_one_style_to_the_shared_vertical_edge()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row.Height = "2cm";
+            row[0].Borders.Style = BorderStyle.ThinThickSmallGap;
+            row[0].Borders.Width = 2;
+            row[1].Borders.Style = BorderStyle.ThickThinSmallGap;
+            row[1].Borders.Width = 2;
+            row[0].AddParagraph("Left");
+            row[1].AddParagraph("Right");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var vertical = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .Where(line => Math.Abs(line.X1 - line.X2) < 0.01 &&
+                    Math.Abs(line.Y1 - line.Y2) > 20)
+                .OrderBy(line => line.X1).ToArray();
+            vertical.Should().HaveCount(6);
+            (vertical[3].X1 - vertical[2].X1).Should().BeApproximately(2.125, .02);
+        }
+
+        [Fact]
         public void Uniform_three_by_three_double_grid_has_closed_cell_and_perimeter_paths()
         {
             var document = new Document();
