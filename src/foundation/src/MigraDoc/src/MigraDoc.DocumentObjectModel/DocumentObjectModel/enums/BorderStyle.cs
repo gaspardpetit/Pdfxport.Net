@@ -57,6 +57,13 @@ namespace MigraDoc.DocumentObjectModel
         ThickThinLargeGap,
         ThinThickThinLargeGap,
 
+        Wave,
+        DoubleWave,
+        DashDotStroked,
+
+        Emboss3D,
+        Engrave3D,
+
         /* --- unsupported ---
           Triple                = 8,
           ThinThickSmallGap     = 9,
