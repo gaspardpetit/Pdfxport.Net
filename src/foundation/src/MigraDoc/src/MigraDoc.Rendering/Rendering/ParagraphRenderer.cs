@@ -798,6 +798,29 @@ namespace MigraDoc.Rendering
             _currentLeaf = lineInfo.StartIter;
             _startLeaf = lineInfo.StartIter;
             _endLeaf = lineInfo.EndIter;
+            if (!_baselineOffsetInitialized)
+            {
+                _exactParagraphBaselineOffset = 0;
+                if (_paragraph.Format.LineSpacingRule == LineSpacingRule.Exactly &&
+                    _documentRenderer.ExactParagraphBaselineOffset is { } baselineOffset)
+                {
+                    var savedLeaf = _currentLeaf;
+                    var fonts = new List<XFont>();
+                    for (var leaf = lineInfo.StartIter; leaf != null; leaf = leaf.GetNextLeaf())
+                    {
+                        _currentLeaf = leaf;
+                        if (leaf.Current is Text text && !IsBlank(text))
+                            fonts.Add(CurrentFont);
+                        if (leaf.Current == lineInfo.EndIter?.Current)
+                            break;
+                    }
+                    _currentLeaf = savedLeaf;
+                    if (baselineOffset(_paragraph, fonts) is double offset &&
+                        !double.IsNaN(offset) && !double.IsInfinity(offset))
+                        _exactParagraphBaselineOffset = offset;
+                }
+                _baselineOffsetInitialized = true;
+            }
             _currentBlankCount = lineInfo.BlankCount;
             _currentLineWidth = lineInfo.LineWidth;
             _currentLineEndsWithLineBreak = lineInfo.LineEndsWithLineBreak;
@@ -1442,7 +1465,7 @@ namespace MigraDoc.Rendering
             get
             {
                 VerticalLineInfo verticalInfo = _currentVerticalInfo;
-                XUnitPt position = _currentYPosition;
+                XUnitPt position = _currentYPosition + _exactParagraphBaselineOffset;
 
                 Font font = CurrentDomFont;
                 XFont xFont = CurrentFont;
@@ -1486,6 +1509,7 @@ namespace MigraDoc.Rendering
         void InitRendering()
         {
             _phase = Phase.Rendering;
+            _baselineOffsetInitialized = false;
 
             var parFormatInfo = (ParagraphFormatInfo)_renderInfo.FormatInfo;
             if (parFormatInfo.LineCount == 0)
@@ -3041,6 +3065,8 @@ namespace MigraDoc.Rendering
         bool _isFirstLine;
         bool _isLastLine;
         VerticalLineInfo _currentVerticalInfo;
+        double _exactParagraphBaselineOffset;
+        bool _baselineOffsetInitialized;
         Area _formattingArea = null!;
         Rectangle? _currentLineRect;
         XUnitPt _currentLineWordsWidth;

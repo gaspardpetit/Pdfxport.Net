@@ -62,6 +62,12 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? TrailingGlyphKerning { get; set; }
 
         /// <summary>
+        /// Selects a paint-only baseline offset in points for an exact-spaced paragraph.
+        /// Receives the fonts on the first rendered line. Null or a non-finite value leaves the baseline unchanged.
+        /// </summary>
+        public Func<Paragraph, IReadOnlyList<XFont>, double?>? ExactParagraphBaselineOffset { get; set; }
+
+        /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
         /// The rendered border width is unchanged.
         /// </summary>
