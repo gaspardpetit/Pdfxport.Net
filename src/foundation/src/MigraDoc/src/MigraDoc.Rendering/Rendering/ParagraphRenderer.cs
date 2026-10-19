@@ -2932,6 +2932,15 @@ namespace MigraDoc.Rendering
                 descent = Math.Max(descent, _currentVerticalInfo.Descent);
             }
 
+            if (_documentRenderer.MinimumLineMetricsForFont?.Invoke(_paragraph, font) is { } minimumMetrics &&
+                double.IsFinite(minimumMetrics.LineHeight) && minimumMetrics.LineHeight > 0 &&
+                double.IsFinite(minimumMetrics.InherentLineSpace) && minimumMetrics.InherentLineSpace > 0)
+            {
+                lineHeight = Math.Max(lineHeight, XUnitPt.FromPoint(minimumMetrics.LineHeight));
+                inherentLineSpace = Math.Max(inherentLineSpace,
+                    XUnitPt.FromPoint(minimumMetrics.InherentLineSpace));
+            }
+
             if (MaxElementHeight > 0)
                 lineHeight = Math.Min(lineHeight, MaxElementHeight - Tolerance);
 

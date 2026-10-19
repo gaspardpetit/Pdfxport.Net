@@ -75,6 +75,14 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, IReadOnlyList<XFont>, double?>? ExactFinalLineHeight { get; set; }
 
         /// <summary>
+        /// Supplies minimum line height and inherent line space, in points, for a resolved font
+        /// in a paragraph. Both values must be finite and positive; null or invalid values
+        /// preserve the normal font metrics.
+        /// </summary>
+        public Func<Paragraph, XFont, (double LineHeight, double InherentLineSpace)?>?
+            MinimumLineMetricsForFont { get; set; }
+
+        /// <summary>
         /// Optionally adjusts the spacing and insets of tab leader characters in points.
         /// Returning null retains the default rendering.
         /// </summary>
