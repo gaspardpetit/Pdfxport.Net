@@ -95,6 +95,7 @@ namespace MigraDoc.Rendering
 
         void RenderCell(Cell cell,
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingTopBorders,
+            HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> precedingBottomBorders,
             HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingLeftBorders,
             bool renderBorders = true)
         {
@@ -102,7 +103,7 @@ namespace MigraDoc.Rendering
             RenderShading(cell, innerRect);
             RenderContent(cell, innerRect);
             if (renderBorders)
-                RenderBorders(cell, innerRect, followingTopBorders, followingLeftBorders);
+                RenderBorders(cell, innerRect, followingTopBorders, precedingBottomBorders, followingLeftBorders);
         }
 
         static void EqualizeRoundedCornerBorders(Cell cell)
@@ -159,6 +160,7 @@ namespace MigraDoc.Rendering
 
         void RenderBorders(Cell cell, Rectangle innerRect,
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingTopBorders,
+            HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> precedingBottomBorders,
             HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingLeftBorders)
         {
             XUnitPt leftPos = innerRect.X;
@@ -239,10 +241,13 @@ namespace MigraDoc.Rendering
                 var bottomLength = rightPos + rightWidth + leftWidth - leftPos;
                 var bottomPen = bordersRenderer.GetPen(BorderType.Bottom);
                 if (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom)) ||
-                    !CoveredByFollowingTopBorder(HorizontalBorderKey(cell, bordersRenderer, bottomPen, false), followingTopBorders))
+                    !CoveredByNarrowerEdges(HorizontalBorderKey(cell, bordersRenderer, bottomPen, false), followingTopBorders, false))
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, bottomLeft, bottomPos, bottomLength,
                         innerStrokeLeft, innerStrokeRight, internalBottomEdge);
-                if (cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false)
+                var topPen = bordersRenderer.GetPen(BorderType.Top);
+                if (cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false &&
+                    (topPen == null || bordersRenderer.GetStyle(BorderType.Top) == BorderStyle.Single ||
+                     !CoveredByNarrowerEdges(HorizontalBorderKey(cell, bordersRenderer, topPen, true), precedingBottomBorders, true)))
                     bordersRenderer.RenderHorizontally(BorderType.Top, leftPos - leftWidth, topPos - topWidth,
                         rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
                         internalTopEdge);
@@ -278,33 +283,36 @@ namespace MigraDoc.Rendering
         static bool IsSharedEdgeStyle(BorderStyle style) =>
             style is BorderStyle.Single or BorderStyle.Dot or BorderStyle.DashSmallGap;
 
-        static bool CoveredByFollowingTopBorder(
-            (int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style) bottom,
-            HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> tops)
+        static bool CoveredByNarrowerEdges(
+            (int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style) target,
+            HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> candidates,
+            bool requireNarrower)
         {
-            if (tops.Contains(bottom))
+            if (!requireNarrower && candidates.Contains(target))
                 return true;
-            if (bottom.Style == BorderStyle.Single)
+            if (target.Style == BorderStyle.Single)
                 return false;
 
-            // Either one merged top edge or several adjacent top edges may cover this
-            // bottom edge. Keep the following edges and avoid overlapping dash phases.
-            var coveredUntil = bottom.Start;
-            foreach (var top in tops.Where(top => top.Boundary == bottom.Boundary &&
-                         top.BorderWidth == bottom.BorderWidth && top.StrokeWidth == bottom.StrokeWidth &&
-                         top.Color == bottom.Color && top.Style == bottom.Style)
-                         .OrderBy(top => top.Start).ThenByDescending(top => top.End))
+            // Prefer the finer cell segmentation so each dash pattern restarts at
+            // the same cell boundaries as Word's table borders.
+            var coveredUntil = target.Start;
+            var hasNarrowerEdge = false;
+            foreach (var edge in candidates.Where(edge => edge.Boundary == target.Boundary &&
+                         edge.Start >= target.Start && edge.End <= target.End &&
+                         edge.BorderWidth == target.BorderWidth && edge.StrokeWidth == target.StrokeWidth &&
+                         edge.Color == target.Color && edge.Style == target.Style)
+                         .OrderBy(edge => edge.Start).ThenByDescending(edge => edge.End))
             {
-                if (top.End <= coveredUntil || top.Start > coveredUntil)
+                if (edge.End <= coveredUntil || edge.Start > coveredUntil)
                     continue;
-                if (coveredUntil == bottom.Start && top.Start == bottom.Start &&
-                    top.LeftInset != bottom.LeftInset)
+                if (coveredUntil == target.Start && edge.LeftInset != target.LeftInset)
                     continue;
-                if (top.End == bottom.End && top.RightInset != bottom.RightInset)
+                if (edge.End == target.End && edge.RightInset != target.RightInset)
                     continue;
-                coveredUntil = Math.Max(coveredUntil, top.End);
-                if (coveredUntil >= bottom.End)
-                    return true;
+                hasNarrowerEdge |= edge.Start > target.Start || edge.End < target.End;
+                coveredUntil = Math.Max(coveredUntil, edge.End);
+                if (coveredUntil >= target.End)
+                    return !requireNarrower || hasNarrowerEdge;
             }
             return false;
         }
@@ -435,6 +443,7 @@ namespace MigraDoc.Rendering
             XPen? gridPen = null;
             var uniformDoubleGrid = followingCells == null && TryGetUniformDoubleGridPen(cells, out gridPen);
             var followingTopBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
+            var precedingBottomBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
             var followingLeftBorders = new HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
             foreach (var cell in cells.Concat(followingCells ?? Array.Empty<Cell>()))
             {
@@ -443,6 +452,7 @@ namespace MigraDoc.Rendering
                 var innerRect = GetInnerRect(CalcStartingHeight(), cell);
                 var borders = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), _gfx);
                 var topPen = borders.GetPen(BorderType.Top);
+                var bottomPen = borders.GetPen(BorderType.Bottom);
                 var leftPen = borders.GetPen(BorderType.Left);
                 if (leftPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Left)) &&
                     cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false)
@@ -454,9 +464,14 @@ namespace MigraDoc.Rendering
                 {
                     followingTopBorders.Add(HorizontalBorderKey(cell, borders, topPen, true));
                 }
+                if (bottomPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Bottom)) &&
+                    cell.Borders.GetBorder(BorderType.Bottom)?.Values.Visible != false)
+                {
+                    precedingBottomBorders.Add(HorizontalBorderKey(cell, borders, bottomPen, false));
+                }
             }
             foreach (var cell in cells)
-                RenderCell(cell, followingTopBorders, followingLeftBorders, !uniformDoubleGrid);
+                RenderCell(cell, followingTopBorders, precedingBottomBorders, followingLeftBorders, !uniformDoubleGrid);
             if (uniformDoubleGrid)
                 RenderUniformDoubleGrid(cells, gridPen!);
         }

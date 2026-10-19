@@ -262,8 +262,7 @@ namespace MigraDoc.Tests
                 .GroupBy(stroke => stroke.Groups["y1"].Value)
                 .OrderBy(row => double.Parse(row.Key, System.Globalization.CultureInfo.InvariantCulture))
                 .Select(row => row.Count()).ToArray();
-            horizontalRows.OrderBy(count => count).Should().Equal(
-                upperMerged ? new[] { 2, 3, 3 } : new[] { 2, 2, 3 });
+            horizontalRows.OrderBy(count => count).Should().Equal(2, 3, 3);
         }
 
         [Fact]
