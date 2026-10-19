@@ -92,7 +92,8 @@ namespace MigraDoc.Tests
             second.Borders.Left.Width = 16;
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
-            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var strokes = BorderStrokes(content)
                 .Where(match => match.Groups["y1"].Value == match.Groups["y2"].Value).ToArray();
             strokes.Should().HaveCount(2);
             strokes.Select(match => match.Groups["x2"].Value).Should().OnlyHaveUniqueItems();
@@ -175,6 +176,50 @@ namespace MigraDoc.Tests
 
         static MatchCollection BorderStrokes(string content) => Regex.Matches(content,
             @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S");
+
+        [Theory]
+        [InlineData(false, BorderStyle.Dot, 3)]
+        [InlineData(true, BorderStyle.Dot, 3)]
+        [InlineData(false, BorderStyle.DashSmallGap, 3)]
+        [InlineData(true, BorderStyle.DashSmallGap, 3)]
+        [InlineData(false, BorderStyle.Single, 1)]
+        [InlineData(true, BorderStyle.Single, 1)]
+        public void DottedAndDashedTableEdgesHaveVisibleEndpointStrokes(bool vertical, BorderStyle style, int expectedStrokes)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var table = document.AddSection().AddTable();
+            table.AddColumn(Unit.FromPoint(83));
+            var cell = table.AddRow()[0];
+            cell.AddParagraph("Cell");
+            var border = vertical ? cell.Borders.Left : cell.Borders.Top;
+            border.Color = Colors.Red;
+            border.Width = 1;
+            border.Style = style;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            if (style == BorderStyle.DashSmallGap)
+                content.Should().MatchRegex(@"\[3(?:\.0)? 1(?:\.0)?\]0 d");
+            var strokes = BorderStrokes(content)
+                .Cast<Match>().ToArray();
+            strokes.Should().HaveCount(expectedStrokes);
+            if (style is BorderStyle.Dot or BorderStyle.DashSmallGap)
+            {
+                var positions = strokes.Select(stroke => (
+                    Start: double.Parse(stroke.Groups[vertical ? "y1" : "x1"].Value,
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    End: double.Parse(stroke.Groups[vertical ? "y2" : "x2"].Value,
+                        System.Globalization.CultureInfo.InvariantCulture))).ToArray();
+                var minimum = positions.SelectMany(pair => new[] { pair.Start, pair.End }).Min();
+                var maximum = positions.SelectMany(pair => new[] { pair.Start, pair.End }).Max();
+                positions.Count(pair => Math.Abs(pair.Start - minimum) < .01 ||
+                    Math.Abs(pair.End - minimum) < .01).Should().BeGreaterThan(1);
+                positions.Count(pair => Math.Abs(pair.Start - maximum) < .01 ||
+                    Math.Abs(pair.End - maximum) < .01).Should().BeGreaterThan(1);
+            }
+        }
 
         [Fact]
         public void Double_cell_borders_render_two_strokes_per_edge()
