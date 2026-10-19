@@ -68,6 +68,18 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? RenderOnlyTrailingGlyphKerning { get; set; }
 
         /// <summary>
+        /// Sets the maximum protrusion, in points, at which a final hanging mark
+        /// can expand the spaces on a left-aligned line. Null leaves spacing unchanged.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? HangingTerminalLineSpaceThreshold { get; set; }
+
+        /// <summary>
+        /// Allows the final hanging mark to expand spaces when its rendered line
+        /// falls just short of the right edge. Returns the near-edge tolerance in points.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? HangingTerminalLineNearEdgeThreshold { get; set; }
+
+        /// <summary>
         /// Selects a paint-only baseline offset in points for an exact-spaced paragraph.
         /// Receives the fonts on the first rendered line. Null or a non-finite value leaves the baseline unchanged.
         /// </summary>
