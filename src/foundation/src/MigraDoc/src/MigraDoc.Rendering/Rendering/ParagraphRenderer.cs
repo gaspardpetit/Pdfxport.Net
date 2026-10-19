@@ -823,6 +823,22 @@ namespace MigraDoc.Rendering
                     _paragraph.Format.AtLeastBaselineOffset is { } atLeastOffset &&
                     double.IsFinite(atLeastOffset.Point))
                     _exactParagraphBaselineOffset = atLeastOffset.Point;
+                if (_documentRenderer.ParagraphPaintBaselineOffset is { } paintBaselineOffset)
+                {
+                    var savedLeaf = _currentLeaf;
+                    var fonts = new List<XFont>();
+                    for (var leaf = lineInfo.StartIter; leaf != null; leaf = leaf.GetNextLeaf())
+                    {
+                        _currentLeaf = leaf;
+                        if (leaf.Current is Text text && !IsBlank(text))
+                            fonts.Add(CurrentFont);
+                        if (leaf.Current == lineInfo.EndIter?.Current)
+                            break;
+                    }
+                    _currentLeaf = savedLeaf;
+                    if (paintBaselineOffset(_paragraph, fonts) is double offset && double.IsFinite(offset))
+                        _exactParagraphBaselineOffset += offset;
+                }
                 _baselineOffsetInitialized = true;
             }
             _currentBlankCount = lineInfo.BlankCount;
