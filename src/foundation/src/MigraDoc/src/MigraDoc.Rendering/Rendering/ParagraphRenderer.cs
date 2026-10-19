@@ -982,6 +982,38 @@ namespace MigraDoc.Rendering
         {
             get
             {
+                if (_phase == Phase.Rendering && _isLastLine && _renderInfo.FormatInfo.IsEnding &&
+                    _paragraph.Format.Alignment == ParagraphAlignment.Left &&
+                    _lastTabPassed && _currentLineBlankCount > 0 &&
+                    _endLeaf?.Current is Text { Content: { Length: > 0 } endText } &&
+                    _documentRenderer.HangingTerminalLineSpaceThreshold is { } hangingThreshold)
+                {
+                    var savedLeaf = _currentLeaf;
+                    _currentLeaf = _endLeaf;
+                    var font = CurrentFont;
+                    var threshold = hangingThreshold(_paragraph, endText, font);
+                    var nearEdgeThreshold = _documentRenderer.HangingTerminalLineNearEdgeThreshold?.Invoke(
+                        _paragraph, endText, font);
+                    var markWidth = threshold is >= 0 && double.IsFinite(threshold.Value)
+                        ? MeasureString(endText[^1..]) : 0;
+                    var renderedAdjustment = threshold is >= 0 && double.IsFinite(threshold.Value)
+                        ? GetRenderOnlyTrailingGlyphKerning(endText, font) : 0;
+                    _currentLeaf = savedLeaf;
+                    if (threshold is >= 0 && double.IsFinite(threshold.Value))
+                    {
+                        var contentArea = _renderInfo.LayoutInfo.ContentArea;
+                        var width = (_currentLineRect?.Width ??
+                            contentArea.GetFittingRect(_currentYPosition,
+                                _currentVerticalInfo.Height)?.Width ?? NRT.ThrowOnNull<XUnitPt>()) -
+                            LeftIndent - RightIndent;
+                        var renderedLineWidth = _currentLineWidth + renderedAdjustment;
+                        var expansion = width - renderedLineWidth + markWidth;
+                        if ((renderedLineWidth - width > threshold.Value ||
+                             nearEdgeThreshold is >= 0 && double.IsFinite(nearEdgeThreshold.Value) &&
+                             renderedLineWidth - width > -nearEdgeThreshold.Value) && expansion > 0)
+                            return MeasureString(" ") + expansion / _currentLineBlankCount;
+                    }
+                }
                 if (_phase == Phase.Rendering &&
                   _paragraph.Format.Alignment == ParagraphAlignment.Justify && _lastTabPassed)
                 {
