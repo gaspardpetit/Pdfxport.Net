@@ -78,7 +78,10 @@ namespace PdfSharp.Charting.Renderers
                 // Draw series rectangle for column, bar or pie charts.
                 rect = new XRect((float_)leri.X, (float_)leri.Y, leri.MarkerArea.Width, leri.MarkerArea.Height);
                 rect.Y += (float_)((leri.Height - leri.MarkerArea.Height) / 2);
-                gfx.DrawRectangle(leri.MarkerPen, leri.MarkerBrush, rect);
+                if (leri.MarkerPen.Width > 0)
+                    gfx.DrawRectangle(leri.MarkerPen, leri.MarkerBrush, rect);
+                else
+                    gfx.DrawRectangle(leri.MarkerBrush, rect);
             }
 
             // Draw text
