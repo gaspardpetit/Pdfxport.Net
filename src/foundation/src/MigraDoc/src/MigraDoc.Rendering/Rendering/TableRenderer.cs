@@ -230,7 +230,7 @@ namespace MigraDoc.Rendering
             {
                 // Simple case: no rounded borders.
                 var rightPen = bordersRenderer.GetPen(BorderType.Right);
-                if (rightPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Right)) ||
+                if (rightPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Right), rightPen) ||
                     !followingLeftBorders.Contains(VerticalBorderKey(cell, bordersRenderer, rightPen, false)))
                     bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos,
                         bottomPos + bottomWidth - topPos, rightOuterStrokeTop, rightInnerStrokeBottom);
@@ -240,13 +240,13 @@ namespace MigraDoc.Rendering
                 var bottomLeft = leftPos - leftWidth;
                 var bottomLength = rightPos + rightWidth + leftWidth - leftPos;
                 var bottomPen = bordersRenderer.GetPen(BorderType.Bottom);
-                if (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom)) ||
+                if (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom), bottomPen) ||
                     !CoveredByNarrowerEdges(HorizontalBorderKey(cell, bordersRenderer, bottomPen, false), followingTopBorders, false))
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, bottomLeft, bottomPos, bottomLength,
                         innerStrokeLeft, innerStrokeRight, internalBottomEdge);
                 var topPen = bordersRenderer.GetPen(BorderType.Top);
                 if (cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false &&
-                    (topPen == null || bordersRenderer.GetStyle(BorderType.Top) == BorderStyle.Single ||
+                    (topPen == null || bordersRenderer.GetStyle(BorderType.Top) is not (BorderStyle.Dot or BorderStyle.DashSmallGap) ||
                      !CoveredByNarrowerEdges(HorizontalBorderKey(cell, bordersRenderer, topPen, true), precedingBottomBorders, true)))
                     bordersRenderer.RenderHorizontally(BorderType.Top, leftPos - leftWidth, topPos - topWidth,
                         rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
@@ -280,8 +280,8 @@ namespace MigraDoc.Rendering
                 borders.GetStyle(left ? BorderType.Left : BorderType.Right));
         }
 
-        static bool IsSharedEdgeStyle(BorderStyle style) =>
-            style is BorderStyle.Single or BorderStyle.Dot or BorderStyle.DashSmallGap;
+        static bool IsSharedEdgeStyle(BorderStyle style, XPen pen) =>
+            pen.DashStyle == XDashStyle.Solid || style is BorderStyle.Dot or BorderStyle.DashSmallGap;
 
         static bool CoveredByNarrowerEdges(
             (int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style) target,
@@ -290,7 +290,7 @@ namespace MigraDoc.Rendering
         {
             if (!requireNarrower && candidates.Contains(target))
                 return true;
-            if (target.Style == BorderStyle.Single)
+            if (target.Style is not (BorderStyle.Dot or BorderStyle.DashSmallGap))
                 return false;
 
             // Prefer the finer cell segmentation so each dash pattern restarts at
@@ -454,17 +454,17 @@ namespace MigraDoc.Rendering
                 var topPen = borders.GetPen(BorderType.Top);
                 var bottomPen = borders.GetPen(BorderType.Bottom);
                 var leftPen = borders.GetPen(BorderType.Left);
-                if (leftPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Left)) &&
+                if (leftPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Left), leftPen) &&
                     cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false)
                 {
                     followingLeftBorders.Add(VerticalBorderKey(cell, borders, leftPen, true));
                 }
-                if (topPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Top)) &&
+                if (topPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Top), topPen) &&
                     cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false)
                 {
                     followingTopBorders.Add(HorizontalBorderKey(cell, borders, topPen, true));
                 }
-                if (bottomPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Bottom)) &&
+                if (bottomPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Bottom), bottomPen) &&
                     cell.Borders.GetBorder(BorderType.Bottom)?.Values.Visible != false)
                 {
                     precedingBottomBorders.Add(HorizontalBorderKey(cell, borders, bottomPen, false));
