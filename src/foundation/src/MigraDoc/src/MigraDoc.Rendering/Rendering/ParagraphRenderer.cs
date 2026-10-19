@@ -802,6 +802,32 @@ namespace MigraDoc.Rendering
             _currentLineWidth = lineInfo.LineWidth;
             _currentLineEndsWithLineBreak = lineInfo.LineEndsWithLineBreak;
             _currentWordsWidth = lineInfo.WordsWidth;
+            double[]? renderWidthAdjustments = null;
+            if (_paragraph.Format.Alignment == ParagraphAlignment.Justify &&
+                _documentRenderer.JustifiedRenderWordWidthAdjustment is { } renderWidthAdjustment)
+            {
+                renderWidthAdjustments = new double[(transitions?.Count ?? 0) + 1];
+                var widthSegment = 0;
+                var savedLeaf = _currentLeaf;
+                for (var leaf = lineInfo.StartIter; leaf != null; leaf = leaf.GetNextLeaf())
+                {
+                    _currentLeaf = leaf;
+                    if (transitions is { Count: > 0 } && widthSegment < transitions.Count &&
+                        transitions[widthSegment].StartIter?.Current == leaf.Current)
+                        widthSegment++;
+                    if (leaf.Current is Text text && !IsBlank(text) &&
+                        renderWidthAdjustment(_paragraph, text.Content, CurrentFont) is double adjustment &&
+                        double.IsFinite(adjustment))
+                    {
+                        _currentWordsWidth += adjustment;
+                        renderWidthAdjustments[widthSegment] += adjustment;
+                    }
+                    if (leaf.Current == lineInfo.EndIter?.Current)
+                        break;
+                }
+                _currentLeaf = savedLeaf;
+                _currentLineWordsWidth += renderWidthAdjustments[0];
+            }
             _currentXPosition = StartXPosition;
             _tabOffsets = lineInfo.TabOffsets;
             _lastTabPassed = lineInfo.LastTab == null;
@@ -837,6 +863,8 @@ namespace MigraDoc.Rendering
                     _currentLineWordsWidth = (segmentIndex < transitions.Count
                         ? transitions[segmentIndex].WordsBefore : lineInfo.WordsWidth) -
                         transition.WordsBefore;
+                    if (renderWidthAdjustments != null)
+                        _currentLineWordsWidth += renderWidthAdjustments[segmentIndex];
                     _currentLineBlankCount = (segmentIndex < transitions.Count
                         ? transitions[segmentIndex].BlanksBefore : lineInfo.BlankCount) -
                         transition.BlanksBefore;

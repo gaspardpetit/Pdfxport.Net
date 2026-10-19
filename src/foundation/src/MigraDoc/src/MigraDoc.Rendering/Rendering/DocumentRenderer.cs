@@ -29,6 +29,12 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Adjusts a justified word's painted width without changing line fitting or pagination.
+        /// Return null to keep its measured width. Non-finite values are ignored.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? JustifiedRenderWordWidthAdjustment { get; set; }
+
+        /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
         /// The rendered border width is unchanged.
         /// </summary>
