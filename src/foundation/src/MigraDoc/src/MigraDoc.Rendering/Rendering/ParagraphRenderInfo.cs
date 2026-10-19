@@ -24,6 +24,11 @@ namespace MigraDoc.Rendering
         ParagraphFormatInfo _formatInfo = new();
 
         /// <summary>
+        /// Gets the number of formatted lines in this paragraph fragment.
+        /// </summary>
+        public int LineCount => _formatInfo.LineCount;
+
+        /// <summary>
         /// Gets the document object to which the layout information applies. Use the Tag property of DocumentObject to identify an object.
         /// </summary>
         public override DocumentObject DocumentObject
