@@ -611,6 +611,42 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void CenteredTextFrameContentMovesTextWithoutMovingFrame()
+        {
+            (string Content, int Pages) Render(bool centered)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var frame = document.AddSection().AddTextFrame();
+                frame.Width = Unit.FromPoint(180);
+                frame.Height = Unit.FromPoint(90);
+                frame.AddParagraph("Centered frame text");
+                frame.LineFormat.Visible = true;
+                frame.CenterContentVertically = centered;
+                ((TextFrame)frame.Clone()).CenterContentVertically.Should().Be(centered);
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.RenderDocument();
+                return (PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0),
+                    renderer.PdfDocument.PageCount);
+            }
+
+            var normal = Render(false);
+            var centered = Render(true);
+            centered.Pages.Should().Be(normal.Pages);
+            centered.Content.Should().Contain("(Centered) Tj");
+            var frameRectangles = @"(?m)^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re$";
+            Regex.Matches(normal.Content, frameRectangles).Count.Should().BeGreaterThan(0);
+            Regex.Matches(centered.Content, frameRectangles).Cast<Match>().Select(match => match.Value)
+                .Should().Equal(Regex.Matches(normal.Content, frameRectangles).Cast<Match>().Select(match => match.Value));
+            var normalTranslations = Regex.Matches(normal.Content, @"(?m)^1 0 0 1 (?<x>-?[\d.]+) (?<y>-?[\d.]+) cm$");
+            var centeredTranslations = Regex.Matches(centered.Content, @"(?m)^1 0 0 1 (?<x>-?[\d.]+) (?<y>-?[\d.]+) cm$");
+            centeredTranslations.Count.Should().Be(normalTranslations.Count);
+            var normalY = double.Parse(normalTranslations[^1].Groups["y"].Value, CultureInfo.InvariantCulture);
+            var centeredY = double.Parse(centeredTranslations[^1].Groups["y"].Value, CultureInfo.InvariantCulture);
+            centeredY.Should().BeGreaterThan(normalY + 10);
+        }
+
+        [Fact]
         public void UnderlineAcrossSmallerFormattedSpaceUsesOneStroke()
         {
             var document = new Document();
