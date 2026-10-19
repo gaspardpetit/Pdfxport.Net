@@ -137,5 +137,49 @@ namespace MigraDoc.Tests
             adjusted[0].Should().BeGreaterThan(baseline[0] + 4);
             adjusted[1].Should().Be(baseline[1]);
         }
+
+        [Fact]
+        public void NonterminalHangingSpaceUsesWidthClippedDuringLineFitting()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            var contentWidth = measure.MeasureString("A short sequence xxxxxxxxx authors.\"", font).Width - 2;
+
+            (double FirstY, double SecondY, double ShortX) Render(bool expand)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(20);
+                section.PageSetup.RightMargin = Unit.FromPoint(20);
+                section.AddParagraph("A short sequence xxxxxxxxx authors.\" next words here.")
+                    .Format.Alignment = ParagraphAlignment.Left;
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.DocumentRenderer.LineEndOverhang = (_, word, _) =>
+                    word.EndsWith("\"", StringComparison.Ordinal) ? 5 : null;
+                if (expand)
+                    renderer.DocumentRenderer.HangingNonterminalLineSpaceLimit = (_, word, _) =>
+                        word.EndsWith("\"", StringComparison.Ordinal) ? 1 : null;
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                var words = new List<(string Text, double X, double Y)>();
+                while (stream.Text.MoveAndGetNext(true, out var text))
+                    words.Add((text!.Text, text.X, text.Y));
+                var first = words.Single(word => word.Text == "A");
+                var shortWord = words.Single(word => word.Text == "short");
+                var next = words.Single(word => word.Text == "next");
+                return (first.Y, next.Y, shortWord.X);
+            }
+
+            var baseline = Render(false);
+            var adjusted = Render(true);
+            baseline.FirstY.Should().NotBe(baseline.SecondY);
+            adjusted.FirstY.Should().Be(baseline.FirstY);
+            adjusted.SecondY.Should().Be(baseline.SecondY);
+            adjusted.ShortX.Should().BeGreaterThan(baseline.ShortX);
+        }
     }
 }

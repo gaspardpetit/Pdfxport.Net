@@ -843,6 +843,7 @@ namespace MigraDoc.Rendering
             }
             _currentBlankCount = lineInfo.BlankCount;
             _currentLineWidth = lineInfo.LineWidth;
+            _currentClippedTrailingWidth = lineInfo.ClippedTrailingWidth;
             _currentLineEndsWithLineBreak = lineInfo.LineEndsWithLineBreak;
             _currentWordsWidth = lineInfo.WordsWidth;
             double[]? renderWidthAdjustments = null;
@@ -938,6 +939,7 @@ namespace MigraDoc.Rendering
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
                 out var lineEndsWithLineBreak, out var naturalFontHeight);
             bool origLastTabPassed = _lastTabPassed;
+            var clippedTrailingWidth = _currentClippedTrailingWidth;
             //------------------------------------------
             _currentLeaf = lineInfo.StartIter;
             _startLeaf = lineInfo.StartIter;
@@ -945,6 +947,7 @@ namespace MigraDoc.Rendering
             _formattingArea = _renderInfo.LayoutInfo.ContentArea;
             _tabOffsets = [];
             _currentLineWidth = 0;
+            _currentClippedTrailingWidth = 0;
             _currentWordsWidth = 0;
             _currentLineEndsWithLineBreak = false;
 
@@ -968,6 +971,7 @@ namespace MigraDoc.Rendering
                         _currentLeaf = _currentLeaf!.GetNextLeaf();
                 }
                 lineInfo.LineWidth = _currentLineWidth;
+                lineInfo.ClippedTrailingWidth = _currentClippedTrailingWidth;
                 lineInfo.WordsWidth = _currentWordsWidth;
                 lineInfo.BlankCount = _currentBlankCount;
                 lineInfo.TabOffsets = _tabOffsets;
@@ -976,12 +980,45 @@ namespace MigraDoc.Rendering
                 _lastTabPassed = origLastTabPassed;
             }
             RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
+            _currentClippedTrailingWidth = clippedTrailingWidth;
         }
 
         XUnitPt CurrentWordDistance
         {
             get
             {
+                if (_phase == Phase.Rendering && !_isLastLine &&
+                    _paragraph.Format.Alignment == ParagraphAlignment.Left &&
+                    _lastTabPassed && _currentLineBlankCount > 0 &&
+                    _currentClippedTrailingWidth > 0 &&
+                    _documentRenderer.HangingNonterminalLineSpaceLimit is { } nonterminalLimit)
+                {
+                    var endLeaf = _endLeaf;
+                    while (endLeaf?.Current is Text blank && IsBlank(blank))
+                        endLeaf = endLeaf.GetPreviousLeaf();
+                    if (endLeaf?.Current is Text { Content: { Length: > 0 } nonterminalText })
+                    {
+                        var savedLeaf = _currentLeaf;
+                        _currentLeaf = endLeaf;
+                        var font = CurrentFont;
+                        var limit = nonterminalLimit(_paragraph, nonterminalText, font);
+                        var markWidth = limit is >= 0 && double.IsFinite(limit.Value)
+                            ? MeasureString(nonterminalText[^1..]) : 0;
+                        _currentLeaf = savedLeaf;
+                        if (limit is >= 0 && double.IsFinite(limit.Value))
+                        {
+                            var area = _renderInfo.LayoutInfo.ContentArea;
+                            var width = (_currentLineRect?.Width ??
+                                area.GetFittingRect(_currentYPosition,
+                                    _currentVerticalInfo.Height)?.Width ?? NRT.ThrowOnNull<XUnitPt>()) -
+                                LeftIndent - RightIndent;
+                            var expansion = width - _currentLineWidth -
+                                _currentClippedTrailingWidth + markWidth;
+                            if (expansion > 0 && expansion / _currentLineBlankCount <= limit.Value)
+                                return MeasureString(" ") + expansion / _currentLineBlankCount;
+                        }
+                    }
+                }
                 if (_phase == Phase.Rendering && _isLastLine && _renderInfo.FormatInfo.IsEnding &&
                     _paragraph.Format.Alignment == ParagraphAlignment.Left &&
                     _lastTabPassed && _currentLineBlankCount > 0 &&
@@ -1603,6 +1640,7 @@ namespace MigraDoc.Rendering
             if (rect != null)
                 _currentXPosition = rect.X;
             _currentLineWidth = 0;
+            _currentClippedTrailingWidth = 0;
             _currentLineEndsWithLineBreak = false;
         }
 
@@ -2184,7 +2222,10 @@ namespace MigraDoc.Rendering
                     overhang(_paragraph, word, CurrentFont) is double allowance &&
                     allowance > 0 && !double.IsInfinity(allowance) &&
                     _currentXPosition + width - allowance <= right)
+                {
+                    _currentClippedTrailingWidth += width - (right - _currentXPosition);
                     width = right - _currentXPosition;
+                }
             }
             var result = FormatAsWord(width, fittingRect);
             if (result == FormatResult.NewLine)
@@ -2741,6 +2782,7 @@ namespace MigraDoc.Rendering
             _currentBlankCount = 0;
             _currentWordsWidth = 0;
             _currentLineWidth = 0;
+            _currentClippedTrailingWidth = 0;
             _currentLineEndsWithLineBreak = false;
         }
 
@@ -2828,6 +2870,7 @@ namespace MigraDoc.Rendering
             lineInfo.WordsWidth = _currentWordsWidth;
 
             lineInfo.LineWidth = _currentLineWidth;
+            lineInfo.ClippedTrailingWidth = _currentClippedTrailingWidth;
             lineInfo.TabOffsets = _tabOffsets;
             lineInfo.ReMeasureLine = _reMeasureLine;
             lineInfo.LineEndsWithLineBreak = _currentLineEndsWithLineBreak;
@@ -3267,6 +3310,7 @@ namespace MigraDoc.Rendering
         XUnitPt _currentWordsWidth;
         int _currentBlankCount;
         XUnitPt _currentLineWidth;
+        XUnitPt _currentClippedTrailingWidth;
         bool _currentLineEndsWithLineBreak;
         bool _isFirstLine;
         bool _isLastLine;
