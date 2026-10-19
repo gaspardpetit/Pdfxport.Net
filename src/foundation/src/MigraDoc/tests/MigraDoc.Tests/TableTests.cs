@@ -517,6 +517,100 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Mixed_decorative_junction_stops_vertical_rails_at_horizontal_band()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("4cm");
+            var cell = table.AddRow()[0];
+            cell.AddParagraph("Junction");
+            cell.Borders.Top.Style = BorderStyle.Triple;
+            cell.Borders.Top.Width = 2;
+            cell.Borders.Bottom.Style = BorderStyle.DoubleWave;
+            cell.Borders.Bottom.Width = 2;
+            cell.Borders.Left.Style = BorderStyle.Dot;
+            cell.Borders.Left.Width = 2;
+            cell.Borders.Right.Style = BorderStyle.ThinThickMediumGap;
+            cell.Borders.Right.Width = 2;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var segments = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            var vertical = segments.Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                Math.Abs(line.Y1 - line.Y2) > 5).ToArray();
+            var wave = segments.Where(line => Math.Abs(line.X1 - line.X2) > .05 &&
+                Math.Abs(line.Y1 - line.Y2) > .05 && Math.Abs(line.Y1 - line.Y2) < 5).ToArray();
+            vertical.Should().NotBeEmpty();
+            wave.Should().NotBeEmpty();
+            var waveMin = wave.Min(line => Math.Min(line.Y1, line.Y2));
+            var waveMax = wave.Max(line => Math.Max(line.Y1, line.Y2));
+            foreach (var line in vertical)
+            {
+                var overlap = Math.Min(Math.Max(line.Y1, line.Y2), waveMax) -
+                    Math.Max(Math.Min(line.Y1, line.Y2), waveMin);
+                overlap.Should().BeLessThan(.05);
+            }
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Double, 2)]
+        [InlineData(BorderStyle.Triple, 3)]
+        public void Mixed_multi_rail_junction_stops_vertical_rails_before_horizontal_rails(
+            BorderStyle horizontalStyle, int expectedHorizontalRails)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("4cm");
+            var cell = table.AddRow()[0];
+            cell.AddParagraph("Junction");
+            cell.Borders.Top.Style = BorderStyle.Single;
+            cell.Borders.Top.Width = 1;
+            cell.Borders.Bottom.Style = horizontalStyle;
+            cell.Borders.Bottom.Width = 2;
+            cell.Borders.Left.Style = BorderStyle.ThinThickMediumGap;
+            cell.Borders.Left.Width = 2;
+            cell.Borders.Right.Style = BorderStyle.ThinThickMediumGap;
+            cell.Borders.Right.Width = 2;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var segments = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            var vertical = segments.Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                Math.Abs(line.Y1 - line.Y2) > 5).ToArray();
+            var horizontal = segments.Where(line => Math.Abs(line.Y1 - line.Y2) < .01 &&
+                Math.Abs(line.X1 - line.X2) > 20).ToArray();
+            vertical.Should().HaveCount(4);
+            horizontal.Should().HaveCount(expectedHorizontalRails + 1);
+            var bottomRails = horizontal.OrderBy(line => line.Y1).Take(expectedHorizontalRails).ToArray();
+            var bottomMin = bottomRails.Min(line => line.Y1);
+            var bottomMax = bottomRails.Max(line => line.Y1);
+            foreach (var line in vertical)
+            {
+                var overlap = Math.Min(Math.Max(line.Y1, line.Y2), bottomMax) -
+                    Math.Max(Math.Min(line.Y1, line.Y2), bottomMin);
+                overlap.Should().BeLessThan(.05);
+            }
+        }
+
+        [Fact]
         public void Uniform_three_by_three_double_grid_has_closed_cell_and_perimeter_paths()
         {
             var document = new Document();

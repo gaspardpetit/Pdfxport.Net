@@ -194,6 +194,17 @@ namespace MigraDoc.Rendering
                 innerStrokeRight = rightPos;
             var internalTopEdge = cell.Row?.Index > 0;
             var internalBottomEdge = cell.Row?.Index + cell.MergeDown < _table.Rows.Count - 1;
+            // Decorative horizontal borders occupy their own band.  A vertical
+            // stroke that runs through that band destroys the intended break at
+            // a four-way junction (most visibly with waves and hatches).  The
+            // horizontal edge owns the band; the vertical edge ends at its near
+            // boundary and resumes below it in the next cell.
+            var bottomStyle = bordersRenderer.GetStyle(BorderType.Bottom);
+            var horizontalOwnsBottomJunction = bottomStyle is BorderStyle.Double or
+                BorderStyle.Triple or BorderStyle.Wave or BorderStyle.DoubleWave or
+                BorderStyle.DashDotStroked ||
+                CompoundProfile(bottomStyle) != null;
+            var verticalBottom = horizontalOwnsBottomJunction ? bottomPos : bottomPos + bottomWidth;
 
             if (cell.RoundedCorner != RoundedCorner.None)
             {
@@ -238,10 +249,10 @@ namespace MigraDoc.Rendering
                     (rightPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Right), rightPen) ||
                      !followingLeftBorders.Contains(rightKey)))
                     bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos,
-                        bottomPos + bottomWidth - topPos, rightOuterStrokeTop, rightInnerStrokeBottom);
+                        verticalBottom - topPos, rightOuterStrokeTop, rightInnerStrokeBottom);
                 if (cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false)
                     bordersRenderer.RenderVertically(BorderType.Left, leftPos - leftWidth, topPos,
-                        bottomPos + bottomWidth - topPos, leftOuterStrokeTop, leftInnerStrokeBottom);
+                        verticalBottom - topPos, leftOuterStrokeTop, leftInnerStrokeBottom);
                 var bottomLeft = leftPos - leftWidth;
                 var bottomLength = rightPos + rightWidth + leftWidth - leftPos;
                 var bottomPen = bordersRenderer.GetPen(BorderType.Bottom);
