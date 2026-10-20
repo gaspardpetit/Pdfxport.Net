@@ -28,6 +28,8 @@ namespace MigraDoc.Rendering
     /// </summary>
     class ParagraphRenderer : Renderer
     {
+        static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
         /// <summary>
         /// Process phases of the renderer.
         /// </summary>
@@ -821,7 +823,7 @@ namespace MigraDoc.Rendering
                 }
                 if (_paragraph.Format.LineSpacingRule == LineSpacingRule.AtLeast &&
                     _paragraph.Format.AtLeastBaselineOffset is { } atLeastOffset &&
-                    double.IsFinite(atLeastOffset.Point))
+                    IsFinite(atLeastOffset.Point))
                     _exactParagraphBaselineOffset = atLeastOffset.Point;
                 if (_documentRenderer.ParagraphPaintBaselineOffset is { } paintBaselineOffset)
                 {
@@ -836,7 +838,7 @@ namespace MigraDoc.Rendering
                             break;
                     }
                     _currentLeaf = savedLeaf;
-                    if (paintBaselineOffset(_paragraph, fonts) is double offset && double.IsFinite(offset))
+                    if (paintBaselineOffset(_paragraph, fonts) is double offset && IsFinite(offset))
                         _exactParagraphBaselineOffset += offset;
                 }
                 _baselineOffsetInitialized = true;
@@ -861,7 +863,7 @@ namespace MigraDoc.Rendering
                         widthSegment++;
                     if (leaf.Current is Text text && !IsBlank(text) &&
                         renderWidthAdjustment(_paragraph, text.Content, CurrentFont) is double adjustment &&
-                        double.IsFinite(adjustment))
+                        IsFinite(adjustment))
                     {
                         _currentWordsWidth += adjustment;
                         renderWidthAdjustments[widthSegment] += adjustment;
@@ -1002,10 +1004,10 @@ namespace MigraDoc.Rendering
                         _currentLeaf = endLeaf;
                         var font = CurrentFont;
                         var limit = nonterminalLimit(_paragraph, nonterminalText, font);
-                        var markWidth = limit is >= 0 && double.IsFinite(limit.Value)
+                        var markWidth = limit is >= 0 && IsFinite(limit.Value)
                             ? MeasureString(nonterminalText[^1..]) : 0;
                         _currentLeaf = savedLeaf;
-                        if (limit is >= 0 && double.IsFinite(limit.Value))
+                        if (limit is >= 0 && IsFinite(limit.Value))
                         {
                             var area = _renderInfo.LayoutInfo.ContentArea;
                             var width = (_currentLineRect?.Width ??
@@ -1031,12 +1033,12 @@ namespace MigraDoc.Rendering
                     var threshold = hangingThreshold(_paragraph, endText, font);
                     var nearEdgeThreshold = _documentRenderer.HangingTerminalLineNearEdgeThreshold?.Invoke(
                         _paragraph, endText, font);
-                    var markWidth = threshold is >= 0 && double.IsFinite(threshold.Value)
+                    var markWidth = threshold is >= 0 && IsFinite(threshold.Value)
                         ? MeasureString(endText[^1..]) : 0;
-                    var renderedAdjustment = threshold is >= 0 && double.IsFinite(threshold.Value)
+                    var renderedAdjustment = threshold is >= 0 && IsFinite(threshold.Value)
                         ? GetRenderOnlyTrailingGlyphKerning(endText, font) : 0;
                     _currentLeaf = savedLeaf;
-                    if (threshold is >= 0 && double.IsFinite(threshold.Value))
+                    if (threshold is >= 0 && IsFinite(threshold.Value))
                     {
                         var contentArea = _renderInfo.LayoutInfo.ContentArea;
                         var width = (_currentLineRect?.Width ??
@@ -1046,7 +1048,7 @@ namespace MigraDoc.Rendering
                         var renderedLineWidth = _currentLineWidth + renderedAdjustment;
                         var expansion = width - renderedLineWidth + markWidth;
                         if ((renderedLineWidth - width > threshold.Value ||
-                             nearEdgeThreshold is >= 0 && double.IsFinite(nearEdgeThreshold.Value) &&
+                             nearEdgeThreshold is >= 0 && IsFinite(nearEdgeThreshold.Value) &&
                              renderedLineWidth - width > -nearEdgeThreshold.Value) && expansion > 0)
                             return MeasureString(" ") + expansion / _currentLineBlankCount;
                     }
@@ -2211,7 +2213,7 @@ namespace MigraDoc.Rendering
                 if (_documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null &&
                     _currentXPosition + width > right &&
                     overhang(_paragraph, word, CurrentFont) is double additiveAllowance &&
-                    additiveAllowance > 0 && double.IsFinite(additiveAllowance))
+                    additiveAllowance > 0 && IsFinite(additiveAllowance))
                 {
                     var additiveResult = FormatAsWord(width, fittingRect, additiveAllowance);
                     if (additiveResult == FormatResult.NewLine)
@@ -2457,7 +2459,7 @@ namespace MigraDoc.Rendering
         {
             if (_phase != Phase.Rendering || word.Length < 2 || char.IsLowSurrogate(word[^1]) ||
                 _documentRenderer.RenderOnlyTrailingGlyphKerning?.Invoke(_paragraph, word, xFont)
-                    is not double adjustment || !double.IsFinite(adjustment))
+                    is not double adjustment || !IsFinite(adjustment))
                 return 0;
             var font = CurrentDomFont;
             return font.Subscript || font.Superscript
@@ -2813,7 +2815,7 @@ namespace MigraDoc.Rendering
                     _currentLeaf = null;
                 }
                 if (fonts.Count > 0 && finalLineHeight(_paragraph, fonts) is double height &&
-                    double.IsFinite(height) && height > 0 && height < _currentVerticalInfo.Height.Point)
+                    IsFinite(height) && height > 0 && height < _currentVerticalInfo.Height.Point)
                     _currentVerticalInfo.Height = XUnitPt.FromPoint(height);
             }
 
@@ -2906,7 +2908,7 @@ namespace MigraDoc.Rendering
                 var distance = _paragraph.Format.Borders.DistanceFromTop.Point;
                 var replacement = _documentRenderer.TopBorderDistanceAtAreaStart?.Invoke(
                     _paragraph, _fieldInfos?.PhysicalPageNr ?? 0, areaY.Point);
-                if (replacement is double candidate && double.IsFinite(candidate) && candidate >= 0)
+                if (replacement is double candidate && IsFinite(candidate) && candidate >= 0)
                     distance = candidate;
                 offset += distance;
                 var bordersRenderer = new BordersRenderer(_paragraph.Format.Borders, _gfx);
@@ -3038,8 +3040,8 @@ namespace MigraDoc.Rendering
             }
 
             if (_documentRenderer.MinimumLineMetricsForFont?.Invoke(_paragraph, font) is { } minimumMetrics &&
-                double.IsFinite(minimumMetrics.LineHeight) && minimumMetrics.LineHeight > 0 &&
-                double.IsFinite(minimumMetrics.InherentLineSpace) && minimumMetrics.InherentLineSpace > 0)
+                IsFinite(minimumMetrics.LineHeight) && minimumMetrics.LineHeight > 0 &&
+                IsFinite(minimumMetrics.InherentLineSpace) && minimumMetrics.InherentLineSpace > 0)
             {
                 lineHeight = Math.Max(lineHeight, XUnitPt.FromPoint(minimumMetrics.LineHeight));
                 inherentLineSpace = Math.Max(inherentLineSpace,

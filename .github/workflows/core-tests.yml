@@ -25,3 +25,14 @@ jobs:
         run: dotnet test src/foundation/src/PDFsharp/tests/PdfSharp.Tests/PdfSharp.Tests.csproj -f net8.0 --verbosity quiet
       - name: MigraDoc tests
         run: dotnet test src/foundation/src/MigraDoc/tests/MigraDoc.Tests/MigraDoc.Tests.csproj -f net8.0 --verbosity quiet
+      - name: Build NuGet packages for all target frameworks
+        shell: pwsh
+        run: |
+          $projects = @(
+            'src/foundation/nuget/src/Pdfxport.Net.NuGet/Pdfxport.Net.NuGet.csproj',
+            'src/foundation/nuget/src/Pdfxport.Net.MigraDoc.NuGet/Pdfxport.Net.MigraDoc.NuGet.csproj'
+          )
+          foreach ($project in $projects) {
+            dotnet build $project --configuration Release '-p:Version=0.0.0-ci' '-p:PackageVersion=0.0.0-ci' --verbosity quiet
+            if ($LASTEXITCODE -ne 0) { throw "Package build failed: $project" }
+          }
