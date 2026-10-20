@@ -1191,22 +1191,54 @@ namespace MigraDoc.Rendering
             var y = new double[rows + 1];
             for (var column = 0; column < columns; column++)
             {
-                var edge = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
-                    cellGrid[(0, column)], _lastHeaderRow), _gfx);
-                x[column] = grid[(0, column)].X.Point - edge.GetWidth(BorderType.Left).Point;
+                x[column] = grid[(0, column)].X.Point;
+                for (var row = 0; row < rows; row++)
+                {
+                    var edge = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
+                        cellGrid[(row, column)], _lastHeaderRow), _gfx);
+                    var width = edge.GetWidth(BorderType.Left).Point;
+                    if (width <= 0)
+                        continue;
+                    x[column] = grid[(row, column)].X.Point - width;
+                    break;
+                }
             }
             for (var row = 0; row < rows; row++)
             {
-                var edge = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
-                    cellGrid[(row, 0)], _lastHeaderRow), _gfx);
-                y[row] = grid[(row, 0)].Y.Point - edge.GetWidth(BorderType.Top).Point;
+                y[row] = grid[(row, 0)].Y.Point;
+                for (var column = 0; column < columns; column++)
+                {
+                    var edge = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
+                        cellGrid[(row, column)], _lastHeaderRow), _gfx);
+                    var width = edge.GetWidth(BorderType.Top).Point;
+                    if (width <= 0)
+                        continue;
+                    y[row] = grid[(row, column)].Y.Point - width;
+                    break;
+                }
             }
-            var terminal = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
-                cellGrid[(rows - 1, columns - 1)], _lastHeaderRow), _gfx);
-            x[^1] = last.X.Point + last.Width.Point -
-                (terminal.GetWidth(BorderType.Right).Point == 0 ? band : 0);
-            y[^1] = last.Y.Point + last.Height.Point -
-                (terminal.GetWidth(BorderType.Bottom).Point == 0 ? band : 0);
+            x[^1] = last.X.Point + last.Width.Point - band;
+            for (var row = 0; row < rows; row++)
+            {
+                var edge = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
+                    cellGrid[(row, columns - 1)], _lastHeaderRow), _gfx);
+                if (edge.GetWidth(BorderType.Right).Point <= 0)
+                    continue;
+                var inner = grid[(row, columns - 1)];
+                x[^1] = inner.X.Point + inner.Width.Point;
+                break;
+            }
+            y[^1] = last.Y.Point + last.Height.Point - band;
+            for (var column = 0; column < columns; column++)
+            {
+                var edge = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
+                    cellGrid[(rows - 1, column)], _lastHeaderRow), _gfx);
+                if (edge.GetWidth(BorderType.Bottom).Point <= 0)
+                    continue;
+                var inner = grid[(rows - 1, column)];
+                y[^1] = inner.Y.Point + inner.Height.Point;
+                break;
+            }
 
             XColor Highlight(double amount) => XColor.FromArgb(
                 (int)Math.Round(pen.Color.A * 255),

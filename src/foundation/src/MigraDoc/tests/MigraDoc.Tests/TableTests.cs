@@ -1778,6 +1778,53 @@ namespace MigraDoc.Tests
         }
 
         [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Three_dimensional_grid_positions_visible_lower_rail_from_its_own_segment(BorderStyle style)
+        {
+            double[] LowerInternalRails(bool hideUpper)
+            {
+                var document = new Document();
+                var table = document.AddSection().AddTable();
+                table.AddColumn("3cm");
+                table.AddColumn("3cm");
+                for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+                {
+                    var row = table.AddRow();
+                    row.Height = "2cm";
+                    foreach (var cell in new[] { row[0], row[1] })
+                    {
+                        cell.Borders.Style = style;
+                        cell.Borders.Width = 3;
+                        cell.AddParagraph("Cell");
+                    }
+                }
+                if (hideUpper)
+                {
+                    table[0, 0].Borders.Right.Visible = false;
+                    table[0, 1].Borders.Left.Visible = false;
+                }
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.RenderDocument();
+                var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+                return BorderStrokes(content).Cast<Match>().Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                    .Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                        Math.Abs(line.Y1 - line.Y2) > 10 && line.X1 > 120 && line.X1 < 180 &&
+                        Math.Min(line.Y1, line.Y2) < 700)
+                    .Select(line => line.X1).Order().ToArray();
+            }
+
+            var expected = LowerInternalRails(false);
+            expected.Should().NotBeEmpty();
+            LowerInternalRails(true).Should().Equal(expected,
+                "a hidden upper segment must not shift the visible lower 3D rail");
+        }
+
+        [Theory]
         [InlineData(BorderStyle.Emboss3D, false)]
         [InlineData(BorderStyle.Emboss3D, true)]
         [InlineData(BorderStyle.Engrave3D, false)]
