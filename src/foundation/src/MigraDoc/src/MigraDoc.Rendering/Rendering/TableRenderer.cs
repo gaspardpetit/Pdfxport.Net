@@ -314,6 +314,10 @@ namespace MigraDoc.Rendering
             var column = cell.Column.Index + (side == BorderType.Right ? 1 : side == BorderType.Left ? -1 : 0);
             if (row < 0 || row >= _table.Rows.Count || column < 0 || column >= _table.Columns.Count)
                 return false;
+            // A cell on another page cannot paint this fragment's boundary.
+            // Repeated heading rows are rendered on the current page as well.
+            if (row > _endRow || row < _startRow && row > _lastHeaderRow)
+                return false;
             var neighbor = _table[row, column];
             if (neighbor.MergeRight != 0 || neighbor.MergeDown != 0 ||
                 !TryGetClosedCellRailPen(neighbor, out var pen, out var style))

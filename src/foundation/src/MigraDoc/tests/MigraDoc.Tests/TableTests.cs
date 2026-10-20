@@ -730,6 +730,61 @@ namespace MigraDoc.Tests
             DoubleBorderBoxes(content).Should().HaveCount(2);
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void Fragment_keeps_double_edge_when_closed_owner_is_on_other_page(bool closedFirst)
+        {
+            var document = new Document();
+            var section = document.AddSection();
+            section.PageSetup.PageHeight = Unit.FromPoint(792);
+            section.PageSetup.TopMargin = Unit.FromPoint(72);
+            section.PageSetup.BottomMargin = Unit.FromPoint(72);
+            var table = section.AddTable();
+            table.AddColumn(Unit.FromPoint(300));
+            var first = table.AddRow();
+            first.Height = Unit.FromPoint(500);
+            first.HeightRule = MigraDoc.DocumentObjectModel.Tables.RowHeightRule.Exactly;
+            if (closedFirst)
+            {
+                first[0].Borders.Style = BorderStyle.Double;
+                first[0].Borders.Width = 2;
+            }
+            else
+            {
+                first[0].Borders.Bottom.Style = BorderStyle.Double;
+                first[0].Borders.Bottom.Width = 2;
+            }
+            first[0].AddParagraph("First");
+            var second = table.AddRow();
+            second.Height = Unit.FromPoint(300);
+            second.HeightRule = MigraDoc.DocumentObjectModel.Tables.RowHeightRule.Exactly;
+            if (closedFirst)
+            {
+                second[0].Borders.Top.Style = BorderStyle.Double;
+                second[0].Borders.Top.Width = 2;
+            }
+            else
+            {
+                second[0].Borders.Style = BorderStyle.Double;
+                second[0].Borders.Width = 2;
+            }
+            second[0].AddParagraph("Second");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.Pages.Count.Should().Be(2);
+            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument,
+                    closedFirst ? 1 : 0))
+                .Cast<Match>().Where(match =>
+                    Math.Abs(double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture) -
+                             double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)) < .01 &&
+                    Math.Abs(double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture) -
+                             double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture)) > 100)
+                .ToArray();
+            strokes.Should().HaveCount(2);
+        }
+
         [Fact]
         public void Four_neighbor_double_junction_turns_both_rails_around_cell_corners()
         {
