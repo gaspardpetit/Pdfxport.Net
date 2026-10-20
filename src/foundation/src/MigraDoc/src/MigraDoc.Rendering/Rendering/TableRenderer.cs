@@ -102,16 +102,7 @@ namespace MigraDoc.Rendering
             bool renderBorders = true, Rectangle? displayRect = null)
         {
             var innerRect = displayRect ?? GetInnerRect(CalcStartingHeight(), cell);
-            var shadingRect = innerRect;
-            if (_alignMixedClosedPerimeter && displayRect == null &&
-                cell.RoundedCorner == RoundedCorner.None && cell.Row?.Index == 0)
-            {
-                var borders = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), _gfx);
-                var extra = HorizontalBoundaryWidth(0) - borders.GetWidth(BorderType.Top).Point;
-                shadingRect = new Rectangle(innerRect.X, innerRect.Y - XUnitPt.FromPoint(extra),
-                    innerRect.Width, innerRect.Height + XUnitPt.FromPoint(extra));
-            }
-            RenderShading(cell, shadingRect);
+            RenderShading(cell, innerRect);
             RenderContent(cell, innerRect);
             if (renderBorders)
                 RenderBorders(cell, innerRect, followingTopBorders, precedingBottomBorders, followingLeftBorders);
@@ -185,8 +176,6 @@ namespace MigraDoc.Rendering
             XUnitPt leftWidth = bordersRenderer.GetWidth(BorderType.Left);
             XUnitPt topWidth = bordersRenderer.GetWidth(BorderType.Top);
             XUnitPt rightWidth = bordersRenderer.GetWidth(BorderType.Right);
-            if (_alignMixedClosedPerimeter && cell.Row?.Index == 0)
-                topPos -= XUnitPt.FromPoint(HorizontalBoundaryWidth(0)) - topWidth;
             XUnitPt? outerStrokeTop = default;
             if (bordersRenderer.GetStyle(BorderType.Top) == BorderStyle.Double)
                 outerStrokeTop = topPos - topWidth + topWidth / 6;
@@ -511,10 +500,6 @@ namespace MigraDoc.Rendering
             var centeredGridBand = uniformDoubleGrid ? gridPen!.Width * 3 :
                 uniformTripleGrid ? triplePen!.Width * 5 :
                 uniformCompoundGrid ? compoundPen!.Width * ClosedRailWidthMultiplier(compoundStyle) : 0;
-            _alignMixedClosedPerimeter = followingCells == null && _startRow == 0 &&
-                _endRow == _table.Rows.Count - 1 && cells.Count == _mergedCells.Count &&
-                !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid &&
-                cells.Any(cell => TryGetClosedCellRailPen(cell, out _, out _));
             var followingTopBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
             var precedingBottomBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
             var followingLeftBorders = new HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
@@ -622,43 +607,59 @@ namespace MigraDoc.Rendering
             var effective = new BordersRenderer(effectiveBorders, _gfx);
             var rightWidth = effective.GetWidth(BorderType.Right).Point;
             var bottomWidth = effective.GetWidth(BorderType.Bottom).Point;
-            var row = cell.Row!.Index;
-            var topCenter = inner.Y.Point - HorizontalBoundaryWidth(row) / 2;
-            var bottomCenter = inner.Y.Point + inner.Height.Point + bottomWidth -
-                HorizontalBoundaryWidth(row + 1) / 2;
-            if (row == 0)
-                topCenter = inner.Y.Point - HorizontalBoundaryWidth(0) + band / 2;
-            if (row == _table.Rows.Count - 1)
-                bottomCenter = inner.Y.Point + inner.Height.Point + bottomWidth - band / 2;
-            // Layout uses the winning shared-edge width, which may belong to
-            // another cell. Draw this cell's closed rails around its own band,
-            // centered on the column boundaries instead.
+            var topCenter = HorizontalBoundaryCenter(cell, BorderType.Top, inner, bottomWidth);
+            var bottomCenter = HorizontalBoundaryCenter(cell, BorderType.Bottom, inner, bottomWidth);
+            // Layout reserves the winning edge width, which may belong to a
+            // neighbor. The closed box uses its own band around shared row and
+            // column crossings.
             return new Rectangle(inner.X + XUnitPt.FromPoint(band / 2 - LeftBorderOffset.Point),
                 XUnitPt.FromPoint(topCenter + band / 2),
                 inner.Width + XUnitPt.FromPoint(rightWidth - band),
                 XUnitPt.FromPoint(bottomCenter - topCenter - band));
         }
 
-        double HorizontalBoundaryWidth(int row)
+        (double Widest, double Narrowest) HorizontalBoundaryBands(int row)
         {
             if (_horizontalBoundaryWidths.TryGetValue(row, out var cached))
                 return cached;
-            var width = 0.0;
+            var widest = 0.0;
+            var narrowest = double.MaxValue;
             for (var column = 0; column < _table.Columns.Count; column++)
             {
                 if (row > 0)
                 {
                     var previous = _mergedCells.GetEffectiveBordersPdf(_table[row - 1, column], _lastHeaderRow);
-                    width = Math.Max(width, new BordersRenderer(previous, _gfx).GetWidth(BorderType.Bottom).Point);
+                    var width = new BordersRenderer(previous, _gfx).GetWidth(BorderType.Bottom).Point;
+                    widest = Math.Max(widest, width);
+                    if (width > 0) narrowest = Math.Min(narrowest, width);
                 }
                 if (row < _table.Rows.Count)
                 {
                     var next = _mergedCells.GetEffectiveBordersPdf(_table[row, column], _lastHeaderRow);
-                    width = Math.Max(width, new BordersRenderer(next, _gfx).GetWidth(BorderType.Top).Point);
+                    var width = new BordersRenderer(next, _gfx).GetWidth(BorderType.Top).Point;
+                    widest = Math.Max(widest, width);
+                    if (width > 0) narrowest = Math.Min(narrowest, width);
                 }
             }
-            _horizontalBoundaryWidths.Add(row, width);
-            return width;
+            var bands = (widest, narrowest == double.MaxValue ? 0 : narrowest);
+            _horizontalBoundaryWidths.Add(row, bands);
+            return bands;
+        }
+
+        double HorizontalBoundaryCenter(Cell cell, BorderType side, Rectangle inner, double bottomWidth)
+        {
+            var row = cell.Row!.Index + (side == BorderType.Bottom ? 1 : 0);
+            var bands = HorizontalBoundaryBands(row);
+            // At the table perimeter the narrowest stroke defines the cell
+            // boundary; wider bands extend equally on both sides of it.
+            if (row == 0)
+                return inner.Y.Point - bands.Narrowest / 2;
+            var outerEnd = side == BorderType.Top
+                ? inner.Y.Point
+                : inner.Y.Point + inner.Height.Point + bottomWidth;
+            if (row == _table.Rows.Count)
+                return outerEnd - bands.Narrowest / 2;
+            return outerEnd - bands.Widest / 2;
         }
 
         void RenderClosedMultiRailCell(Cell cell, BorderStyle style, XPen pen, double band)
@@ -778,14 +779,10 @@ namespace MigraDoc.Rendering
                 start = inner.X.Point + inner.Width.Point + borderWidth -
                     LeftBorderOffset.Point - borderWidth / 2;
             else if (side == BorderType.Top)
-                start = cell.Row!.Index == 0
-                    ? inner.Y.Point - HorizontalBoundaryWidth(0)
-                    : inner.Y.Point - HorizontalBoundaryWidth(cell.Row.Index) / 2 - borderWidth / 2;
+                start = HorizontalBoundaryCenter(cell, side, inner,
+                    renderer.GetWidth(BorderType.Bottom).Point) - borderWidth / 2;
             else if (side == BorderType.Bottom)
-                start = cell.Row!.Index == _table.Rows.Count - 1
-                    ? inner.Y.Point + inner.Height.Point
-                    : inner.Y.Point + inner.Height.Point + borderWidth -
-                      HorizontalBoundaryWidth(cell.Row.Index + 1) / 2 - borderWidth / 2;
+                start = HorizontalBoundaryCenter(cell, side, inner, borderWidth) - borderWidth / 2;
             var positions = new double[widths.Length];
             var offset = 0.0;
             for (var index = 0; index < widths.Length; index++)
@@ -1295,6 +1292,7 @@ namespace MigraDoc.Rendering
 
         void InitFormat(Area area, FormatInfo? previousFormatInfo)
         {
+            _horizontalBoundaryWidths.Clear();
             var prevTableFormatInfo = (TableFormatInfo?)previousFormatInfo;
             var tblRenderInfo = new TableRenderInfo
             {
@@ -1462,6 +1460,13 @@ namespace MigraDoc.Rendering
         void FinishLayoutInfo(Area area, XUnitPt currentHeight, XUnitPt startingHeight)
         {
             var layoutInfo = _renderInfo.LayoutInfo;
+            if (_currRow >= 0 && _currRow == _table.Rows.Count - 1 && _table.Columns.Count > 0 &&
+                Enumerable.Range(0, _table.Columns.Count).Any(column =>
+                    TryGetClosedCellRailPen(_table[_currRow, column], out _, out _)))
+            {
+                var bands = HorizontalBoundaryBands(_table.Rows.Count);
+                layoutInfo.MarginBottom = XUnitPt.FromPoint((bands.Widest - bands.Narrowest) / 2);
+            }
             layoutInfo.StartingHeight = startingHeight;
             //REM: Trailing height would have to be calculated in case tables had a keep with next property.
             layoutInfo.TrailingHeight = 0;
@@ -2009,8 +2014,7 @@ namespace MigraDoc.Rendering
 
         readonly Table _table;
         MergedCellList _mergedCells = null!;  // Set in InitRendering.
-        bool _alignMixedClosedPerimeter;
-        readonly Dictionary<int, double> _horizontalBoundaryWidths = new();
+        readonly Dictionary<int, (double Widest, double Narrowest)> _horizontalBoundaryWidths = new();
         Dictionary<Cell, FormattedCell> _formattedCells = null!;  // Set in InitRendering. //SortedList formattedCells;
         Dictionary<int, XUnitPt> _bottomBorderMap = null!;  // Set in InitRendering. //SortedList bottomBorderMap;
         //Dictionary<int, int> _connectedRowsMap = null!;  // Set in InitRendering. //SortedList connectedRowsMap;
