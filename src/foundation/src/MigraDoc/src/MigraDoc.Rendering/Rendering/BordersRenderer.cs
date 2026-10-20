@@ -389,6 +389,14 @@ namespace MigraDoc.Rendering
 
         void RenderHatch(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, XPen source)
         {
+            if (length.Point <= 0 || source.Width <= 0)
+                return;
+            // A diagonal pen extends beyond its endpoints. Keep its ink in the
+            // band that table layout reserved, including for very thin edges.
+            var state = _gfx.Save();
+            _gfx.IntersectClip(vertical
+                ? new XRect(left.Point, top.Point, source.Width, length.Point)
+                : new XRect(left.Point, top.Point, length.Point, source.Width));
             var tint = XColor.FromArgb((int)Math.Round(source.Color.A * 255),
                 (int)Math.Round(((double)source.Color.R + 255) / 2),
                 (int)Math.Round(((double)source.Color.G + 255) / 2),
@@ -424,6 +432,7 @@ namespace MigraDoc.Rendering
 #endif
                 }
             }
+            _gfx.Restore(state);
         }
 
         void RenderThreeDimensional(XUnitPt left, XUnitPt top, XUnitPt length,
