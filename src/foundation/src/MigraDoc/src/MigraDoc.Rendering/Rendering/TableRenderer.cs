@@ -245,12 +245,13 @@ namespace MigraDoc.Rendering
                 var followingOwnsRight = rightPen != null && CompoundProfile(rightKey.Style) != null &&
                     followingLeftBorders.Any(edge => edge.Boundary == rightKey.Boundary &&
                         edge.Start == rightKey.Start && edge.End == rightKey.End);
-                if (!followingOwnsRight &&
+                if (!followingOwnsRight && !AdjacentClosedCellOwnsEdge(cell, BorderType.Right, bordersRenderer) &&
                     (rightPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Right), rightPen) ||
                      !followingLeftBorders.Contains(rightKey)))
                     bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos,
                         verticalBottom - topPos, rightOuterStrokeTop, rightInnerStrokeBottom);
-                if (cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false)
+                if (cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false &&
+                    !AdjacentClosedCellOwnsEdge(cell, BorderType.Left, bordersRenderer))
                     bordersRenderer.RenderVertically(BorderType.Left, leftPos - leftWidth, topPos,
                         verticalBottom - topPos, leftOuterStrokeTop, leftInnerStrokeBottom);
                 var bottomLeft = leftPos - leftWidth;
@@ -260,13 +261,14 @@ namespace MigraDoc.Rendering
                 var followingOwnsBottom = bottomPen != null && CompoundProfile(bottomKey.Style) != null &&
                     followingTopBorders.Any(edge => edge.Boundary == bottomKey.Boundary &&
                         edge.Start == bottomKey.Start && edge.End == bottomKey.End);
-                if (!followingOwnsBottom &&
+                if (!followingOwnsBottom && !AdjacentClosedCellOwnsEdge(cell, BorderType.Bottom, bordersRenderer) &&
                     (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom), bottomPen) ||
                      !CoveredByNarrowerEdges(bottomKey, followingTopBorders, false)))
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, bottomLeft, bottomPos, bottomLength,
                         innerStrokeLeft, innerStrokeRight, internalBottomEdge);
                 var topPen = bordersRenderer.GetPen(BorderType.Top);
                 if (cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false &&
+                    !AdjacentClosedCellOwnsEdge(cell, BorderType.Top, bordersRenderer) &&
                     (topPen == null || bordersRenderer.GetStyle(BorderType.Top) is not
                         (BorderStyle.Dot or BorderStyle.DashSmallGap or BorderStyle.DashDot or BorderStyle.DashDotDot) ||
                      !CoveredByNarrowerEdges(HorizontalBorderKey(cell, bordersRenderer, topPen, true), precedingBottomBorders, true)))
@@ -276,6 +278,23 @@ namespace MigraDoc.Rendering
             }
 
             RenderDiagonalBorders(mergedBorders, innerRect);
+        }
+
+        bool AdjacentClosedCellOwnsEdge(Cell cell, BorderType side, BordersRenderer current)
+        {
+            if (cell.MergeRight != 0 || cell.MergeDown != 0 || cell.Row == null || cell.Column == null)
+                return false;
+            var row = cell.Row.Index + (side == BorderType.Bottom ? 1 : side == BorderType.Top ? -1 : 0);
+            var column = cell.Column.Index + (side == BorderType.Right ? 1 : side == BorderType.Left ? -1 : 0);
+            if (row < 0 || row >= _table.Rows.Count || column < 0 || column >= _table.Columns.Count)
+                return false;
+            var neighbor = _table[row, column];
+            if (neighbor.MergeRight != 0 || neighbor.MergeDown != 0 ||
+                !TryGetClosedCellRailPen(neighbor, out var pen, out var style))
+                return false;
+            var currentPen = current.GetPen(side);
+            return current.GetStyle(side) == style && currentPen != null &&
+                currentPen.Width == pen!.Width && currentPen.Color == pen.Color;
         }
 
         (int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style) HorizontalBorderKey(
