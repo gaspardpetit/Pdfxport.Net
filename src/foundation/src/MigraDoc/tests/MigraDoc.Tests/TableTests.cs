@@ -656,6 +656,37 @@ namespace MigraDoc.Tests
             content.Should().NotContain("W* n");
         }
 
+        [Theory]
+        [InlineData(2, false)]
+        [InlineData(1, true)]
+        public void Closed_triple_cell_yields_to_winning_same_style_pen(int neighborWidth,
+            bool differentColor)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Right.Style = BorderStyle.Triple;
+            row[0].Borders.Right.Width = neighborWidth;
+            row[0].Borders.Right.Color = Colors.Red;
+            row[0].AddParagraph("Owner");
+            row[1].Borders.Style = BorderStyle.Triple;
+            row[1].Borders.Width = 1;
+            row[1].Borders.Color = differentColor ? Colors.Blue : Colors.Red;
+            row[1].AddParagraph("Closed candidate");
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            var effective = cells.GetEffectiveBordersPdf(row[1], -1);
+            effective.Left.Width.Point.Should().Be(neighborWidth);
+            effective.Left.Color.Should().Be(Colors.Red);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().NotContain("W* n");
+        }
+
         [Fact]
         public void Isolated_triple_edge_wins_over_narrower_single_only_in_pdf()
         {

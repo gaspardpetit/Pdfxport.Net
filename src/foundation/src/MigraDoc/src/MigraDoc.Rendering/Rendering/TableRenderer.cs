@@ -647,6 +647,10 @@ namespace MigraDoc.Rendering
                 // a multi-rail edge occupies a larger band. Keep the closed
                 // box when that band wins; yield to a genuinely wider edge.
                 var winningStyle = effective.GetStyle(side);
+                var winningPen = effective.GetPen(side);
+                if (winningStyle == edgeStyle && winningPen != null &&
+                    (winningPen.Width != edgePen.Width || winningPen.Color != edgePen.Color))
+                    return false;
                 if (winningStyle != edgeStyle &&
                     winningStyle is not (BorderStyle.Double or BorderStyle.Triple) &&
                     CompoundProfile(winningStyle) == null &&
@@ -758,7 +762,7 @@ namespace MigraDoc.Rendering
 
         double HorizontalBoundaryCenter(Cell cell, BorderType side, Rectangle inner, double bottomWidth)
         {
-            var row = cell.Row!.Index + (side == BorderType.Bottom ? 1 : 0);
+            var row = cell.Row!.Index + (side == BorderType.Bottom ? cell.MergeDown + 1 : 0);
             var bands = HorizontalBoundaryBands(row);
             // At the table perimeter the narrowest stroke defines the cell
             // boundary; wider bands extend equally on both sides of it.
