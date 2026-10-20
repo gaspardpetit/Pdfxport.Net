@@ -1041,16 +1041,16 @@ namespace MigraDoc.Rendering
                 Fill(left, top + first + gap, first, second);
                 Fill(left + first + gap, top + first + gap, second, second);
 
-                // At the table's four outer corners, the outside rail turns
-                // around the perimeter instead of ending in isolated blocks.
-                if (row == 0 && (column == 0 || column == _table.Columns.Count))
+                // Close channels where they meet the table perimeter. The
+                // outside rail continues across each T junction and corner.
+                if (row == 0)
                     Fill(left + first - tileOverlap, top, gap + 2 * tileOverlap, first);
-                if (row == _table.Rows.Count && (column == 0 || column == _table.Columns.Count))
+                if (row == _table.Rows.Count)
                     Fill(left + first - tileOverlap, top + first + gap,
                         gap + 2 * tileOverlap, second);
-                if (column == 0 && (row == 0 || row == _table.Rows.Count))
+                if (column == 0)
                     Fill(left, top + first - tileOverlap, first, gap + 2 * tileOverlap);
-                if (column == _table.Columns.Count && (row == 0 || row == _table.Rows.Count))
+                if (column == _table.Columns.Count)
                     Fill(left + first + gap, top + first - tileOverlap,
                         second, gap + 2 * tileOverlap);
             }
