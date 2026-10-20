@@ -35,6 +35,7 @@ namespace MigraDoc.Rendering
         public ParagraphIterator? EndIter;
         public XUnitPt WordsWidth;
         public XUnitPt LineWidth;
+        public XUnitPt ClippedTrailingWidth;
         public bool LineEndsWithLineBreak;
         public int BlankCount;
         public VerticalLineInfo Vertical;

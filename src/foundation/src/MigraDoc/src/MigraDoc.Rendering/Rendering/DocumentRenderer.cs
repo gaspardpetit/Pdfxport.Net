@@ -80,6 +80,12 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? HangingTerminalLineNearEdgeThreshold { get; set; }
 
         /// <summary>
+        /// Sets the maximum added width per blank, in points, when a non-final
+        /// left-aligned line ends in a clipped hanging mark. Null leaves spacing unchanged.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? HangingNonterminalLineSpaceLimit { get; set; }
+
+        /// <summary>
         /// Selects a paint-only baseline offset in points for an exact-spaced paragraph.
         /// Receives the fonts on the first rendered line. Null or a non-finite value leaves the baseline unchanged.
         /// </summary>
