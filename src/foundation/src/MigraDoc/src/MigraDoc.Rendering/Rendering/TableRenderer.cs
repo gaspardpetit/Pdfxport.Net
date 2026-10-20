@@ -526,14 +526,7 @@ namespace MigraDoc.Rendering
             if (uniformTripleGrid)
                 RenderUniformTripleGrid(cells, triplePen!);
             if (uniformCompoundGrid)
-            {
                 RenderUniformCompoundGrid(cells, compoundPen!, compoundStyle);
-                if (!CompoundProfile(compoundStyle)!.Value.ThreeRails)
-                {
-                    RenderFourWayRailJunctions(cells, tightClear: true);
-                    RenderUniformTwoRailInteriorGaps(cells, compoundPen!, CompoundProfile(compoundStyle)!.Value);
-                }
-            }
             if (uniformThreeDimensionalGrid)
                 RenderUniformThreeDimensionalGrid(cells, threeDimensionalPen!);
         }
@@ -619,10 +612,6 @@ namespace MigraDoc.Rendering
                 (profile.ThreeRails ? profile.First : 0);
         }
 
-        // A subpixel inset keeps the antialiased white gap at a uniform two-rail
-        // crossing the same visible width as the straight gap.
-        const double TwoRailJunctionInset = 0.025;
-
         sealed class JunctionArm
         {
             public BorderStyle Style { get; init; }
@@ -697,7 +686,7 @@ namespace MigraDoc.Rendering
             return b.BorderWidth >= a.BorderWidth ? b : a;
         }
 
-        void RenderFourWayRailJunctions(IReadOnlyList<Cell> cells, bool tightClear = false)
+        void RenderFourWayRailJunctions(IReadOnlyList<Cell> cells)
         {
             var grid = cells.Where(cell => cell.MergeRight == 0 && cell.MergeDown == 0 &&
                     cell.RoundedCorner == RoundedCorner.None)
@@ -729,32 +718,27 @@ namespace MigraDoc.Rendering
                         Math.Abs(north.Positions[index] - south.Positions[index]) > 1 ||
                         Math.Abs(west.Positions[index] - east.Positions[index]) > 1))
                     continue;
-                RenderFourWayRailJunction(north, south, west, east, tightClear);
+                RenderFourWayRailJunction(north, south, west, east);
             }
         }
 
         void RenderFourWayRailJunction(JunctionArm north, JunctionArm south,
-            JunctionArm west, JunctionArm east, bool tightClear)
+            JunctionArm west, JunctionArm east)
         {
             var last = north.Positions.Length - 1;
             var stroke = new[] { north, south, west, east }.SelectMany(arm => arm.Widths).Max();
-            var x0 = Math.Min(north.Positions[0], south.Positions[0]) -
-                (tightClear ? Math.Max(north.Widths[0], south.Widths[0]) / 2 : stroke);
-            var x1 = Math.Max(north.Positions[last], south.Positions[last]) +
-                (tightClear ? Math.Max(north.Widths[last], south.Widths[last]) / 2 : stroke);
-            var y0 = Math.Min(west.Positions[0], east.Positions[0]) -
-                (tightClear ? Math.Max(west.Widths[0], east.Widths[0]) / 2 : stroke);
-            var y1 = Math.Max(west.Positions[last], east.Positions[last]) +
-                (tightClear ? Math.Max(west.Widths[last], east.Widths[last]) / 2 : stroke);
+            var x0 = Math.Min(north.Positions[0], south.Positions[0]) - stroke;
+            var x1 = Math.Max(north.Positions[last], south.Positions[last]) + stroke;
+            var y0 = Math.Min(west.Positions[0], east.Positions[0]) - stroke;
+            var y1 = Math.Max(west.Positions[last], east.Positions[last]) + stroke;
             _gfx.DrawRectangle(XBrushes.White, new XRect(x0, y0, x1 - x0, y1 - y0));
 
             // The outer rails turn around the four cells.  An odd profile has
             // a middle rail, which continues through both directions.
-            var opticalInset = tightClear ? TwoRailJunctionInset : 0;
-            DrawJunctionCorner(north, 0, west, 0, x0, y0, true, true, opticalInset);
-            DrawJunctionCorner(north, last, east, 0, x1, y0, false, true, opticalInset);
-            DrawJunctionCorner(south, 0, west, last, x0, y1, true, false, opticalInset);
-            DrawJunctionCorner(south, last, east, last, x1, y1, false, false, opticalInset);
+            DrawJunctionCorner(north, 0, west, 0, x0, y0, true, true);
+            DrawJunctionCorner(north, last, east, 0, x1, y0, false, true);
+            DrawJunctionCorner(south, 0, west, last, x0, y1, true, false);
+            DrawJunctionCorner(south, last, east, last, x1, y1, false, false);
             if (last == 2)
             {
                 var vertical = new XPen(north.Pen.Color, north.Widths[1]);
@@ -769,10 +753,10 @@ namespace MigraDoc.Rendering
 
         void DrawJunctionCorner(JunctionArm vertical, int verticalIndex,
             JunctionArm horizontal, int horizontalIndex, double xBoundary, double yBoundary,
-            bool left, bool top, double opticalInset)
+            bool left, bool top)
         {
-            var x = vertical.Positions[verticalIndex] + (left ? opticalInset : -opticalInset);
-            var y = horizontal.Positions[horizontalIndex] + (top ? opticalInset : -opticalInset);
+            var x = vertical.Positions[verticalIndex];
+            var y = horizontal.Positions[horizontalIndex];
             var verticalPen = new XPen(vertical.Pen.Color, vertical.Widths[verticalIndex]);
             var horizontalPen = new XPen(horizontal.Pen.Color, horizontal.Widths[horizontalIndex]);
             DrawCompoundRail(verticalPen, x, top ? yBoundary - verticalPen.Width : y - horizontalPen.Width / 2,
@@ -991,11 +975,7 @@ namespace MigraDoc.Rendering
             }
             else
             {
-                // Two-rail Word borders turn around every cell. Long grid lines
-                // cross through the other rail at junctions and break the boxes.
-                foreach (var cell in cells)
-                    RenderClosedCompoundCell(cell, pen, profile);
-                RenderUniformTwoRailPerimeterJunctions(cells, pen, profile);
+                RenderUniformTwoRailGrid(cells, pen, profile);
                 return;
             }
             foreach (var cell in cells)
@@ -1003,58 +983,80 @@ namespace MigraDoc.Rendering
                     GetInnerRect(CalcStartingHeight(), cell));
         }
 
-        void RenderUniformTwoRailPerimeterJunctions(IReadOnlyList<Cell> cells, XPen pen,
+        void RenderUniformTwoRailGrid(IReadOnlyList<Cell> cells, XPen pen,
             (double First, double Middle, double Gap, bool ThreeRails) profile)
         {
-            var borderWidth = pen.Width * (profile.First + profile.Middle + profile.Gap);
-            var firstWidth = pen.Width * profile.First;
+            var first = pen.Width * profile.First;
+            var second = pen.Width * profile.Middle;
             var gap = pen.Width * profile.Gap;
+            var band = first + gap + second;
             var grid = cells.ToDictionary(cell => (cell.Row!.Index, cell.Column!.Index),
                 cell => GetInnerRect(CalcStartingHeight(), cell));
-            var left = grid[(0, 0)].X.Point - borderWidth;
-            var top = grid[(0, 0)].Y.Point - borderWidth;
+            var x = new double[_table.Columns.Count + 1];
+            var y = new double[_table.Rows.Count + 1];
+            for (var column = 0; column < _table.Columns.Count; column++)
+                x[column] = grid[(0, column)].X.Point - band;
+            for (var row = 0; row < _table.Rows.Count; row++)
+                y[row] = grid[(row, 0)].Y.Point - band;
             var last = grid[(_table.Rows.Count - 1, _table.Columns.Count - 1)];
-            var right = last.X.Point + last.Width.Point;
-            var bottom = last.Y.Point + last.Height.Point;
-            const double overlap = 0.25;
-            for (var row = 1; row < _table.Rows.Count; row++)
+            x[^1] = last.X.Point + last.Width.Point;
+            y[^1] = last.Y.Point + last.Height.Point;
+            var brush = new XSolidBrush(pen.Color);
+            void Fill(double left, double top, double width, double height)
             {
-                var y = grid[(row, 0)].Y.Point - borderWidth + firstWidth;
-                _gfx.DrawRectangle(XBrushes.White, new XRect(left - overlap, y,
-                    borderWidth + 2 * overlap, gap));
-                _gfx.DrawRectangle(XBrushes.White, new XRect(right - overlap, y,
-                    borderWidth + 2 * overlap, gap));
+                if (width > 0 && height > 0)
+                    _gfx.DrawRectangle(brush, new XRect(left, top, width, height));
             }
-            for (var column = 1; column < _table.Columns.Count; column++)
-            {
-                var x = grid[(0, column)].X.Point - borderWidth + firstWidth;
-                _gfx.DrawRectangle(XBrushes.White, new XRect(x, top - overlap,
-                    gap, borderWidth + 2 * overlap));
-                _gfx.DrawRectangle(XBrushes.White, new XRect(x, bottom - overlap,
-                    gap, borderWidth + 2 * overlap));
-            }
-        }
 
-        void RenderUniformTwoRailInteriorGaps(IReadOnlyList<Cell> cells, XPen pen,
-            (double First, double Middle, double Gap, bool ThreeRails) profile)
-        {
-            var borderWidth = pen.Width * (profile.First + profile.Middle + profile.Gap);
-            var firstWidth = pen.Width * profile.First;
-            var gap = pen.Width * profile.Gap;
-            var grid = cells.ToDictionary(cell => (cell.Row!.Index, cell.Column!.Index),
-                cell => GetInnerRect(CalcStartingHeight(), cell));
-            const double overlap = 0.25;
-            for (var row = 1; row < _table.Rows.Count; row++)
-            for (var column = 1; column < _table.Columns.Count; column++)
+            // Lines occupy only the spans between junctions. No white mask or
+            // crossing stroke is needed. A small same-color overlap at tile
+            // seams avoids antialiasing cracks without entering the white channel.
+            const double tileOverlap = 0.2;
+            for (var column = 0; column <= _table.Columns.Count; column++)
+            for (var row = 0; row < _table.Rows.Count; row++)
             {
-                var inner = grid[(row, column)];
-                var x = inner.X.Point - borderWidth;
-                var y = inner.Y.Point - borderWidth;
-                _gfx.DrawRectangle(XBrushes.White, new XRect(x + firstWidth + TwoRailJunctionInset, y - overlap,
-                    gap - 2 * TwoRailJunctionInset, borderWidth + 2 * overlap));
-                _gfx.DrawRectangle(XBrushes.White, new XRect(x - overlap, y + firstWidth + TwoRailJunctionInset,
-                    borderWidth + 2 * overlap, gap - 2 * TwoRailJunctionInset));
+                var top = y[row] + band - tileOverlap;
+                var height = y[row + 1] - top + tileOverlap;
+                Fill(x[column], top, first, height);
+                Fill(x[column] + first + gap, top, second, height);
             }
+            for (var row = 0; row <= _table.Rows.Count; row++)
+            for (var column = 0; column < _table.Columns.Count; column++)
+            {
+                var left = x[column] + band - tileOverlap;
+                var width = x[column + 1] - left + tileOverlap;
+                Fill(left, y[row], width, first);
+                Fill(left, y[row] + first + gap, width, second);
+            }
+
+            // A junction owns the four rail corners. Their shared white cross
+            // has exactly the same gap width as the adjoining line segments.
+            for (var row = 0; row <= _table.Rows.Count; row++)
+            for (var column = 0; column <= _table.Columns.Count; column++)
+            {
+                var left = x[column];
+                var top = y[row];
+                Fill(left, top, first, first);
+                Fill(left + first + gap, top, second, first);
+                Fill(left, top + first + gap, first, second);
+                Fill(left + first + gap, top + first + gap, second, second);
+
+                // At the table's four outer corners, the outside rail turns
+                // around the perimeter instead of ending in isolated blocks.
+                if (row == 0 && (column == 0 || column == _table.Columns.Count))
+                    Fill(left + first - tileOverlap, top, gap + 2 * tileOverlap, first);
+                if (row == _table.Rows.Count && (column == 0 || column == _table.Columns.Count))
+                    Fill(left + first - tileOverlap, top + first + gap,
+                        gap + 2 * tileOverlap, second);
+                if (column == 0 && (row == 0 || row == _table.Rows.Count))
+                    Fill(left, top + first - tileOverlap, first, gap + 2 * tileOverlap);
+                if (column == _table.Columns.Count && (row == 0 || row == _table.Rows.Count))
+                    Fill(left + first + gap, top + first - tileOverlap,
+                        second, gap + 2 * tileOverlap);
+            }
+            foreach (var cell in cells)
+                RenderDiagonalBorders(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow),
+                    GetInnerRect(CalcStartingHeight(), cell));
         }
 
         bool TryGetUniformTripleGridPen(IReadOnlyList<Cell> cells, out XPen? pen)
