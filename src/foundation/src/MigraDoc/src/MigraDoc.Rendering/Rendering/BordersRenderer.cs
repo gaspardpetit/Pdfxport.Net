@@ -340,6 +340,13 @@ namespace MigraDoc.Rendering
 
         void RenderWave(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, bool doubleWave, XPen source)
         {
+            if (length.Point <= 0 || source.Width <= 0)
+                return;
+            var bandWidth = source.Width * (doubleWave ? 2.5 : 1);
+            var state = _gfx.Save();
+            _gfx.IntersectClip(vertical
+                ? new XRect(left.Point, top.Point, bandWidth, length.Point)
+                : new XRect(left.Point, top.Point, length.Point, bandWidth));
             var baseWidth = source.Width;
             var railPen = new XPen(source.Color, Math.Max(0.25, baseWidth * 0.18));
             var count = doubleWave ? 2 : 1;
@@ -385,6 +392,7 @@ namespace MigraDoc.Rendering
                     }
                 }
             }
+            _gfx.Restore(state);
         }
 
         void RenderHatch(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, XPen source)

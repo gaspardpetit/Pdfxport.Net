@@ -1814,6 +1814,41 @@ namespace MigraDoc.Tests
             }
         }
 
+        [Theory]
+        [InlineData(BorderStyle.Wave, 0.1, 0.1)]
+        [InlineData(BorderStyle.DoubleWave, 0.1, 0.25)]
+        public void Thin_waves_stay_in_the_reserved_border_band(
+            BorderStyle style, double strokeWidth, double bandWidth)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var cell = table.AddRow()[0];
+            cell.Borders.Style = style;
+            cell.Borders.Width = strokeWidth;
+            cell.AddParagraph("Cell");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var clips = Regex.Matches(content,
+                @"(?m)^q\s+(?:-?[\d.]+ -?[\d.]+ m\s+)(?:-?[\d.]+ -?[\d.]+ l\s+){3}h\s+W\* n");
+            clips.Count.Should().Be(4, "each wave side is clipped to its own reserved band");
+            foreach (Match clip in clips)
+            {
+                var points = Regex.Matches(clip.Value,
+                    @"(?m)(?<x>-?[\d.]+) (?<y>-?[\d.]+) [ml]")
+                    .Cast<Match>().Select(match => (
+                        X: double.Parse(match.Groups["x"].Value, CultureInfo.InvariantCulture),
+                        Y: double.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture)))
+                    .ToArray();
+                points.Should().HaveCount(4);
+                var clipWidth = points.Max(point => point.X) - points.Min(point => point.X);
+                var clipHeight = points.Max(point => point.Y) - points.Min(point => point.Y);
+                Math.Min(clipWidth, clipHeight).Should().BeApproximately(bandWidth, .001);
+            }
+        }
+
         [Fact]
         public void Closed_rail_exclusion_clip_covers_a_tall_custom_page()
         {
