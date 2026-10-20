@@ -664,14 +664,39 @@ namespace MigraDoc.Rendering
                     (winningPen.Width != edgePen.Width || winningPen.Color != edgePen.Color))
                     return false;
                 if (winningStyle != edgeStyle &&
-                    winningStyle is not (BorderStyle.Double or BorderStyle.Triple) &&
-                    CompoundProfile(winningStyle) == null &&
+                    (winningStyle is not (BorderStyle.Double or BorderStyle.Triple) &&
+                     CompoundProfile(winningStyle) == null ||
+                     !AdjacentCellHasClosedRailProfile(cell, side, winningStyle, winningPen)) &&
                     effective.GetWidth(side).Point >=
                     edgePen.Width * ClosedRailWidthMultiplier(edgeStyle))
                     return false;
                 pen ??= edgePen;
             }
             return pen != null;
+        }
+
+        bool AdjacentCellHasClosedRailProfile(Cell cell, BorderType side, BorderStyle style, XPen? pen)
+        {
+            if (pen == null || cell.Row == null || cell.Column == null)
+                return false;
+            var row = cell.Row.Index + (side == BorderType.Bottom ? 1 : side == BorderType.Top ? -1 : 0);
+            var column = cell.Column.Index + (side == BorderType.Right ? 1 : side == BorderType.Left ? -1 : 0);
+            if (row < 0 || row >= _table.Rows.Count || column < 0 || column >= _table.Columns.Count)
+                return false;
+            var neighbor = _table[row, column];
+            if (neighbor.MergeRight != 0 || neighbor.MergeDown != 0 ||
+                neighbor.RoundedCorner != RoundedCorner.None)
+                return false;
+            var borders = new BordersRenderer(neighbor.Borders, _gfx);
+            foreach (var edge in new[] { BorderType.Top, BorderType.Right, BorderType.Bottom, BorderType.Left })
+            {
+                var edgePen = borders.GetPen(edge);
+                if (borders.GetStyle(edge) != style || edgePen == null ||
+                    edgePen.Width != pen.Width || edgePen.Color != pen.Color ||
+                    neighbor.Borders.GetBorder(edge)?.Values.Visible == false)
+                    return false;
+            }
+            return true;
         }
 
         Rectangle GetClosedCellInnerRect(Cell cell, double band)
@@ -1165,11 +1190,23 @@ namespace MigraDoc.Rendering
             var x = new double[columns + 1];
             var y = new double[rows + 1];
             for (var column = 0; column < columns; column++)
-                x[column] = grid[(0, column)].X.Point - band;
+            {
+                var edge = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
+                    cellGrid[(0, column)], _lastHeaderRow), _gfx);
+                x[column] = grid[(0, column)].X.Point - edge.GetWidth(BorderType.Left).Point;
+            }
             for (var row = 0; row < rows; row++)
-                y[row] = grid[(row, 0)].Y.Point - band;
-            x[^1] = last.X.Point + last.Width.Point;
-            y[^1] = last.Y.Point + last.Height.Point;
+            {
+                var edge = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
+                    cellGrid[(row, 0)], _lastHeaderRow), _gfx);
+                y[row] = grid[(row, 0)].Y.Point - edge.GetWidth(BorderType.Top).Point;
+            }
+            var terminal = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(
+                cellGrid[(rows - 1, columns - 1)], _lastHeaderRow), _gfx);
+            x[^1] = last.X.Point + last.Width.Point -
+                (terminal.GetWidth(BorderType.Right).Point == 0 ? band : 0);
+            y[^1] = last.Y.Point + last.Height.Point -
+                (terminal.GetWidth(BorderType.Bottom).Point == 0 ? band : 0);
 
             XColor Highlight(double amount) => XColor.FromArgb(
                 (int)Math.Round(pen.Color.A * 255),

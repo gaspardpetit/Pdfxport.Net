@@ -688,6 +688,30 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Closed_double_cell_yields_to_wider_triple_neighbor()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Right.Style = BorderStyle.Triple;
+            row[0].Borders.Right.Width = 2;
+            row[0].AddParagraph("Triple owner");
+            row[1].Borders.Style = BorderStyle.Double;
+            row[1].Borders.Width = 1;
+            row[1].AddParagraph("Closed candidate");
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            cells.GetEffectiveBordersPdf(row[1], -1).Left.Style.Should().Be(BorderStyle.Triple);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().NotContain("W* n", "the losing closed double box must not mask the triple edge");
+        }
+
+        [Fact]
         public void Merged_cell_terminal_border_prevents_a_closed_triple_box()
         {
             var document = new Document();
@@ -1691,6 +1715,35 @@ namespace MigraDoc.Tests
             BorderStrokes(content).Cast<Match>().Should().HaveCount(6);
             Regex.Matches(content, @"W\* n").Count.Should().Be(4,
                 "the two line caps and both triangular faces of the elbow are clipped separately");
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Three_dimensional_terminal_tiles_move_inside_missing_left_edge(BorderStyle style)
+        {
+            double LeftmostBorderInk(bool hideLeft)
+            {
+                var document = new Document();
+                var table = document.AddSection().AddTable();
+                table.AddColumn("3cm");
+                var cell = table.AddRow()[0];
+                cell.Borders.Style = style;
+                cell.Borders.Width = 3;
+                cell.Borders.Left.Visible = !hideLeft;
+                cell.AddParagraph("Cell");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.RenderDocument();
+                var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+                var coordinates = Regex.Matches(content, @"(?m)(?<x>-?[\d.]+) -?[\d.]+ [ml]")
+                    .Cast<Match>().Select(match => double.Parse(match.Groups["x"].Value,
+                        CultureInfo.InvariantCulture)).ToArray();
+                coordinates.Should().NotBeEmpty();
+                return coordinates.Min();
+            }
+
+            LeftmostBorderInk(true).Should().BeGreaterThan(LeftmostBorderInk(false) + 2,
+                "the bottom edge's terminal tile must move inward when the left edge is absent");
         }
 
         [Theory]
