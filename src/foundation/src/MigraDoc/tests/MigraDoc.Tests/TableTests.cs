@@ -370,6 +370,45 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Word_cell_geometry_positions_shading_from_each_cells_own_border_band()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            for (var column = 0; column < 3; column++)
+                table.AddColumn(Unit.FromPoint(100));
+            var row = table.AddRow();
+            var styles = new[] { BorderStyle.Single, BorderStyle.Double, BorderStyle.Triple };
+            var widths = new[] { 1.0, 2.0, 3.0 };
+            for (var column = 0; column < 3; column++)
+            {
+                var cell = row[column];
+                cell.AddParagraph($"{column + 1}");
+                cell.Shading.Color = Colors.LightBlue;
+                cell.Borders.Style = styles[column];
+                cell.Borders.Width = Unit.FromPoint(widths[column]);
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.UseWordTableCellContentMargins = true;
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var shades = Regex.Matches(content,
+                    @"(?m)^(?<left>-?[\d.]+) (?<bottom>-?[\d.]+) (?<width>[\d.]+) (?<height>[\d.]+) re\s+f$")
+                .Cast<Match>()
+                .Select(match => (
+                    Left: double.Parse(match.Groups["left"].Value, CultureInfo.InvariantCulture),
+                    Bottom: double.Parse(match.Groups["bottom"].Value, CultureInfo.InvariantCulture),
+                    Width: double.Parse(match.Groups["width"].Value, CultureInfo.InvariantCulture),
+                    Height: double.Parse(match.Groups["height"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            shades.Should().HaveCount(3);
+            (shades[1].Left - shades[0].Left).Should().BeApproximately(102.5, 0.02);
+            (shades[2].Left - shades[1].Left).Should().BeApproximately(104.5, 0.02);
+            (shades[0].Width - shades[1].Width).Should().BeApproximately(5, 0.02);
+            (shades[1].Width - shades[2].Width).Should().BeApproximately(9, 0.02);
+        }
+
+        [Fact]
         public void Double_right_outer_stroke_meets_outer_top_border()
         {
             var document = new Document();

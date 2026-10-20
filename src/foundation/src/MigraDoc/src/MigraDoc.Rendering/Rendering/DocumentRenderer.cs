@@ -146,6 +146,12 @@ namespace MigraDoc.Rendering
         public Func<Table, int, double?>? TableFragmentTopBorderReservation { get; set; }
 
         /// <summary>
+        /// Places Word table cell content from the grid edge using the larger of
+        /// the cell margin and half the occupied border band.
+        /// </summary>
+        public bool UseWordTableCellContentMargins { get; set; }
+
+        /// <summary>
         /// Selects text frames whose content is clipped to the frame rectangle when
         /// <see cref="TextFrame.ClipContent"/> has not been set.
         /// </summary>
