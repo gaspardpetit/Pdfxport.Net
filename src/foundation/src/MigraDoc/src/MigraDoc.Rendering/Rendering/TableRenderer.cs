@@ -1246,8 +1246,8 @@ namespace MigraDoc.Rendering
                         XUnitPt.FromPoint(y[row]),
                         XUnitPt.FromPoint(x[column + 1] - x[column] - band));
 
-            // At a corner, the two present faces meet diagonally. A lone face
-            // fills its quadrant; two missing faces leave that quadrant clear.
+            // Crossings and T junctions use four quadrants. An elbow has one
+            // miter across the entire tile, from its outer to inner corner.
             for (var row = 0; row <= rows; row++)
             for (var column = 0; column <= columns; column++)
             {
@@ -1270,9 +1270,71 @@ namespace MigraDoc.Rendering
                 var south = row < rows ? vertical[row, column] : null;
                 var west = column > 0 ? horizontal[row, column - 1] : null;
                 var east = column < columns ? horizontal[row, column] : null;
-                if ((north != null || west != null) && (north != null || east != null) &&
-                    (south != null || east != null) && (south != null || west != null))
-                    _gfx.DrawRectangle(middleBrush, new XRect(left, top, band, band));
+                var armCount = (north != null ? 1 : 0) + (south != null ? 1 : 0) +
+                    (west != null ? 1 : 0) + (east != null ? 1 : 0);
+                if (armCount == 0)
+                    continue;
+                _gfx.DrawRectangle(middleBrush, new XRect(left, top, band, band));
+                if (armCount == 1)
+                {
+                    // The terminal side carries its outer shade across the
+                    // line. Miter the opposite shade into that cap at their
+                    // one shared corner.
+                    var tile = new[] { nw, ne, se, sw };
+                    DrawFace(north ?? south, tile, true, left, top);
+                    DrawFace(west ?? east, tile, false, left, top);
+                    var endArm = (north ?? south ?? west ?? east)!.Value;
+                    var emboss = endArm.Renderer.GetStyle(endArm.Side) == BorderStyle.Emboss3D;
+                    var firstColor = emboss ? shade : pen.Color;
+                    var lastColor = emboss ? pen.Color : shade;
+                    var cap = widths[0];
+                    if (north != null)
+                    {
+                        _gfx.DrawRectangle(new XSolidBrush(lastColor), new XRect(left, bottom - cap, band, cap));
+                        _gfx.DrawPolygon(new XSolidBrush(firstColor),
+                            new[] { sw, new XPoint(left, bottom - cap), new XPoint(left + cap, bottom - cap) },
+                            XFillMode.Winding);
+                    }
+                    else if (south != null)
+                    {
+                        _gfx.DrawRectangle(new XSolidBrush(firstColor), new XRect(left, top, band, cap));
+                        _gfx.DrawPolygon(new XSolidBrush(lastColor),
+                            new[] { ne, new XPoint(right, top + cap), new XPoint(right - cap, top + cap) },
+                            XFillMode.Winding);
+                    }
+                    else if (west != null)
+                    {
+                        _gfx.DrawRectangle(new XSolidBrush(lastColor), new XRect(right - cap, top, cap, band));
+                        _gfx.DrawPolygon(new XSolidBrush(firstColor),
+                            new[] { ne, new XPoint(right - cap, top), new XPoint(right - cap, top + cap) },
+                            XFillMode.Winding);
+                    }
+                    else
+                    {
+                        _gfx.DrawRectangle(new XSolidBrush(firstColor), new XRect(left, top, cap, band));
+                        _gfx.DrawPolygon(new XSolidBrush(lastColor),
+                            new[] { sw, new XPoint(left + cap, bottom - cap), new XPoint(left + cap, bottom) },
+                            XFillMode.Winding);
+                    }
+                    continue;
+                }
+                var verticalArm = north ?? south;
+                var horizontalArm = west ?? east;
+                if (armCount == 2 && verticalArm != null && horizontalArm != null)
+                {
+                    XPoint outer, inner, verticalCorner, horizontalCorner;
+                    if (north != null && west != null)
+                        (outer, inner, verticalCorner, horizontalCorner) = (se, nw, ne, sw);
+                    else if (north != null)
+                        (outer, inner, verticalCorner, horizontalCorner) = (sw, ne, nw, se);
+                    else if (west != null)
+                        (outer, inner, verticalCorner, horizontalCorner) = (ne, sw, se, nw);
+                    else
+                        (outer, inner, verticalCorner, horizontalCorner) = (nw, se, sw, ne);
+                    DrawFace(verticalArm, new[] { outer, inner, verticalCorner }, true, left, top);
+                    DrawFace(horizontalArm, new[] { outer, inner, horizontalCorner }, false, left, top);
+                    continue;
+                }
                 DrawJoin(north, west, new[] { nw, n, center, w },
                     new[] { nw, n, center }, new[] { nw, center, w }, left, top);
                 DrawJoin(north, east, new[] { n, ne, e, center },

@@ -1686,10 +1686,11 @@ namespace MigraDoc.Tests
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
-            // The present right and bottom edges form one mitered corner;
-            // no top or left stroke extends across the missing quadrants.
+            // The present right and bottom edges form one full-tile miter;
+            // no top or left segment is drawn beyond the junction tiles.
             BorderStrokes(content).Cast<Match>().Should().HaveCount(6);
-            content.Should().Contain("h f");
+            Regex.Matches(content, @"W\* n").Count.Should().Be(4,
+                "the two line caps and both triangular faces of the elbow are clipped separately");
         }
 
         [Theory]
