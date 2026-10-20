@@ -1335,8 +1335,8 @@ namespace MigraDoc.Tests
             renderer.RenderDocument();
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
             // Both grey rails and the original black rail must be present.
-            content.Should().Contain(".4 .4 .4 RG");
-            content.Should().Contain(".149 .149 .149 RG");
+            content.Should().Contain(".278 .278 .278 RG");
+            content.Should().Contain(".102 .102 .102 RG");
             content.Should().Contain("0 0 0 RG");
         }
     }

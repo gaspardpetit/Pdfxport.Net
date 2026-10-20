@@ -429,8 +429,8 @@ namespace MigraDoc.Rendering
                 (int)Math.Round(color.R + (255 - color.R) * amount),
                 (int)Math.Round(color.G + (255 - color.G) * amount),
                 (int)Math.Round(color.B + (255 - color.B) * amount));
-            var shade = Highlight(source.Color, .4);
-            var middle = Highlight(source.Color, .15);
+            var shade = Highlight(source.Color, .28);
+            var middle = Highlight(source.Color, .1);
             var colors = emboss
                 ? new[] { shade, middle, source.Color }
                 : new[] { source.Color, middle, shade };
