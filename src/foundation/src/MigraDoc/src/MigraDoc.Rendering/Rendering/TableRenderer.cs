@@ -97,9 +97,12 @@ namespace MigraDoc.Rendering
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingTopBorders,
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> precedingBottomBorders,
             HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingLeftBorders,
-            bool renderBorders = true)
+            bool renderBorders = true, double centeredGridBand = 0)
         {
             var innerRect = GetInnerRect(CalcStartingHeight(), cell);
+            if (centeredGridBand > 0)
+                innerRect = new Rectangle(innerRect.X - XUnitPt.FromPoint(centeredGridBand / 2),
+                    innerRect.Y, innerRect.Width, innerRect.Height);
             RenderShading(cell, innerRect);
             RenderContent(cell, innerRect);
             if (renderBorders)
@@ -476,6 +479,9 @@ namespace MigraDoc.Rendering
             BorderStyle threeDimensionalStyle = BorderStyle.None;
             var uniformThreeDimensionalGrid = followingCells == null &&
                 TryGetUniformThreeDimensionalGridPen(cells, out threeDimensionalPen, out threeDimensionalStyle);
+            var centeredGridBand = uniformDoubleGrid ? gridPen!.Width * 3 :
+                uniformTripleGrid ? triplePen!.Width * 5 :
+                uniformCompoundGrid ? compoundPen!.Width * ClosedRailWidthMultiplier(compoundStyle) : 0;
             var followingTopBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
             var precedingBottomBorders = new HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
             var followingLeftBorders = new HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)>();
@@ -512,7 +518,8 @@ namespace MigraDoc.Rendering
                 var closed = !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && !uniformThreeDimensionalGrid &&
                     TryGetClosedCellRailPen(cell, out closedPen, out closedStyle);
                 RenderCell(cell, followingTopBorders, precedingBottomBorders, followingLeftBorders,
-                    !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && !uniformThreeDimensionalGrid && !closed);
+                    !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && !uniformThreeDimensionalGrid && !closed,
+                    centeredGridBand);
                 if (closed)
                     closedCells.Add((cell, closedStyle, closedPen!));
             }
@@ -521,12 +528,18 @@ namespace MigraDoc.Rendering
                 RenderClosedMultiRailCell(closed.Cell, closed.Style, closed.Pen);
             if (!uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && followingCells == null)
                 RenderFourWayRailJunctions(cells);
-            if (uniformDoubleGrid)
-                RenderUniformDoubleGrid(cells, gridPen!);
-            if (uniformTripleGrid)
-                RenderUniformTripleGrid(cells, triplePen!);
-            if (uniformCompoundGrid)
-                RenderUniformCompoundGrid(cells, compoundPen!, compoundStyle);
+            if (centeredGridBand > 0)
+            {
+                var state = _gfx.Save();
+                _gfx.TranslateTransform(-centeredGridBand / 2, 0);
+                if (uniformDoubleGrid)
+                    RenderUniformDoubleGrid(cells, gridPen!);
+                if (uniformTripleGrid)
+                    RenderUniformTripleGrid(cells, triplePen!);
+                if (uniformCompoundGrid)
+                    RenderUniformCompoundGrid(cells, compoundPen!, compoundStyle);
+                _gfx.Restore(state);
+            }
             if (uniformThreeDimensionalGrid)
                 RenderUniformThreeDimensionalGrid(cells, threeDimensionalPen!);
         }
