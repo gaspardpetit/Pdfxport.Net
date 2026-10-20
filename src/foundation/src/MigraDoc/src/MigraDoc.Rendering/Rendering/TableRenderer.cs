@@ -1571,7 +1571,8 @@ namespace MigraDoc.Rendering
             var layoutInfo = _renderInfo.LayoutInfo;
             if (_currRow >= 0 && _currRow == _table.Rows.Count - 1 && _table.Columns.Count > 0 &&
                 Enumerable.Range(0, _table.Columns.Count).Any(column =>
-                    TryGetClosedCellRailPen(_table[_currRow, column], out _, out _)))
+                    _mergedCells.GetCoveringCell(_table[_currRow, column]) is { } covering &&
+                    TryGetClosedCellRailPen(covering, out _, out _)))
             {
                 var bands = HorizontalBoundaryBands(_table.Rows.Count);
                 layoutInfo.MarginBottom = XUnitPt.FromPoint((bands.Widest - bands.Narrowest) / 2);

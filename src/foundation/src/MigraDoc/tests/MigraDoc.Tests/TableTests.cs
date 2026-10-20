@@ -730,6 +730,37 @@ namespace MigraDoc.Tests
             DoubleBorderBoxes(content).Should().HaveCount(2);
         }
 
+        [Fact]
+        public void Closed_rail_cell_merged_into_final_row_reserves_bottom_band()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var first = table.AddRow();
+            first[0].MergeDown = 1;
+            first[0].Borders.Style = BorderStyle.Triple;
+            first[0].Borders.Width = 3;
+            first[0].AddParagraph("Merged triple");
+            first[1].Borders.Style = BorderStyle.Single;
+            first[1].Borders.Width = 1;
+            first[1].AddParagraph("Top");
+            var last = table.AddRow();
+            last[1].Borders.Style = BorderStyle.Single;
+            last[1].Borders.Width = 1;
+            last[1].AddParagraph("Bottom");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var tableInfo = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .Single(info => info.FormatInfo is TableFormatInfo);
+            var margin = (XUnitPt)tableInfo.LayoutInfo.GetType()
+                .GetProperty("MarginBottom", System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic)!
+                .GetValue(tableInfo.LayoutInfo)!;
+            margin.Point.Should().BeApproximately(7, .02);
+        }
+
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
