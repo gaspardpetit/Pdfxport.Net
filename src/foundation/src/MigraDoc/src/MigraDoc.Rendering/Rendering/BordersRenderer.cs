@@ -399,6 +399,9 @@ namespace MigraDoc.Rendering
             for (var start = 0.0; start < length.Point; start += pitch)
             {
                 var along = Math.Min(cross * 0.65, length.Point - start);
+                // Omit a negligible final remnant instead of drawing a tiny hatch cap.
+                if (along < 0.02)
+                    break;
                 var across = along / 0.65;
                 if (vertical)
                 {
