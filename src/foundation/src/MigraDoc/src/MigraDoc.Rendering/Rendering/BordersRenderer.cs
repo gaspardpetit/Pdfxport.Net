@@ -398,14 +398,16 @@ namespace MigraDoc.Rendering
             var pitch = Math.Max(0.8, source.Width * 0.8);
             for (var start = 0.0; start < length.Point; start += pitch)
             {
+                var along = Math.Min(cross * 0.65, length.Point - start);
+                var across = along / 0.65;
                 if (vertical)
                 {
                     var x = left.Point;
                     var y = top.Point + start;
 #if PSGFX
-                    _gfx.DrawLine(railPen, new(x, y + cross * 0.65), new(x + cross, y));
+                    _gfx.DrawLine(railPen, new(x, y + along), new(x + across, y));
 #else
-                    _gfx.DrawLine(railPen, x, y + cross * 0.65, x + cross, y);
+                    _gfx.DrawLine(railPen, x, y + along, x + across, y);
 #endif
                 }
                 else
@@ -413,9 +415,9 @@ namespace MigraDoc.Rendering
                     var x = left.Point + start;
                     var y = top.Point;
 #if PSGFX
-                    _gfx.DrawLine(railPen, new(x, y + cross), new(x + cross * 0.65, y));
+                    _gfx.DrawLine(railPen, new(x, y + across), new(x + along, y));
 #else
-                    _gfx.DrawLine(railPen, x, y + cross, x + cross * 0.65, y);
+                    _gfx.DrawLine(railPen, x, y + across, x + along, y);
 #endif
                 }
             }
