@@ -1813,5 +1813,34 @@ namespace MigraDoc.Tests
                     "the hatch pen must not paint beyond the width reserved by table layout");
             }
         }
+
+        [Fact]
+        public void Closed_rail_exclusion_clip_covers_a_tall_custom_page()
+        {
+            var document = new Document();
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(612);
+            section.PageSetup.PageHeight = Unit.FromPoint(11000);
+            section.PageSetup.TopMargin = Unit.FromPoint(10050);
+            var table = section.AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            foreach (var cell in new[] { row[0], row[1] })
+            {
+                cell.Borders.Style = BorderStyle.Triple;
+                cell.Borders.Width = 3;
+                cell.AddParagraph("Cell");
+            }
+            row[1].Borders.Top.Style = BorderStyle.Single;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            Regex.IsMatch(content,
+                @"(?m)^0 11000 m\s+612 11000 l\s+612 0 l\s+0 0 l\s+h\s+(?:-?[\d.]+ -?[\d.]+ [ml]\s+){4}h\s+W\* n")
+                .Should().BeTrue(
+                "the inverse border clip must span the actual page, including the table below 10,000 points");
+        }
     }
 }

@@ -126,7 +126,7 @@ namespace MigraDoc.Rendering
             foreach (var region in regions)
             {
                 var outside = new XGraphicsPath { FillMode = XFillMode.Alternate };
-                outside.AddRectangle(new XRect(-10000, -10000, 20000, 20000));
+                outside.AddRectangle(new XRect(0, 0, _gfx.PageSize.Width, _gfx.PageSize.Height));
                 outside.AddRectangle(region);
                 _gfx.IntersectClip(outside);
             }
