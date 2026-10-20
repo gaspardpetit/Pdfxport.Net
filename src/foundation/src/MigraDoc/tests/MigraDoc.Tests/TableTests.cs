@@ -632,6 +632,58 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Isolated_triple_edge_wins_over_narrower_single_only_in_pdf()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Right.Style = BorderStyle.Triple;
+            row[0].Borders.Right.Width = 1;
+            row[1].Borders.Left.Style = BorderStyle.Single;
+            row[1].Borders.Left.Width = 2;
+
+            var pdfCells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            pdfCells.GetEffectiveBordersPdf(row[0], -1).Right.Style.Should().Be(BorderStyle.Triple);
+            pdfCells.GetEffectiveBordersPdf(row[1], -1).Left.Style.Should().Be(BorderStyle.Triple);
+
+            var rtfCells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            rtfCells.GetEffectiveBordersRtf(row[0]).Right.Style.Should().Be(BorderStyle.Single);
+            rtfCells.GetEffectiveBordersRtf(row[1]).Left.Style.Should().Be(BorderStyle.Single);
+
+            row[0].AddParagraph("Left");
+            row[1].AddParagraph("Right");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            Regex.Matches(content, @"(?m)^2 w$").Should().BeEmpty();
+            Regex.Matches(content, @"(?m)^1 w$").Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public void Isolated_horizontal_triple_edge_wins_over_narrower_single_only_in_pdf()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var top = table.AddRow()[0];
+            var bottom = table.AddRow()[0];
+            top.Borders.Bottom.Style = BorderStyle.Triple;
+            top.Borders.Bottom.Width = 1;
+            bottom.Borders.Top.Style = BorderStyle.Single;
+            bottom.Borders.Top.Width = 2;
+
+            var pdfCells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            pdfCells.GetEffectiveBordersPdf(top, -1).Bottom.Style.Should().Be(BorderStyle.Triple);
+            pdfCells.GetEffectiveBordersPdf(bottom, -1).Top.Style.Should().Be(BorderStyle.Triple);
+
+            var rtfCells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            rtfCells.GetEffectiveBordersRtf(top).Bottom.Style.Should().Be(BorderStyle.Single);
+            rtfCells.GetEffectiveBordersRtf(bottom).Top.Style.Should().Be(BorderStyle.Single);
+        }
+
+        [Fact]
         public void Four_neighbor_double_junction_turns_both_rails_around_cell_corners()
         {
             var document = new Document();

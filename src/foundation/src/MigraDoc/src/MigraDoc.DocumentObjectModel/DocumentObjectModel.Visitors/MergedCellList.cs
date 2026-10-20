@@ -209,7 +209,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             if (leftNeighbor != null && leftNeighbor.RoundedCorner != RoundedCorner.TopRight && leftNeighbor.RoundedCorner != RoundedCorner.BottomRight)
             {
                 var nbrBrdrs = leftNeighbor.Values.Borders;
-                if (nbrBrdrs != null && GetEffectiveBorderWidth(nbrBrdrs, BorderType.Right) >= GetEffectiveBorderWidth(borders, BorderType.Left))
+                if (nbrBrdrs != null && GetBorderWidthForComparison(nbrBrdrs, BorderType.Right, borders, BorderType.Left, considerHeadingRows) >= GetBorderWidthForComparison(borders, BorderType.Left, nbrBrdrs, BorderType.Right, considerHeadingRows))
                     borders.SetValue("Left", GetBorderFromBorders(nbrBrdrs, BorderType.Right));
             }
 
@@ -217,7 +217,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             if (rightNeighbor != null && rightNeighbor.RoundedCorner != RoundedCorner.TopLeft && rightNeighbor.RoundedCorner != RoundedCorner.BottomLeft)
             {
                 var nbrBrdrs = rightNeighbor.Values.Borders;
-                if (nbrBrdrs != null && GetEffectiveBorderWidth(nbrBrdrs, BorderType.Left) > GetEffectiveBorderWidth(borders, BorderType.Right))
+                if (nbrBrdrs != null && GetBorderWidthForComparison(nbrBrdrs, BorderType.Left, borders, BorderType.Right, considerHeadingRows) > GetBorderWidthForComparison(borders, BorderType.Right, nbrBrdrs, BorderType.Left, considerHeadingRows))
                     borders.SetValue("Right", GetBorderFromBorders(nbrBrdrs, BorderType.Left));
             }
             
@@ -245,7 +245,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             if (topNeighbor != null && topNeighbor.RoundedCorner != RoundedCorner.BottomLeft && topNeighbor.RoundedCorner != RoundedCorner.BottomRight)
             {
                 var nbrBrdrs = topNeighbor.Values.Borders;
-                if (nbrBrdrs != null && GetEffectiveBorderWidth(nbrBrdrs, BorderType.Bottom) >= GetEffectiveBorderWidth(borders, BorderType.Top))
+                if (nbrBrdrs != null && GetBorderWidthForComparison(nbrBrdrs, BorderType.Bottom, borders, BorderType.Top, considerHeadingRows) >= GetBorderWidthForComparison(borders, BorderType.Top, nbrBrdrs, BorderType.Bottom, considerHeadingRows))
                     borders.SetValue("Top", GetBorderFromBorders(nbrBrdrs, BorderType.Bottom));
             }
 
@@ -253,7 +253,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             if (bottomNeighbor != null && bottomNeighbor.RoundedCorner != RoundedCorner.TopLeft && bottomNeighbor.RoundedCorner != RoundedCorner.TopRight)
             {
                 var nbrBrdrs = bottomNeighbor.Values.Borders;
-                if (nbrBrdrs != null && GetEffectiveBorderWidth(nbrBrdrs, BorderType.Top) > GetEffectiveBorderWidth(borders, BorderType.Bottom))
+                if (nbrBrdrs != null && GetBorderWidthForComparison(nbrBrdrs, BorderType.Top, borders, BorderType.Bottom, considerHeadingRows) > GetBorderWidthForComparison(borders, BorderType.Bottom, nbrBrdrs, BorderType.Top, considerHeadingRows))
                     borders.SetValue("Bottom", GetBorderFromBorders(nbrBrdrs, BorderType.Top));
             }
 #if CACHE
@@ -318,6 +318,37 @@ namespace MigraDoc.DocumentObjectModel.Visitors
         /// <summary>
         /// Returns the width of the border at the specified position.
         /// </summary>
+        static double GetBorderWidthForComparison(Borders? borders, BorderType type,
+            Borders? opposingBorders, BorderType opposingType, bool pdf)
+        {
+            var width = GetEffectiveBorderWidth(borders, type).Point;
+            if (!pdf || borders == null || width <= 0)
+                return width;
+
+            // Only the multi-rail versus single conflict uses the occupied PDF
+            // band. Mixed decorative styles retain Word's nominal-width priority.
+            var opposingStyle = opposingBorders?.GetBorder(opposingType)?.Values.Style ??
+                opposingBorders?.Values.Style ?? BorderStyle.Single;
+            if (opposingStyle != BorderStyle.Single)
+                return width;
+            var style = borders.GetBorder(type)?.Values.Style ?? borders.Values.Style ?? BorderStyle.Single;
+            var multiplier = style switch
+            {
+                BorderStyle.Double => 3,
+                BorderStyle.Triple => 5,
+                BorderStyle.ThinThickSmallGap or BorderStyle.ThickThinSmallGap => 1.75,
+                BorderStyle.ThinThickThinSmallGap => 2.5,
+                BorderStyle.ThinThickMediumGap or BorderStyle.ThickThinMediumGap => 2,
+                BorderStyle.ThinThickThinMediumGap => 3,
+                BorderStyle.ThinThickLargeGap or BorderStyle.ThickThinLargeGap => 2.125,
+                BorderStyle.ThinThickThinLargeGap => 3.5,
+                BorderStyle.DoubleWave => 2.5,
+                BorderStyle.Emboss3D or BorderStyle.Engrave3D => 1.75,
+                _ => 1
+            };
+            return width * multiplier;
+        }
+
         static Unit GetEffectiveBorderWidth(Borders? borders, BorderType type)
         {
             if (borders == null)
