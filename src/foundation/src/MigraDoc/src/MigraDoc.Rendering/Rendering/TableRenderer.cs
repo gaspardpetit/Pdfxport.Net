@@ -567,7 +567,7 @@ namespace MigraDoc.Rendering
             var orderedClosed = closedCells.OrderBy(item => item.Band).ToArray();
             var closedMasks = orderedClosed.Select(item => GetClosedRailMasks(item.Cell, item.Style,
                 item.Pen, item.Band)).ToArray();
-            var junctions = !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && followingCells == null
+            var junctions = !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid
                 ? GetFourWayRailJunctions(cells)
                 : new List<(JunctionArm North, JunctionArm South, JunctionArm West, JunctionArm East)>();
             var junctionMasks = junctions.Select(junction => GetFourWayRailJunctionBounds(
@@ -648,6 +648,11 @@ namespace MigraDoc.Rendering
                 // box when that band wins; yield to a genuinely wider edge.
                 var winningStyle = effective.GetStyle(side);
                 var winningPen = effective.GetPen(side);
+                if ((side == BorderType.Right && cell.MergeRight > 0 ||
+                     side == BorderType.Bottom && cell.MergeDown > 0) &&
+                    (winningStyle != edgeStyle || winningPen == null ||
+                     winningPen.Width != edgePen.Width || winningPen.Color != edgePen.Color))
+                    return false;
                 if (winningStyle == edgeStyle && winningPen != null &&
                     (winningPen.Width != edgePen.Width || winningPen.Color != edgePen.Color))
                     return false;

@@ -688,6 +688,56 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Merged_cell_terminal_border_prevents_a_closed_triple_box()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].MergeRight = 1;
+            row[0].Borders.Style = BorderStyle.Triple;
+            row[0].Borders.Width = 2;
+            row[0].AddParagraph("Merged");
+            row[1].Borders.Right.Style = BorderStyle.Single;
+            row[1].Borders.Right.Width = 1;
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            cells.GetEffectiveBordersPdf(row[0], -1).Right.Style.Should().Be(BorderStyle.Single);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().NotContain("W* n");
+        }
+
+        [Fact]
+        public void Header_rows_render_their_own_four_way_triple_junction()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var index = 0; index < 2; index++)
+            {
+                var row = table.AddRow();
+                row.HeadingFormat = true;
+                for (var column = 0; column < 2; column++)
+                {
+                    row[column].Borders.Style = BorderStyle.Triple;
+                    row[column].Borders.Width = 3;
+                    row[column].AddParagraph("Header");
+                }
+            }
+            table.AddRow()[0].AddParagraph("Body");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            BorderStrokes(content).Count.Should().Be(10);
+        }
+
+        [Fact]
         public void Isolated_triple_edge_wins_over_narrower_single_only_in_pdf()
         {
             var document = new Document();
