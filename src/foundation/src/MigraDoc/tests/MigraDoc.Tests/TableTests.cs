@@ -632,6 +632,31 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Closed_triple_cell_yields_to_equal_band_single_edge()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Style = BorderStyle.Single;
+            row[0].Borders.Width = 5;
+            row[0].AddParagraph("Single");
+            row[1].Borders.Style = BorderStyle.Triple;
+            row[1].Borders.Width = 1;
+            row[1].AddParagraph("Triple");
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            cells.GetEffectiveBordersPdf(row[1], -1).Left.Style.Should().Be(BorderStyle.Single);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().Contain("5 w");
+            content.Should().NotContain("W* n");
+        }
+
+        [Fact]
         public void Isolated_triple_edge_wins_over_narrower_single_only_in_pdf()
         {
             var document = new Document();

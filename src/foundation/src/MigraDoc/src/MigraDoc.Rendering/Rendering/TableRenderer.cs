@@ -646,7 +646,7 @@ namespace MigraDoc.Rendering
                 if (winningStyle != edgeStyle &&
                     winningStyle is not (BorderStyle.Double or BorderStyle.Triple) &&
                     CompoundProfile(winningStyle) == null &&
-                    effective.GetWidth(side).Point >
+                    effective.GetWidth(side).Point >=
                     edgePen.Width * ClosedRailWidthMultiplier(edgeStyle))
                     return false;
                 pen ??= edgePen;
