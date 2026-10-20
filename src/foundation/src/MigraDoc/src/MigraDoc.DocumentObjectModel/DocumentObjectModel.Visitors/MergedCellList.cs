@@ -355,6 +355,8 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                 return 0;
 
             var border = borders.GetBorder(type);
+            if (border?.Values.Visible == false)
+                return 0;
 
 #if true
             // Use "borders" if "border" is null or empty.

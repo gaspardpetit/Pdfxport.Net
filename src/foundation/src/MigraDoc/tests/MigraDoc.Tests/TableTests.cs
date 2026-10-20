@@ -712,6 +712,28 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Hidden_inherited_triple_edge_does_not_defeat_visible_single_edge()
+        {
+            var table = new Document().AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Style = BorderStyle.Triple;
+            row[0].Borders.Width = 1;
+            row[0].Borders.Right.Visible = false;
+            row[1].Borders.Style = BorderStyle.Single;
+            row[1].Borders.Width = 2;
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            var leftResolved = cells.GetEffectiveBordersPdf(row[0], -1);
+            leftResolved.Right.Style.Should().Be(BorderStyle.Single);
+            var resolved = cells.GetEffectiveBordersPdf(row[1], -1);
+            resolved.Style.Should().Be(BorderStyle.Single);
+            resolved.Left.Style.Should().NotBe(BorderStyle.Triple,
+                "the hidden inherited triple must not replace the visible single edge");
+        }
+
+        [Fact]
         public void Closed_cell_yields_to_winning_rail_from_previous_page()
         {
             var document = new Document();
