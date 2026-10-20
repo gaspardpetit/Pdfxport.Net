@@ -66,8 +66,36 @@ namespace MigraDoc.Rendering
         internal XUnitPt GetWidth(BorderType type)
         {
             var width = GetStrokeWidth(type);
-            return GetStyle(type) == BorderStyle.Double ? width * 3 : width;
+            return GetStyle(type) switch
+            {
+                BorderStyle.Double => width * 3,
+                BorderStyle.Triple => width * 5,
+                BorderStyle.ThinThickSmallGap or BorderStyle.ThickThinSmallGap => width * 1.75,
+                BorderStyle.ThinThickThinSmallGap => width * 2.5,
+                BorderStyle.ThinThickMediumGap or BorderStyle.ThickThinMediumGap => width * 2,
+                BorderStyle.ThinThickThinMediumGap => width * 3,
+                BorderStyle.ThinThickLargeGap or BorderStyle.ThickThinLargeGap => width * 2.125,
+                BorderStyle.ThinThickThinLargeGap => width * 3.5,
+                BorderStyle.DoubleWave => width * 2.5,
+                BorderStyle.Emboss3D or BorderStyle.Engrave3D => width * 1.75,
+                _ => width
+            };
         }
+
+        static (double[] Widths, double Gap)? CompoundRails(BorderStyle style) => style switch
+        {
+            BorderStyle.Triple => (new[] { 1.0, 1.0, 1.0 }, 1.0),
+            BorderStyle.ThinThickSmallGap => (new[] { 1.0, 0.375 }, 0.375),
+            BorderStyle.ThickThinSmallGap => (new[] { 0.375, 1.0 }, 0.375),
+            BorderStyle.ThinThickThinSmallGap => (new[] { 0.375, 1.0, 0.375 }, 0.375),
+            BorderStyle.ThinThickMediumGap => (new[] { 1.0, 0.5 }, 0.5),
+            BorderStyle.ThickThinMediumGap => (new[] { 0.5, 1.0 }, 0.5),
+            BorderStyle.ThinThickThinMediumGap => (new[] { 0.5, 1.0, 0.5 }, 0.5),
+            BorderStyle.ThinThickLargeGap => (new[] { 0.75, 0.375 }, 1.0),
+            BorderStyle.ThickThinLargeGap => (new[] { 0.375, 0.75 }, 1.0),
+            BorderStyle.ThinThickThinLargeGap => (new[] { 0.375, 0.75, 0.375 }, 1.0),
+            _ => null
+        };
 
         XUnitPt GetStrokeWidth(BorderType type)
         {
@@ -138,6 +166,22 @@ namespace MigraDoc.Rendering
             var pen = GetPen(type);
             if (pen != null)
             {
+                if (GetStyle(type) is BorderStyle.Wave or BorderStyle.DoubleWave)
+                {
+                    RenderWave(left, top, height, true, GetStyle(type) == BorderStyle.DoubleWave, pen);
+                    return;
+                }
+                if (GetStyle(type) == BorderStyle.DashDotStroked)
+                {
+                    RenderHatch(left, top, height, true, pen);
+                    return;
+                }
+                if (GetStyle(type) is BorderStyle.Emboss3D or BorderStyle.Engrave3D)
+                {
+                    RenderThreeDimensional(left, top, height, true,
+                        GetStyle(type) == BorderStyle.Emboss3D, pen);
+                    return;
+                }
                 if (GetStyle(type) == BorderStyle.Double)
                 {
                     var strokeWidth = borderWidth / 3;
@@ -157,15 +201,33 @@ namespace MigraDoc.Rendering
 #endif
                     return;
                 }
+                if (CompoundRails(GetStyle(type)) is { } rails)
+                {
+                    var position = left;
+                    for (var rail = 0; rail < rails.Widths.Length; rail++)
+                    {
+                        var railWidth = pen.Width * rails.Widths[rail];
+                        position += XUnitPt.FromPoint(railWidth / 2);
+                        var railPen = new XPen(pen.Color, railWidth);
+#if PSGFX
+                        _gfx.DrawLine(railPen, new(position, top + height), new(position, top));
+#else
+                        _gfx.DrawLine(railPen, position, top + height, position, top);
+#endif
+                        position += XUnitPt.FromPoint(railWidth / 2 + pen.Width * rails.Gap);
+                    }
+                    return;
+                }
                 left += borderWidth / 2;
 #if PSGFX
                 _gfx.DrawLine(pen, new(left, top + height), new(left, top));
 #else
                 _gfx.DrawLine(pen, left, top + height, left, top);
 #endif
-                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap && height.Point > 0)
+                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashLargeGap or BorderStyle.DashSmallGap or
+                    BorderStyle.DashDot or BorderStyle.DashDotDot && height.Point > 0)
                 {
-                    var endpointLength = XUnitPt.FromPoint(Math.Min(0.5, height.Point / 2));
+                    var endpointLength = XUnitPt.FromPoint(Math.Min(pen.Width, height.Point / 2));
                     var endpointPen = new XPen(pen.Color, pen.Width);
 #if PSGFX
                     _gfx.DrawLine(endpointPen, new(left, top), new(left, top + endpointLength));
@@ -196,6 +258,22 @@ namespace MigraDoc.Rendering
             var pen = GetPen(type);
             if (pen != null)
             {
+                if (GetStyle(type) is BorderStyle.Wave or BorderStyle.DoubleWave)
+                {
+                    RenderWave(left, top, width, false, GetStyle(type) == BorderStyle.DoubleWave, pen);
+                    return;
+                }
+                if (GetStyle(type) == BorderStyle.DashDotStroked)
+                {
+                    RenderHatch(left, top, width, false, pen);
+                    return;
+                }
+                if (GetStyle(type) is BorderStyle.Emboss3D or BorderStyle.Engrave3D)
+                {
+                    RenderThreeDimensional(left, top, width, false,
+                        GetStyle(type) == BorderStyle.Emboss3D, pen);
+                    return;
+                }
                 if (GetStyle(type) == BorderStyle.Double)
                 {
                     var strokeWidth = borderWidth / 3;
@@ -221,15 +299,33 @@ namespace MigraDoc.Rendering
 #endif
                     return;
                 }
+                if (CompoundRails(GetStyle(type)) is { } rails)
+                {
+                    var position = top;
+                    for (var rail = 0; rail < rails.Widths.Length; rail++)
+                    {
+                        var railWidth = pen.Width * rails.Widths[rail];
+                        position += XUnitPt.FromPoint(railWidth / 2);
+                        var railPen = new XPen(pen.Color, railWidth);
+#if PSGFX
+                        _gfx.DrawLine(railPen, new(left + width, position), new(left, position));
+#else
+                        _gfx.DrawLine(railPen, left + width, position, left, position);
+#endif
+                        position += XUnitPt.FromPoint(railWidth / 2 + pen.Width * rails.Gap);
+                    }
+                    return;
+                }
                 top += borderWidth / 2;
 #if PSGFX
                 _gfx.DrawLine(pen, new(left + width, top), new(left, top));
 #else
                 _gfx.DrawLine(pen, left + width, top, left, top);
 #endif
-                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashSmallGap && width.Point > 0)
+                if (GetStyle(type) is BorderStyle.Dot or BorderStyle.DashLargeGap or BorderStyle.DashSmallGap or
+                    BorderStyle.DashDot or BorderStyle.DashDotDot && width.Point > 0)
                 {
-                    var endpointLength = XUnitPt.FromPoint(Math.Min(0.5, width.Point / 2));
+                    var endpointLength = XUnitPt.FromPoint(Math.Min(pen.Width, width.Point / 2));
                     var endpointPen = new XPen(pen.Color, pen.Width);
 #if PSGFX
                     _gfx.DrawLine(endpointPen, new(left, top), new(left + endpointLength, top));
@@ -239,6 +335,150 @@ namespace MigraDoc.Rendering
                     _gfx.DrawLine(endpointPen, left + width - endpointLength, top, left + width, top);
 #endif
                 }
+            }
+        }
+
+        void RenderWave(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, bool doubleWave, XPen source)
+        {
+            if (length.Point <= 0 || source.Width <= 0)
+                return;
+            var bandWidth = source.Width * (doubleWave ? 2.5 : 1);
+            var state = _gfx.Save();
+            _gfx.IntersectClip(vertical
+                ? new XRect(left.Point, top.Point, bandWidth, length.Point)
+                : new XRect(left.Point, top.Point, length.Point, bandWidth));
+            var baseWidth = source.Width;
+            var railPen = new XPen(source.Color, Math.Max(0.25, baseWidth * 0.18));
+            var count = doubleWave ? 2 : 1;
+            for (var rail = 0; rail < count; rail++)
+            {
+                var cross = doubleWave ? baseWidth * (0.7 + rail * 1.1) : baseWidth * 0.5;
+                var amplitude = baseWidth * 0.28;
+                var pitch = Math.Max(1.5, baseWidth * 1.45);
+                var chevron = pitch * 0.68;
+                for (var start = 0.0; start < length.Point; start += pitch)
+                {
+                    var end = Math.Min(length.Point, start + chevron);
+                    var midpoint = (start + end) / 2;
+                    if (vertical)
+                    {
+                        var x = left.Point + cross;
+#if PSGFX
+                        _gfx.DrawLine(railPen, new(x + amplitude, top.Point + start),
+                            new(x - amplitude, top.Point + midpoint));
+                        _gfx.DrawLine(railPen, new(x - amplitude, top.Point + midpoint),
+                            new(x + amplitude, top.Point + end));
+#else
+                        _gfx.DrawLine(railPen, x + amplitude, top.Point + start,
+                            x - amplitude, top.Point + midpoint);
+                        _gfx.DrawLine(railPen, x - amplitude, top.Point + midpoint,
+                            x + amplitude, top.Point + end);
+#endif
+                    }
+                    else
+                    {
+                        var y = top.Point + cross;
+#if PSGFX
+                        _gfx.DrawLine(railPen, new(left.Point + start, y + amplitude),
+                            new(left.Point + midpoint, y - amplitude));
+                        _gfx.DrawLine(railPen, new(left.Point + midpoint, y - amplitude),
+                            new(left.Point + end, y + amplitude));
+#else
+                        _gfx.DrawLine(railPen, left.Point + start, y + amplitude,
+                            left.Point + midpoint, y - amplitude);
+                        _gfx.DrawLine(railPen, left.Point + midpoint, y - amplitude,
+                            left.Point + end, y + amplitude);
+#endif
+                    }
+                }
+            }
+            _gfx.Restore(state);
+        }
+
+        void RenderHatch(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, XPen source)
+        {
+            if (length.Point <= 0 || source.Width <= 0)
+                return;
+            // A diagonal pen extends beyond its endpoints. Keep its ink in the
+            // band that table layout reserved, including for very thin edges.
+            var state = _gfx.Save();
+            _gfx.IntersectClip(vertical
+                ? new XRect(left.Point, top.Point, source.Width, length.Point)
+                : new XRect(left.Point, top.Point, length.Point, source.Width));
+            var tint = XColor.FromArgb((int)Math.Round(source.Color.A * 255),
+                (int)Math.Round(((double)source.Color.R + 255) / 2),
+                (int)Math.Round(((double)source.Color.G + 255) / 2),
+                (int)Math.Round(((double)source.Color.B + 255) / 2));
+            var railPen = new XPen(tint, Math.Max(0.35, source.Width * 0.35));
+            var cross = source.Width;
+            var pitch = Math.Max(0.8, source.Width * 0.8);
+            for (var start = 0.0; start < length.Point; start += pitch)
+            {
+                var along = Math.Min(cross * 0.65, length.Point - start);
+                // Omit a negligible final remnant instead of drawing a tiny hatch cap.
+                if (along < 0.02)
+                    break;
+                var across = along / 0.65;
+                if (vertical)
+                {
+                    var x = left.Point;
+                    var y = top.Point + start;
+#if PSGFX
+                    _gfx.DrawLine(railPen, new(x, y + along), new(x + across, y));
+#else
+                    _gfx.DrawLine(railPen, x, y + along, x + across, y);
+#endif
+                }
+                else
+                {
+                    var x = left.Point + start;
+                    var y = top.Point;
+#if PSGFX
+                    _gfx.DrawLine(railPen, new(x, y + across), new(x + along, y));
+#else
+                    _gfx.DrawLine(railPen, x, y + across, x + along, y);
+#endif
+                }
+            }
+            _gfx.Restore(state);
+        }
+
+        void RenderThreeDimensional(XUnitPt left, XUnitPt top, XUnitPt length,
+            bool vertical, bool emboss, XPen source)
+        {
+            static XColor Highlight(XColor color, double amount) => XColor.FromArgb(
+                (int)Math.Round(color.A * 255),
+                (int)Math.Round(color.R + (255 - color.R) * amount),
+                (int)Math.Round(color.G + (255 - color.G) * amount),
+                (int)Math.Round(color.B + (255 - color.B) * amount));
+            var shade = Highlight(source.Color, .28);
+            var middle = Highlight(source.Color, .1);
+            var colors = emboss
+                ? new[] { shade, middle, source.Color }
+                : new[] { source.Color, middle, shade };
+            var widths = new[] { source.Width * .375, source.Width, source.Width * .375 };
+            var position = vertical ? left : top;
+            for (var rail = 0; rail < widths.Length; rail++)
+            {
+                position += XUnitPt.FromPoint(widths[rail] / 2);
+                var railPen = new XPen(colors[rail], widths[rail]);
+                if (vertical)
+                {
+#if PSGFX
+                    _gfx.DrawLine(railPen, new(position, top + length), new(position, top));
+#else
+                    _gfx.DrawLine(railPen, position, top + length, position, top);
+#endif
+                }
+                else
+                {
+#if PSGFX
+                    _gfx.DrawLine(railPen, new(left + length, position), new(left, position));
+#else
+                    _gfx.DrawLine(railPen, left + length, position, left, position);
+#endif
+                }
+                position += XUnitPt.FromPoint(widths[rail] / 2);
             }
         }
 

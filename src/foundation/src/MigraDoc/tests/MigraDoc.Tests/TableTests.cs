@@ -182,6 +182,10 @@ namespace MigraDoc.Tests
         [InlineData(true, BorderStyle.Dot, 3)]
         [InlineData(false, BorderStyle.DashSmallGap, 3)]
         [InlineData(true, BorderStyle.DashSmallGap, 3)]
+        [InlineData(false, BorderStyle.DashDot, 3)]
+        [InlineData(true, BorderStyle.DashDot, 3)]
+        [InlineData(false, BorderStyle.DashDotDot, 3)]
+        [InlineData(true, BorderStyle.DashDotDot, 3)]
         [InlineData(false, BorderStyle.Single, 1)]
         [InlineData(true, BorderStyle.Single, 1)]
         public void DottedAndDashedTableEdgesHaveVisibleEndpointStrokes(bool vertical, BorderStyle style, int expectedStrokes)
@@ -202,10 +206,14 @@ namespace MigraDoc.Tests
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
             if (style == BorderStyle.DashSmallGap)
                 content.Should().MatchRegex(@"\[3(?:\.0)? 1(?:\.0)?\]0 d");
+            if (style == BorderStyle.DashDot)
+                content.Should().MatchRegex(@"\[3(?:\.0)? 1(?:\.0)? 1(?:\.0)? 1(?:\.0)?\]0 d");
+            if (style == BorderStyle.DashDotDot)
+                content.Should().MatchRegex(@"\[3(?:\.0)? 1(?:\.0)? 1(?:\.0)? 1(?:\.0)? 1(?:\.0)? 1(?:\.0)?\]0 d");
             var strokes = BorderStrokes(content)
                 .Cast<Match>().ToArray();
             strokes.Should().HaveCount(expectedStrokes);
-            if (style is BorderStyle.Dot or BorderStyle.DashSmallGap)
+            if (style is BorderStyle.Dot or BorderStyle.DashSmallGap or BorderStyle.DashDot or BorderStyle.DashDotDot)
             {
                 var positions = strokes.Select(stroke => (
                     Start: double.Parse(stroke.Groups[vertical ? "y1" : "x1"].Value,
@@ -226,6 +234,10 @@ namespace MigraDoc.Tests
         [InlineData(BorderStyle.DashSmallGap, false)]
         [InlineData(BorderStyle.Dot, true)]
         [InlineData(BorderStyle.DashSmallGap, true)]
+        [InlineData(BorderStyle.DashDot, false)]
+        [InlineData(BorderStyle.DashDot, true)]
+        [InlineData(BorderStyle.DashDotDot, false)]
+        [InlineData(BorderStyle.DashDotDot, true)]
         public void MergedCellSharedPatternedEdgeIsPaintedOnce(BorderStyle style, bool upperMerged)
         {
             var document = new Document();
@@ -428,6 +440,742 @@ namespace MigraDoc.Tests
 
         static void AssertDoubleRailGap(double firstRail, double secondRail, double strokeWidth) =>
             (secondRail - firstRail).Should().BeApproximately(2 * strokeWidth, 0.01);
+
+        [Fact]
+        public void Mixed_compound_cells_assign_one_style_to_the_shared_vertical_edge()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row.Height = "2cm";
+            row[0].Borders.Style = BorderStyle.ThinThickSmallGap;
+            row[0].Borders.Width = 2;
+            row[1].Borders.Style = BorderStyle.ThickThinSmallGap;
+            row[1].Borders.Width = 2;
+            row[0].AddParagraph("Left");
+            row[1].AddParagraph("Right");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var vertical = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .Where(line => Math.Abs(line.X1 - line.X2) < 0.01 &&
+                    Math.Abs(line.Y1 - line.Y2) > 20)
+                .OrderBy(line => line.X1).ToArray();
+            // Both cells contribute a complete pair of rails.  The later
+            // cell clears the shared band and paints its own pair there.
+            vertical.Should().HaveCount(8);
+            (vertical[1].X1 - vertical[0].X1).Should().BeApproximately(2.125, .02);
+            (vertical[3].X1 - vertical[2].X1).Should().BeApproximately(.625, .02);
+            (vertical[5].X1 - vertical[4].X1).Should().BeApproximately(.625, .02);
+            (vertical[7].X1 - vertical[6].X1).Should().BeApproximately(2.125, .02);
+
+            var horizontal = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .Where(line => Math.Abs(line.Y1 - line.Y2) < .01 &&
+                    Math.Abs(line.X1 - line.X2) > 20).ToArray();
+            horizontal.Should().HaveCount(8);
+            foreach (var rail in vertical)
+            {
+                foreach (var endpoint in new[] { rail.Y1, rail.Y2 })
+                    horizontal.Should().Contain(line => Math.Abs(line.Y1 - endpoint) <= 1.01 &&
+                        Math.Min(line.X1, line.X2) <= rail.X1 + .01 &&
+                        Math.Max(line.X1, line.X2) >= rail.X1 - .01);
+            }
+        }
+
+        [Fact]
+        public void Mixed_two_and_three_rail_compound_cells_join_every_rail_at_corners()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            foreach (var styles in new[]
+                     {
+                         new[] { BorderStyle.ThinThickSmallGap, BorderStyle.ThinThickThinSmallGap },
+                         new[] { BorderStyle.ThinThickThinLargeGap, BorderStyle.ThickThinMediumGap }
+                     })
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    row[column].Borders.Style = styles[column];
+                    row[column].Borders.Width = 2;
+                    row[column].AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var segments = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            var vertical = segments.Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                Math.Abs(line.Y1 - line.Y2) > 20).ToArray();
+            var horizontal = segments.Where(line => Math.Abs(line.Y1 - line.Y2) < .01 &&
+                Math.Abs(line.X1 - line.X2) > 20).ToArray();
+            vertical.Should().HaveCount(20);
+            horizontal.Should().HaveCount(20);
+            foreach (var rail in vertical)
+            {
+                foreach (var endpoint in new[] { rail.Y1, rail.Y2 })
+                    horizontal.Should().Contain(line => Math.Abs(line.Y1 - endpoint) <= 1.01 &&
+                        Math.Min(line.X1, line.X2) <= rail.X1 + .01 &&
+                        Math.Max(line.X1, line.X2) >= rail.X1 - .01);
+            }
+        }
+
+        [Fact]
+        public void Four_neighbor_triple_junction_continues_middle_rails_and_turns_outer_rails()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    var triple = rowIndex != column;
+                    row[column].Borders.Style = triple ? BorderStyle.Triple : BorderStyle.Single;
+                    row[column].Borders.Width = triple ? 3 : 1;
+                    row[column].AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().Contain("W* n");
+            var lines = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .TakeLast(10).ToArray();
+            var vertical = lines.Where(line => Math.Abs(line.X1 - line.X2) < .01).ToArray();
+            var horizontal = lines.Where(line => Math.Abs(line.Y1 - line.Y2) < .01).ToArray();
+            vertical.Should().HaveCount(5);
+            horizontal.Should().HaveCount(5);
+            var centerX = vertical.Select(line => line.X1).Distinct().OrderBy(x => x).ElementAt(1);
+            var centerY = horizontal.Select(line => line.Y1).Distinct().OrderBy(y => y).ElementAt(1);
+            var middleVertical = vertical.Single(line => Math.Abs(line.X1 - centerX) < .01);
+            var middleHorizontal = horizontal.Single(line => Math.Abs(line.Y1 - centerY) < .01);
+            Math.Abs(middleVertical.Y2 - middleVertical.Y1).Should().BeGreaterThan(
+                vertical.Where(line => line != middleVertical).Max(line => Math.Abs(line.Y2 - line.Y1)));
+            Math.Abs(middleHorizontal.X2 - middleHorizontal.X1).Should().BeGreaterThan(
+                horizontal.Where(line => line != middleHorizontal).Max(line => Math.Abs(line.X2 - line.X1)));
+            Math.Min(middleHorizontal.X1, middleHorizontal.X2).Should().BeLessThan(centerX);
+            Math.Max(middleHorizontal.X1, middleHorizontal.X2).Should().BeGreaterThan(centerX);
+            Math.Min(middleVertical.Y1, middleVertical.Y2).Should().BeLessThan(centerY);
+            Math.Max(middleVertical.Y1, middleVertical.Y2).Should().BeGreaterThan(centerY);
+        }
+
+        [Fact]
+        public void Four_neighbor_junction_respects_a_wider_single_border_on_one_arm()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    var triple = rowIndex != column;
+                    row[column].Borders.Style = triple ? BorderStyle.Triple : BorderStyle.Single;
+                    row[column].Borders.Width = triple ? 3 : rowIndex == 0 ? 20 : 1;
+                    row[column].AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            // The 20-point single edge wins over the entire 15-point triple
+            // band. No closed-cell clipping may erase that winning edge.
+            content.Should().Contain("20 w");
+            content.Should().NotContain("W* n");
+            Regex.Matches(content, @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$")
+                .Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Closed_triple_cell_yields_to_equal_band_single_edge()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Style = BorderStyle.Single;
+            row[0].Borders.Width = 5;
+            row[0].AddParagraph("Single");
+            row[1].Borders.Style = BorderStyle.Triple;
+            row[1].Borders.Width = 1;
+            row[1].AddParagraph("Triple");
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            cells.GetEffectiveBordersPdf(row[1], -1).Left.Style.Should().Be(BorderStyle.Single);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().Contain("5 w");
+            content.Should().NotContain("W* n");
+        }
+
+        [Theory]
+        [InlineData(2, false)]
+        [InlineData(1, true)]
+        public void Closed_triple_cell_yields_to_winning_same_style_pen(int neighborWidth,
+            bool differentColor)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Right.Style = BorderStyle.Triple;
+            row[0].Borders.Right.Width = neighborWidth;
+            row[0].Borders.Right.Color = Colors.Red;
+            row[0].AddParagraph("Owner");
+            row[1].Borders.Style = BorderStyle.Triple;
+            row[1].Borders.Width = 1;
+            row[1].Borders.Color = differentColor ? Colors.Blue : Colors.Red;
+            row[1].AddParagraph("Closed candidate");
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            var effective = cells.GetEffectiveBordersPdf(row[1], -1);
+            effective.Left.Width.Point.Should().Be(neighborWidth);
+            effective.Left.Color.Should().Be(Colors.Red);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().NotContain("W* n");
+        }
+
+        [Fact]
+        public void Closed_double_cell_yields_to_wider_triple_neighbor()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Right.Style = BorderStyle.Triple;
+            row[0].Borders.Right.Width = 2;
+            row[0].AddParagraph("Triple owner");
+            row[1].Borders.Style = BorderStyle.Double;
+            row[1].Borders.Width = 1;
+            row[1].AddParagraph("Closed candidate");
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            cells.GetEffectiveBordersPdf(row[1], -1).Left.Style.Should().Be(BorderStyle.Triple);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().NotContain("W* n", "the losing closed double box must not mask the triple edge");
+        }
+
+        [Fact]
+        public void Hidden_inherited_triple_edge_does_not_defeat_visible_single_edge()
+        {
+            var table = new Document().AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Style = BorderStyle.Triple;
+            row[0].Borders.Width = 1;
+            row[0].Borders.Right.Visible = false;
+            row[1].Borders.Style = BorderStyle.Single;
+            row[1].Borders.Width = 2;
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            var leftResolved = cells.GetEffectiveBordersPdf(row[0], -1);
+            leftResolved.Right.Style.Should().Be(BorderStyle.Single);
+            var resolved = cells.GetEffectiveBordersPdf(row[1], -1);
+            resolved.Style.Should().Be(BorderStyle.Single);
+            resolved.Left.Style.Should().NotBe(BorderStyle.Triple,
+                "the hidden inherited triple must not replace the visible single edge");
+        }
+
+        [Fact]
+        public void Closed_cell_yields_to_winning_rail_from_previous_page()
+        {
+            var document = new Document();
+            var section = document.AddSection();
+            section.PageSetup.PageHeight = Unit.FromPoint(180);
+            section.PageSetup.TopMargin = Unit.FromPoint(30);
+            section.PageSetup.BottomMargin = Unit.FromPoint(30);
+            var table = section.AddTable();
+            table.AddColumn("3cm");
+            foreach (var style in new[] { BorderStyle.Triple, BorderStyle.Double })
+            {
+                var row = table.AddRow();
+                row.Height = Unit.FromPoint(100);
+                row.HeightRule = MigraDoc.DocumentObjectModel.Tables.RowHeightRule.Exactly;
+                row[0].Borders.Style = style;
+                row[0].Borders.Width = style == BorderStyle.Triple ? 2 : 1;
+                row[0].AddParagraph("Cell");
+            }
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            cells.GetEffectiveBordersPdf(table[1, 0], -1).Top.Style.Should().Be(BorderStyle.Triple);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.Pages.Count.Should().Be(2);
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 1);
+            content.Should().Contain("2 w", "the winning triple top edge is painted on this page");
+            content.Should().NotMatchRegex(@"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+S$",
+                "the losing double cell must not paint a closed box over its top edge");
+        }
+
+        [Fact]
+        public void Merged_cell_terminal_border_prevents_a_closed_triple_box()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].MergeRight = 1;
+            row[0].Borders.Style = BorderStyle.Triple;
+            row[0].Borders.Width = 2;
+            row[0].AddParagraph("Merged");
+            row[1].Borders.Right.Style = BorderStyle.Single;
+            row[1].Borders.Right.Width = 1;
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            cells.GetEffectiveBordersPdf(row[0], -1).Right.Style.Should().Be(BorderStyle.Single);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().NotContain("W* n");
+        }
+
+        [Fact]
+        public void Header_rows_render_their_own_four_way_triple_junction()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var index = 0; index < 2; index++)
+            {
+                var row = table.AddRow();
+                row.HeadingFormat = true;
+                for (var column = 0; column < 2; column++)
+                {
+                    row[column].Borders.Style = BorderStyle.Triple;
+                    row[column].Borders.Width = 3;
+                    row[column].AddParagraph("Header");
+                }
+            }
+            table.AddRow()[0].AddParagraph("Body");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            BorderStrokes(content).Count.Should().Be(10);
+        }
+
+        [Fact]
+        public void First_body_rail_masks_the_repeated_header_boundary()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var header = table.AddRow();
+            header.HeadingFormat = true;
+            header[0].Borders.Style = BorderStyle.Triple;
+            header[0].Borders.Width = 3;
+            header[0].AddParagraph("Header");
+            var body = table.AddRow();
+            body[0].Borders.Style = BorderStyle.Double;
+            body[0].Borders.Width = 4;
+            body[0].AddParagraph("Body");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().Contain("3 w").And.Contain("4 w");
+            // The body mask clips the header's lower rail before the body pass
+            // paints its own box at the shared boundary.
+            Regex.Matches(content, @"W\* n").Count.Should().Be(4);
+        }
+
+        [Fact]
+        public void Isolated_triple_edge_wins_over_narrower_single_only_in_pdf()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            row[0].Borders.Right.Style = BorderStyle.Triple;
+            row[0].Borders.Right.Width = 1;
+            row[1].Borders.Left.Style = BorderStyle.Single;
+            row[1].Borders.Left.Width = 2;
+
+            var pdfCells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            pdfCells.GetEffectiveBordersPdf(row[0], -1).Right.Style.Should().Be(BorderStyle.Triple);
+            pdfCells.GetEffectiveBordersPdf(row[1], -1).Left.Style.Should().Be(BorderStyle.Triple);
+
+            var rtfCells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            rtfCells.GetEffectiveBordersRtf(row[0]).Right.Style.Should().Be(BorderStyle.Single);
+            rtfCells.GetEffectiveBordersRtf(row[1]).Left.Style.Should().Be(BorderStyle.Single);
+
+            row[0].AddParagraph("Left");
+            row[1].AddParagraph("Right");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            Regex.Matches(content, @"(?m)^2 w$").Should().BeEmpty();
+            Regex.Matches(content, @"(?m)^1 w$").Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public void Isolated_horizontal_triple_edge_wins_over_narrower_single_only_in_pdf()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var top = table.AddRow()[0];
+            var bottom = table.AddRow()[0];
+            top.Borders.Bottom.Style = BorderStyle.Triple;
+            top.Borders.Bottom.Width = 1;
+            bottom.Borders.Top.Style = BorderStyle.Single;
+            bottom.Borders.Top.Width = 2;
+
+            var pdfCells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            pdfCells.GetEffectiveBordersPdf(top, -1).Bottom.Style.Should().Be(BorderStyle.Triple);
+            pdfCells.GetEffectiveBordersPdf(bottom, -1).Top.Style.Should().Be(BorderStyle.Triple);
+
+            var rtfCells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            rtfCells.GetEffectiveBordersRtf(top).Bottom.Style.Should().Be(BorderStyle.Single);
+            rtfCells.GetEffectiveBordersRtf(bottom).Top.Style.Should().Be(BorderStyle.Single);
+        }
+
+        [Fact]
+        public void Closed_rail_cell_beside_vertical_merge_renders_across_boundary()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var first = table.AddRow();
+            first[0].Borders.Style = BorderStyle.Double;
+            first[0].Borders.Width = 2;
+            first[0].AddParagraph("Double");
+            first[1].MergeDown = 1;
+            first[1].AddParagraph("Merged");
+            var second = table.AddRow();
+            second[0].AddParagraph("Other");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            DoubleBorderBoxes(content).Should().HaveCount(2);
+        }
+
+        [Fact]
+        public void Closed_rail_cell_merged_into_final_row_reserves_bottom_band()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var first = table.AddRow();
+            first[0].MergeDown = 1;
+            first[0].Borders.Style = BorderStyle.Triple;
+            first[0].Borders.Width = 3;
+            first[0].AddParagraph("Merged triple");
+            first[1].Borders.Style = BorderStyle.Single;
+            first[1].Borders.Width = 1;
+            first[1].AddParagraph("Top");
+            var last = table.AddRow();
+            last[1].Borders.Style = BorderStyle.Single;
+            last[1].Borders.Width = 1;
+            last[1].AddParagraph("Bottom");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var tableInfo = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .Single(info => info.FormatInfo is TableFormatInfo);
+            var margin = (XUnitPt)tableInfo.LayoutInfo.GetType()
+                .GetProperty("MarginBottom", System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic)!
+                .GetValue(tableInfo.LayoutInfo)!;
+            margin.Point.Should().BeApproximately(7, .02);
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void Fragment_keeps_double_edge_when_closed_owner_is_on_other_page(bool closedFirst)
+        {
+            var document = new Document();
+            var section = document.AddSection();
+            section.PageSetup.PageHeight = Unit.FromPoint(792);
+            section.PageSetup.TopMargin = Unit.FromPoint(72);
+            section.PageSetup.BottomMargin = Unit.FromPoint(72);
+            var table = section.AddTable();
+            table.AddColumn(Unit.FromPoint(300));
+            var first = table.AddRow();
+            first.Height = Unit.FromPoint(500);
+            first.HeightRule = MigraDoc.DocumentObjectModel.Tables.RowHeightRule.Exactly;
+            if (closedFirst)
+            {
+                first[0].Borders.Style = BorderStyle.Double;
+                first[0].Borders.Width = 2;
+            }
+            else
+            {
+                first[0].Borders.Bottom.Style = BorderStyle.Double;
+                first[0].Borders.Bottom.Width = 2;
+            }
+            first[0].AddParagraph("First");
+            var second = table.AddRow();
+            second.Height = Unit.FromPoint(300);
+            second.HeightRule = MigraDoc.DocumentObjectModel.Tables.RowHeightRule.Exactly;
+            if (closedFirst)
+            {
+                second[0].Borders.Top.Style = BorderStyle.Double;
+                second[0].Borders.Top.Width = 2;
+            }
+            else
+            {
+                second[0].Borders.Style = BorderStyle.Double;
+                second[0].Borders.Width = 2;
+            }
+            second[0].AddParagraph("Second");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.Pages.Count.Should().Be(2);
+            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument,
+                    closedFirst ? 1 : 0))
+                .Cast<Match>().Where(match =>
+                    Math.Abs(double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture) -
+                             double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)) < .01 &&
+                    Math.Abs(double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture) -
+                             double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture)) > 100)
+                .ToArray();
+            strokes.Should().HaveCount(2);
+        }
+
+        [Fact]
+        public void Four_neighbor_double_junction_turns_both_rails_around_cell_corners()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    var isDouble = rowIndex != column;
+                    row[column].Borders.Style = isDouble ? BorderStyle.Double : BorderStyle.Single;
+                    row[column].Borders.Width = isDouble ? 2 : 1;
+                    row[column].AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().Contain("W* n");
+            var lines = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .TakeLast(8).ToArray();
+            lines.Count(line => Math.Abs(line.X1 - line.X2) < .01).Should().Be(4);
+            lines.Count(line => Math.Abs(line.Y1 - line.Y2) < .01).Should().Be(4);
+        }
+
+        [Fact]
+        public void Mixed_single_double_triple_cells_keep_individual_closed_rail_boxes()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            for (var column = 0; column < 3; column++) table.AddColumn("4cm");
+            var row = table.AddRow();
+            row.Height = "2cm";
+            static void SetCellBorders(MigraDoc.DocumentObjectModel.Tables.Cell cell, BorderStyle style, int width)
+            {
+                foreach (var border in new[] { cell.Borders.Top, cell.Borders.Right,
+                             cell.Borders.Bottom, cell.Borders.Left })
+                {
+                    border.Style = style;
+                    border.Width = width;
+                }
+            }
+            SetCellBorders(row[0], BorderStyle.Single, 1);
+            SetCellBorders(row[1], BorderStyle.Double, 2);
+            SetCellBorders(row[2], BorderStyle.Triple, 3);
+            for (var column = 0; column < 3; column++) row[column].AddParagraph($"{column}");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var boxes = DoubleBorderBoxes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0));
+            boxes.Should().HaveCount(5);
+            var groups = boxes.GroupBy(box => Math.Round(box.X + box.Width / 2, 2))
+                .OrderBy(group => group.Key).ToArray();
+            groups.Should().HaveCount(2);
+            groups[0].Should().HaveCount(2);
+            groups[1].Should().HaveCount(3);
+            var doubleRails = groups[0].OrderBy(box => box.Width).ToArray();
+            AssertEncloses(doubleRails[1], doubleRails[0]);
+            (doubleRails[0].X - doubleRails[1].X).Should().BeApproximately(4, .02);
+            var tripleRails = groups[1].OrderBy(box => box.Width).ToArray();
+            AssertEncloses(tripleRails[2], tripleRails[1]);
+            AssertEncloses(tripleRails[1], tripleRails[0]);
+            (tripleRails[0].X - tripleRails[1].X).Should().BeApproximately(6, .02);
+            (tripleRails[1].X - tripleRails[2].X).Should().BeApproximately(6, .02);
+
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().Contain("W* n");
+            Regex.Matches(content, @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$")
+                .Should().BeEmpty();
+        }
+
+        [Fact]
+        public void Mixed_decorative_junction_stops_vertical_rails_at_horizontal_band()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("4cm");
+            var cell = table.AddRow()[0];
+            cell.AddParagraph("Junction");
+            cell.Borders.Top.Style = BorderStyle.Triple;
+            cell.Borders.Top.Width = 2;
+            cell.Borders.Bottom.Style = BorderStyle.DoubleWave;
+            cell.Borders.Bottom.Width = 2;
+            cell.Borders.Left.Style = BorderStyle.Dot;
+            cell.Borders.Left.Width = 2;
+            cell.Borders.Right.Style = BorderStyle.ThinThickMediumGap;
+            cell.Borders.Right.Width = 2;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var segments = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            var vertical = segments.Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                Math.Abs(line.Y1 - line.Y2) > 5).ToArray();
+            var wave = segments.Where(line => Math.Abs(line.X1 - line.X2) > .05 &&
+                Math.Abs(line.Y1 - line.Y2) > .05 && Math.Abs(line.Y1 - line.Y2) < 5).ToArray();
+            vertical.Should().NotBeEmpty();
+            wave.Should().NotBeEmpty();
+            var waveMin = wave.Min(line => Math.Min(line.Y1, line.Y2));
+            var waveMax = wave.Max(line => Math.Max(line.Y1, line.Y2));
+            foreach (var line in vertical)
+            {
+                var overlap = Math.Min(Math.Max(line.Y1, line.Y2), waveMax) -
+                    Math.Max(Math.Min(line.Y1, line.Y2), waveMin);
+                overlap.Should().BeLessThan(.05);
+            }
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Double, 2)]
+        [InlineData(BorderStyle.Triple, 3)]
+        public void Mixed_multi_rail_junction_stops_vertical_rails_before_horizontal_rails(
+            BorderStyle horizontalStyle, int expectedHorizontalRails)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("4cm");
+            var cell = table.AddRow()[0];
+            cell.AddParagraph("Junction");
+            cell.Borders.Top.Style = BorderStyle.Single;
+            cell.Borders.Top.Width = 1;
+            cell.Borders.Bottom.Style = horizontalStyle;
+            cell.Borders.Bottom.Width = 2;
+            cell.Borders.Left.Style = BorderStyle.ThinThickMediumGap;
+            cell.Borders.Left.Width = 2;
+            cell.Borders.Right.Style = BorderStyle.ThinThickMediumGap;
+            cell.Borders.Right.Width = 2;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var segments = Regex.Matches(content,
+                    @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
+                .Cast<Match>()
+                .Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                .ToArray();
+            var vertical = segments.Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                Math.Abs(line.Y1 - line.Y2) > 5).ToArray();
+            var horizontal = segments.Where(line => Math.Abs(line.Y1 - line.Y2) < .01 &&
+                Math.Abs(line.X1 - line.X2) > 20).ToArray();
+            vertical.Should().HaveCount(4);
+            horizontal.Should().HaveCount(expectedHorizontalRails + 1);
+            var bottomRails = horizontal.OrderBy(line => line.Y1).Take(expectedHorizontalRails).ToArray();
+            var bottomMin = bottomRails.Min(line => line.Y1);
+            var bottomMax = bottomRails.Max(line => line.Y1);
+            foreach (var line in vertical)
+            {
+                var overlap = Math.Min(Math.Max(line.Y1, line.Y2), bottomMax) -
+                    Math.Max(Math.Min(line.Y1, line.Y2), bottomMin);
+                overlap.Should().BeLessThan(.05);
+            }
+        }
 
         [Fact]
         public void Uniform_three_by_three_double_grid_has_closed_cell_and_perimeter_paths()
@@ -937,6 +1685,351 @@ namespace MigraDoc.Tests
             pdfRenderer.PdfDocument.Save(filename);
             // … and start a viewer.
             PdfFileUtility.ShowDocumentIfDebugging(filename);
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Black_three_dimensional_borders_include_visible_highlights(BorderStyle style)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var cell = table.AddRow()[0];
+            cell.Borders.Style = style;
+            cell.Borders.Width = 3;
+            cell.AddParagraph("Cell");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            // Both grey rails and the original black rail must be present.
+            content.Should().Contain(".278 .278 .278 RG");
+            content.Should().Contain(".102 .102 .102 RG");
+            content.Should().Contain("0 0 0 RG");
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D, BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Emboss3D, BorderStyle.Engrave3D)]
+        [InlineData(BorderStyle.Engrave3D, BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D, BorderStyle.Engrave3D)]
+        public void Three_dimensional_edges_stop_at_their_junctions(
+            BorderStyle upperStyle, BorderStyle lowerStyle)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    var cell = row[column];
+                    cell.Borders.Style = rowIndex == 0 ? upperStyle : lowerStyle;
+                    cell.Borders.Width = 3;
+                    cell.AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var verticalStrokes = BorderStrokes(content).Cast<Match>().Select(match =>
+                (Y1: double.Parse(match.Groups["y1"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                 Y2: double.Parse(match.Groups["y2"].Value, System.Globalization.CultureInfo.InvariantCulture)))
+                .Where(line => Math.Abs(line.Y2 - line.Y1) > .1).ToArray();
+            verticalStrokes.Should().NotBeEmpty();
+            verticalStrokes.Max(line => Math.Abs(line.Y2 - line.Y1)).Should().BeLessThan(60,
+                "each 3D border segment must end before the next junction");
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Three_dimensional_missing_edges_leave_the_corner_clear(BorderStyle style)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var cell = table.AddRow()[0];
+            cell.Borders.Style = style;
+            cell.Borders.Width = 3;
+            cell.Borders.Top.Visible = false;
+            cell.Borders.Left.Visible = false;
+            cell.AddParagraph("Cell");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            // The present right and bottom edges form one full-tile miter;
+            // no top or left segment is drawn beyond the junction tiles.
+            BorderStrokes(content).Cast<Match>().Should().HaveCount(6);
+            Regex.Matches(content, @"W\* n").Count.Should().Be(4,
+                "the two line caps and both triangular faces of the elbow are clipped separately");
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Three_dimensional_terminal_tiles_move_inside_missing_left_edge(BorderStyle style)
+        {
+            double LeftmostBorderInk(bool hideLeft)
+            {
+                var document = new Document();
+                var table = document.AddSection().AddTable();
+                table.AddColumn("3cm");
+                var cell = table.AddRow()[0];
+                cell.Borders.Style = style;
+                cell.Borders.Width = 3;
+                cell.Borders.Left.Visible = !hideLeft;
+                cell.AddParagraph("Cell");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.RenderDocument();
+                var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+                var coordinates = Regex.Matches(content, @"(?m)(?<x>-?[\d.]+) -?[\d.]+ [ml]")
+                    .Cast<Match>().Select(match => double.Parse(match.Groups["x"].Value,
+                        CultureInfo.InvariantCulture)).ToArray();
+                coordinates.Should().NotBeEmpty();
+                return coordinates.Min();
+            }
+
+            LeftmostBorderInk(true).Should().BeGreaterThan(LeftmostBorderInk(false) + 2,
+                "the bottom edge's terminal tile must move inward when the left edge is absent");
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Three_dimensional_junction_omits_two_missing_arms(BorderStyle style)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var top = table.AddRow();
+            var bottom = table.AddRow();
+            foreach (var row in new[] { top, bottom })
+            foreach (var cell in new[] { row[0], row[1] })
+            {
+                cell.Borders.Style = style;
+                cell.Borders.Width = 3;
+                cell.AddParagraph("Cell");
+            }
+            top[0].Borders.Right.Visible = false;
+            top[1].Borders.Left.Visible = false;
+            top[0].Borders.Bottom.Visible = false;
+            bottom[0].Borders.Top.Visible = false;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            // Ten grid spans remain after the two absent spans are removed;
+            // each has exactly three shaded strokes.
+            BorderStrokes(content).Cast<Match>().Should().HaveCount(30);
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Three_dimensional_grid_positions_visible_lower_rail_from_its_own_segment(BorderStyle style)
+        {
+            double[] LowerInternalRails(bool hideUpper)
+            {
+                var document = new Document();
+                var table = document.AddSection().AddTable();
+                table.AddColumn("3cm");
+                table.AddColumn("3cm");
+                for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+                {
+                    var row = table.AddRow();
+                    row.Height = "2cm";
+                    foreach (var cell in new[] { row[0], row[1] })
+                    {
+                        cell.Borders.Style = style;
+                        cell.Borders.Width = 3;
+                        cell.AddParagraph("Cell");
+                    }
+                }
+                if (hideUpper)
+                {
+                    table[0, 0].Borders.Right.Visible = false;
+                    table[0, 1].Borders.Left.Visible = false;
+                }
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.RenderDocument();
+                var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+                return BorderStrokes(content).Cast<Match>().Select(match => (
+                    X1: double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture),
+                    Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
+                    X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
+                    Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
+                    .Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                        Math.Abs(line.Y1 - line.Y2) > 10 && line.X1 > 120 && line.X1 < 180 &&
+                        Math.Min(line.Y1, line.Y2) < 700)
+                    .Select(line => line.X1).Order().ToArray();
+            }
+
+            var expected = LowerInternalRails(false);
+            expected.Should().NotBeEmpty();
+            LowerInternalRails(true).Should().Equal(expected,
+                "a hidden upper segment must not shift the visible lower 3D rail");
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D, false)]
+        [InlineData(BorderStyle.Emboss3D, true)]
+        [InlineData(BorderStyle.Engrave3D, false)]
+        [InlineData(BorderStyle.Engrave3D, true)]
+        public void Non_uniform_three_dimensional_grid_stops_vertical_rails_at_horizontal_bands(
+            BorderStyle style, bool repeatedHeading)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                foreach (var cell in new[] { row[0], row[1] })
+                {
+                    cell.Borders.Style = style;
+                    cell.Borders.Width = 3;
+                    cell.AddParagraph("Cell");
+                }
+            }
+            // Either condition forces the cell-by-cell fallback.
+            if (repeatedHeading)
+                table.Rows[0].HeadingFormat = true;
+            else
+                table[0, 0].Borders.Top.Style = BorderStyle.Single;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var segments = BorderStrokes(content).Cast<Match>().Select(match =>
+            {
+                double Coordinate(string group) => double.Parse(match.Groups[group].Value,
+                    CultureInfo.InvariantCulture);
+                return (X1: Coordinate("x1"), Y1: Coordinate("y1"),
+                    X2: Coordinate("x2"), Y2: Coordinate("y2"));
+            }).ToArray();
+            var vertical = segments.Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                Math.Abs(line.Y1 - line.Y2) > 10).ToArray();
+            var horizontal = segments.Where(line => Math.Abs(line.Y1 - line.Y2) < .01 &&
+                Math.Abs(line.X1 - line.X2) > 10).ToArray();
+            vertical.Should().NotBeEmpty();
+            horizontal.Should().NotBeEmpty();
+            var overlaps = from line in vertical
+                from band in horizontal
+                where line.X1 > Math.Min(band.X1, band.X2) + .01 &&
+                      line.X1 < Math.Max(band.X1, band.X2) - .01 &&
+                      band.Y1 > Math.Min(line.Y1, line.Y2) + .01 &&
+                      band.Y1 < Math.Max(line.Y1, line.Y2) - .01
+                select (line, band);
+            overlaps.Should().BeEmpty("horizontal 3D bands own their crossings in the fallback renderer");
+        }
+
+        [Theory]
+        [InlineData(0.25)]
+        [InlineData(3.0)]
+        public void Dash_dot_stroked_hatches_stay_in_the_reserved_border_band(double width)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var cell = table.AddRow()[0];
+            cell.Borders.Style = BorderStyle.DashDotStroked;
+            cell.Borders.Width = width;
+            cell.AddParagraph("Cell");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var clips = Regex.Matches(content,
+                @"(?m)^q\s+(?:-?[\d.]+ -?[\d.]+ m\s+)(?:-?[\d.]+ -?[\d.]+ l\s+){3}h\s+W\* n");
+            clips.Count.Should().Be(4, "each side has its own horizontal or vertical hatch band");
+            foreach (Match clip in clips)
+            {
+                var points = Regex.Matches(clip.Value,
+                    @"(?m)(?<x>-?[\d.]+) (?<y>-?[\d.]+) [ml]")
+                    .Cast<Match>().Select(match => (
+                        X: double.Parse(match.Groups["x"].Value, CultureInfo.InvariantCulture),
+                        Y: double.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture)))
+                    .ToArray();
+                points.Should().HaveCount(4);
+                var clipWidth = points.Max(point => point.X) - points.Min(point => point.X);
+                var clipHeight = points.Max(point => point.Y) - points.Min(point => point.Y);
+                Math.Min(clipWidth, clipHeight).Should().BeApproximately(width, .001,
+                    "the hatch pen must not paint beyond the width reserved by table layout");
+            }
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Wave, 0.1, 0.1)]
+        [InlineData(BorderStyle.DoubleWave, 0.1, 0.25)]
+        public void Thin_waves_stay_in_the_reserved_border_band(
+            BorderStyle style, double strokeWidth, double bandWidth)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var cell = table.AddRow()[0];
+            cell.Borders.Style = style;
+            cell.Borders.Width = strokeWidth;
+            cell.AddParagraph("Cell");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var clips = Regex.Matches(content,
+                @"(?m)^q\s+(?:-?[\d.]+ -?[\d.]+ m\s+)(?:-?[\d.]+ -?[\d.]+ l\s+){3}h\s+W\* n");
+            clips.Count.Should().Be(4, "each wave side is clipped to its own reserved band");
+            foreach (Match clip in clips)
+            {
+                var points = Regex.Matches(clip.Value,
+                    @"(?m)(?<x>-?[\d.]+) (?<y>-?[\d.]+) [ml]")
+                    .Cast<Match>().Select(match => (
+                        X: double.Parse(match.Groups["x"].Value, CultureInfo.InvariantCulture),
+                        Y: double.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture)))
+                    .ToArray();
+                points.Should().HaveCount(4);
+                var clipWidth = points.Max(point => point.X) - points.Min(point => point.X);
+                var clipHeight = points.Max(point => point.Y) - points.Min(point => point.Y);
+                Math.Min(clipWidth, clipHeight).Should().BeApproximately(bandWidth, .001);
+            }
+        }
+
+        [Fact]
+        public void Closed_rail_exclusion_clip_covers_a_tall_custom_page()
+        {
+            var document = new Document();
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(612);
+            section.PageSetup.PageHeight = Unit.FromPoint(11000);
+            section.PageSetup.TopMargin = Unit.FromPoint(10050);
+            var table = section.AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var row = table.AddRow();
+            foreach (var cell in new[] { row[0], row[1] })
+            {
+                cell.Borders.Style = BorderStyle.Triple;
+                cell.Borders.Width = 3;
+                cell.AddParagraph("Cell");
+            }
+            row[1].Borders.Top.Style = BorderStyle.Single;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            Regex.IsMatch(content,
+                @"(?m)^0 11000 m\s+612 11000 l\s+612 0 l\s+0 0 l\s+h\s+(?:-?[\d.]+ -?[\d.]+ [ml]\s+){4}h\s+W\* n")
+                .Should().BeTrue(
+                "the inverse border clip must span the actual page, including the table below 10,000 points");
         }
     }
 }

@@ -45,24 +45,24 @@ namespace MigraDoc.DocumentObjectModel
 
         Double,
 
-        /* --- unsupported ---
-          Triple                = 8,
-          ThinThickSmallGap     = 9,
-          ThickThinSmallGap     = 10,
-          ThinThickThinSmallGap = 11,
-          ThinThickMedGap       = 12,
-          ThickThinMedGap       = 13,
-          ThinThickThinMedGap   = 14,
-          ThinThickLargeGap     = 15,
-          ThickThinLargeGap     = 16,
-          ThinThickThinLargeGap = 17,
-          SingleWavy            = 18,
-          DoubleWavy            = 19,
-          DashDotStroked        = 20,
-          Emboss3D              = 21,
-          Engrave3D             = 22,
-          LineStyleOutset       = 23,
-          LineStyleInset        = 24
-        */
+        Triple,
+
+        ThinThickSmallGap,
+        ThickThinSmallGap,
+        ThinThickThinSmallGap,
+        ThinThickMediumGap,
+        ThickThinMediumGap,
+        ThinThickThinMediumGap,
+        ThinThickLargeGap,
+        ThickThinLargeGap,
+        ThinThickThinLargeGap,
+
+        Wave,
+        DoubleWave,
+        DashDotStroked,
+
+        Emboss3D,
+        Engrave3D,
+
     }
 }
