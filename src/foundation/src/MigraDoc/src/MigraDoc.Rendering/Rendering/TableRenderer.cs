@@ -228,7 +228,7 @@ namespace MigraDoc.Rendering
             var bottomStyle = bordersRenderer.GetStyle(BorderType.Bottom);
             var horizontalOwnsBottomJunction = bottomStyle is BorderStyle.Double or
                 BorderStyle.Triple or BorderStyle.Wave or BorderStyle.DoubleWave or
-                BorderStyle.DashDotStroked ||
+                BorderStyle.DashDotStroked or BorderStyle.Emboss3D or BorderStyle.Engrave3D ||
                 CompoundProfile(bottomStyle) != null;
             var verticalBottom = horizontalOwnsBottomJunction ? bottomPos : bottomPos + bottomWidth;
 

@@ -1723,5 +1723,60 @@ namespace MigraDoc.Tests
             // each has exactly three shaded strokes.
             BorderStrokes(content).Cast<Match>().Should().HaveCount(30);
         }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D, false)]
+        [InlineData(BorderStyle.Emboss3D, true)]
+        [InlineData(BorderStyle.Engrave3D, false)]
+        [InlineData(BorderStyle.Engrave3D, true)]
+        public void Non_uniform_three_dimensional_grid_stops_vertical_rails_at_horizontal_bands(
+            BorderStyle style, bool repeatedHeading)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                foreach (var cell in new[] { row[0], row[1] })
+                {
+                    cell.Borders.Style = style;
+                    cell.Borders.Width = 3;
+                    cell.AddParagraph("Cell");
+                }
+            }
+            // Either condition forces the cell-by-cell fallback.
+            if (repeatedHeading)
+                table.Rows[0].HeadingFormat = true;
+            else
+                table[0, 0].Borders.Top.Style = BorderStyle.Single;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var segments = BorderStrokes(content).Cast<Match>().Select(match =>
+            {
+                double Coordinate(string group) => double.Parse(match.Groups[group].Value,
+                    CultureInfo.InvariantCulture);
+                return (X1: Coordinate("x1"), Y1: Coordinate("y1"),
+                    X2: Coordinate("x2"), Y2: Coordinate("y2"));
+            }).ToArray();
+            var vertical = segments.Where(line => Math.Abs(line.X1 - line.X2) < .01 &&
+                Math.Abs(line.Y1 - line.Y2) > 10).ToArray();
+            var horizontal = segments.Where(line => Math.Abs(line.Y1 - line.Y2) < .01 &&
+                Math.Abs(line.X1 - line.X2) > 10).ToArray();
+            vertical.Should().NotBeEmpty();
+            horizontal.Should().NotBeEmpty();
+            var overlaps = from line in vertical
+                from band in horizontal
+                where line.X1 > Math.Min(band.X1, band.X2) + .01 &&
+                      line.X1 < Math.Max(band.X1, band.X2) - .01 &&
+                      band.Y1 > Math.Min(line.Y1, line.Y2) + .01 &&
+                      band.Y1 < Math.Max(line.Y1, line.Y2) - .01
+                select (line, band);
+            overlaps.Should().BeEmpty("horizontal 3D bands own their crossings in the fallback renderer");
+        }
     }
 }
