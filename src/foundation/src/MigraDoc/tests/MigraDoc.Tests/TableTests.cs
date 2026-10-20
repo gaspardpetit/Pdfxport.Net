@@ -623,9 +623,10 @@ namespace MigraDoc.Tests
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
-            // The triple rails are clipped without painting an opaque band over
-            // the wider single border or the page background.
-            content.Should().Contain("W* n");
+            // The 20-point single edge wins over the entire 15-point triple
+            // band. No closed-cell clipping may erase that winning edge.
+            content.Should().Contain("20 w");
+            content.Should().NotContain("W* n");
             Regex.Matches(content, @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$")
                 .Should().BeEmpty();
         }

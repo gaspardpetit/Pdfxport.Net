@@ -622,9 +622,10 @@ namespace MigraDoc.Rendering
         {
             pen = null;
             style = BorderStyle.None;
-            if (cell.RoundedCorner != RoundedCorner.None)
+            if (cell.RoundedCorner != RoundedCorner.None || _mergedCells.GetCoveringCell(cell) != cell)
                 return false;
             var renderer = new BordersRenderer(cell.Borders, _gfx);
+            var effective = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), _gfx);
             foreach (var side in new[] { BorderType.Top, BorderType.Right, BorderType.Bottom, BorderType.Left })
             {
                 var edgeStyle = renderer.GetStyle(side);
@@ -637,6 +638,16 @@ namespace MigraDoc.Rendering
                 var edgePen = renderer.GetPen(side);
                 if (edgePen == null || edgePen.DashStyle != XDashStyle.Solid ||
                     pen != null && (pen.Width != edgePen.Width || pen.Color != edgePen.Color))
+                    return false;
+                // The effective-border resolver compares nominal widths, while
+                // a multi-rail edge occupies a larger band. Keep the closed
+                // box when that band wins; yield to a genuinely wider edge.
+                var winningStyle = effective.GetStyle(side);
+                if (winningStyle != edgeStyle &&
+                    winningStyle is not (BorderStyle.Double or BorderStyle.Triple) &&
+                    CompoundProfile(winningStyle) == null &&
+                    effective.GetWidth(side).Point >
+                    edgePen.Width * ClosedRailWidthMultiplier(edgeStyle))
                     return false;
                 pen ??= edgePen;
             }
