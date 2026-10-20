@@ -146,6 +146,12 @@ namespace MigraDoc.Rendering
         public Func<Table, int, double?>? TableFragmentTopBorderReservation { get; set; }
 
         /// <summary>
+        /// Optionally supplies a cell's paint and content rectangles after table
+        /// layout. Null preserves the renderer's normal placement.
+        /// </summary>
+        public Func<Cell, TableCellPlacementContext, TableCellPlacement?>? TableCellPlacement { get; set; }
+
+        /// <summary>
         /// Selects text frames whose content is clipped to the frame rectangle when
         /// <see cref="TextFrame.ClipContent"/> has not been set.
         /// </summary>
