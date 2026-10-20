@@ -1316,5 +1316,27 @@ namespace MigraDoc.Tests
             // … and start a viewer.
             PdfFileUtility.ShowDocumentIfDebugging(filename);
         }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Black_three_dimensional_borders_include_visible_highlights(BorderStyle style)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var cell = table.AddRow()[0];
+            cell.Borders.Style = style;
+            cell.Borders.Width = 3;
+            cell.AddParagraph("Cell");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            // Both grey rails and the original black rail must be present.
+            content.Should().Contain(".4 .4 .4 RG");
+            content.Should().Contain(".149 .149 .149 RG");
+            content.Should().Contain("0 0 0 RG");
+        }
     }
 }

@@ -424,13 +424,13 @@ namespace MigraDoc.Rendering
         void RenderThreeDimensional(XUnitPt left, XUnitPt top, XUnitPt length,
             bool vertical, bool emboss, XPen source)
         {
-            static XColor Scale(XColor color, double factor) => XColor.FromArgb(
+            static XColor Highlight(XColor color, double amount) => XColor.FromArgb(
                 (int)Math.Round(color.A * 255),
-                Math.Min(255, (int)Math.Round(color.R * factor)),
-                Math.Min(255, (int)Math.Round(color.G * factor)),
-                Math.Min(255, (int)Math.Round(color.B * factor)));
-            var shade = Scale(source.Color, 3.25);
-            var middle = Scale(source.Color, 1.3);
+                (int)Math.Round(color.R + (255 - color.R) * amount),
+                (int)Math.Round(color.G + (255 - color.G) * amount),
+                (int)Math.Round(color.B + (255 - color.B) * amount));
+            var shade = Highlight(source.Color, .4);
+            var middle = Highlight(source.Color, .15);
             var colors = emboss
                 ? new[] { shade, middle, source.Color }
                 : new[] { source.Color, middle, shade };

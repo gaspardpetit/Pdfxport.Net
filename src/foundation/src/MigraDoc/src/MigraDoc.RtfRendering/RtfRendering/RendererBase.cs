@@ -114,6 +114,19 @@ namespace MigraDoc.RtfRendering
             _enumTranslationTable.Add(BorderStyle.Dot, "dot");
             _enumTranslationTable.Add(BorderStyle.Double, "db");
             _enumTranslationTable.Add(BorderStyle.Single, "s");
+            // RTF does not expose every PDF border variant. Use the nearest
+            // supported style so a document remains renderable in RTF.
+            foreach (var style in new[] { BorderStyle.Triple,
+                         BorderStyle.ThinThickSmallGap, BorderStyle.ThickThinSmallGap,
+                         BorderStyle.ThinThickThinSmallGap, BorderStyle.ThinThickMediumGap,
+                         BorderStyle.ThickThinMediumGap, BorderStyle.ThinThickThinMediumGap,
+                         BorderStyle.ThinThickLargeGap, BorderStyle.ThickThinLargeGap,
+                         BorderStyle.ThinThickThinLargeGap, BorderStyle.DoubleWave })
+                _enumTranslationTable.Add(style, "db");
+            foreach (var style in new[] { BorderStyle.Wave, BorderStyle.Emboss3D,
+                         BorderStyle.Engrave3D })
+                _enumTranslationTable.Add(style, "s");
+            _enumTranslationTable.Add(BorderStyle.DashDotStroked, "dashd");
             //BorderType.None simply not rendered.
 
             //TabLeader

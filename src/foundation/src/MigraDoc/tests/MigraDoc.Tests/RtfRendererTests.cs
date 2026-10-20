@@ -123,6 +123,26 @@ namespace MigraDoc.Tests
             rtf.Should().Contain(@"\shpwrk" + side);
         }
 
+        public static IEnumerable<object[]> BorderStyles => Enum.GetValues<BorderStyle>()
+            .Where(style => style != BorderStyle.None)
+            .Select(style => new object[] { style });
+
+        [Theory]
+        [MemberData(nameof(BorderStyles))]
+        public void EveryBorderStyleRendersToRtf(BorderStyle style)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("2cm");
+            var cell = table.AddRow()[0];
+            cell.Borders.Style = style;
+            cell.Borders.Width = 1;
+            cell.AddParagraph("Cell");
+
+            var rtf = new RtfDocumentRenderer().RenderToString(document, Environment.CurrentDirectory);
+            rtf.Should().Contain(@"\clbrdr");
+        }
+
         /// <summary>
         /// Creates an absolutely minimalistic document.
         /// </summary>
