@@ -370,7 +370,7 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
-        public void Word_cell_geometry_positions_shading_from_each_cells_own_border_band()
+        public void Cell_placement_callback_can_position_shading_from_border_bands()
         {
             var document = new Document();
             var table = document.AddSection().AddTable();
@@ -389,7 +389,16 @@ namespace MigraDoc.Tests
             }
 
             var renderer = new PdfDocumentRenderer { Document = document };
-            renderer.DocumentRenderer.UseWordTableCellContentMargins = true;
+            renderer.DocumentRenderer.TableCellPlacement = (_, geometry) =>
+            {
+                var grid = geometry.GridRect;
+                return new TableCellPlacement(
+                    new XRect(grid.X + geometry.LeftBand / 2,
+                        grid.Y - geometry.RowTopBand + geometry.TopBand,
+                        geometry.ColumnWidth - (geometry.LeftBand + geometry.RightBand) / 2,
+                        geometry.RowPitch + geometry.RowTopBand - geometry.TopBand - geometry.RowBottomBand),
+                    grid, Math.Max(geometry.LeftPadding, geometry.LeftBand / 2));
+            };
             renderer.RenderDocument();
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
             var shades = Regex.Matches(content,

@@ -103,10 +103,13 @@ namespace MigraDoc.Rendering
             IReadOnlyList<XRect>? borderExclusions = null)
         {
             var innerRect = displayRect ?? GetInnerRect(CalcStartingHeight(), cell);
+            var placement = ResolveCellPlacement(cell, innerRect);
+            if (placement?.PaintRect is { } paintRect)
+                innerRect = FromXRect(paintRect);
             RenderShading(cell, innerRect);
-            var contentRect = _documentRenderer?.UseWordTableCellContentMargins == true
-                ? GetInnerRect(CalcStartingHeight(), cell) : innerRect;
-            RenderContent(cell, contentRect);
+            var contentRect = placement?.ContentRect is { } overrideContentRect
+                ? FromXRect(overrideContentRect) : innerRect;
+            RenderContent(cell, contentRect, placement?.ContentLeftPadding);
             if (renderBorders)
             {
                 XGraphicsState? state = null;
@@ -399,7 +402,7 @@ namespace MigraDoc.Rendering
             bordersRenderer.RenderDiagonally(BorderType.DiagonalUp, innerRect.X, innerRect.Y, innerRect.Width, innerRect.Height);
         }
 
-        void RenderContent(Cell cell, Rectangle innerRect)
+        void RenderContent(Cell cell, Rectangle innerRect, double? leftPaddingOverride = null)
         {
             var formattedCell = _formattedCells[cell];
             var renderInfos = formattedCell.GetRenderInfos();
@@ -411,12 +414,7 @@ namespace MigraDoc.Rendering
             XUnitPt contentHeight = formattedCell.ContentHeight;
             XUnitPt innerHeight = innerRect.Height;
             Debug.Assert(cell.Column != null, "cell.Column != null");
-            var leftPadding = cell.Column.LeftPadding.Point;
-            if (_documentRenderer?.UseWordTableCellContentMargins == true)
-            {
-                var leftBand = new BordersRenderer(cell.Borders, _gfx).GetWidth(BorderType.Left).Point;
-                leftPadding = Math.Max(leftPadding, leftBand / 2);
-            }
+            var leftPadding = leftPaddingOverride ?? cell.Column.LeftPadding.Point;
             XUnitPt targetX = (float_)(innerRect.X + leftPadding);
 
             XUnitPt targetY;
@@ -594,9 +592,7 @@ namespace MigraDoc.Rendering
                 Rectangle? displayRect = null;
                 if (closed)
                     displayRect = GetClosedCellInnerRect(cell, closedBorder.Band);
-                else if (_documentRenderer?.UseWordTableCellContentMargins == true)
-                    displayRect = GetWordCellPaintRect(cell);
-                if (!closed && displayRect == null && centeredGridBand > 0)
+                else if (centeredGridBand > 0)
                 {
                     var inner = GetInnerRect(CalcStartingHeight(), cell);
                     displayRect = new Rectangle(inner.X - XUnitPt.FromPoint(centeredGridBand / 2),
@@ -713,9 +709,6 @@ namespace MigraDoc.Rendering
 
         Rectangle GetClosedCellInnerRect(Cell cell, double band)
         {
-            if (_documentRenderer?.UseWordTableCellContentMargins == true &&
-                GetWordCellPaintRect(cell) is { } wordRect)
-                return wordRect;
             var inner = GetInnerRect(CalcStartingHeight(), cell);
             var effectiveBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
             var effective = new BordersRenderer(effectiveBorders, _gfx);
@@ -726,58 +719,41 @@ namespace MigraDoc.Rendering
             // Layout reserves the winning edge width, which may belong to a
             // neighbor. The closed box uses its own band around shared row and
             // column crossings.
-            return new Rectangle(inner.X + XUnitPt.FromPoint(band / 2 - LeftBorderOffset.Point),
+            var defaultRect = new Rectangle(inner.X + XUnitPt.FromPoint(band / 2 - LeftBorderOffset.Point),
                 XUnitPt.FromPoint(topCenter + band / 2),
                 inner.Width + XUnitPt.FromPoint(rightWidth - band),
                 XUnitPt.FromPoint(bottomCenter - topCenter - band));
+            return ResolveCellPlacement(cell, defaultRect)?.PaintRect is { } paintRect
+                ? FromXRect(paintRect) : defaultRect;
         }
 
-        Rectangle? GetWordCellPaintRect(Cell cell)
+        TableCellPlacement? ResolveCellPlacement(Cell cell, Rectangle defaultPaintRect)
         {
-            if (cell.Row == null || cell.Column == null || cell.MergeDown != 0 ||
-                cell.MergeRight != 0 || !_bottomBorderMap.TryGetValue(cell.Row.Index, out var rowStart) ||
-                !_bottomBorderMap.TryGetValue(cell.Row.Index + 1, out var rowEnd))
+            var callback = _documentRenderer?.TableCellPlacement;
+            if (callback == null || cell.Row == null || cell.Column == null)
                 return null;
-            // A shared boundary reserves the widest band. Word paints each cell
-            // from its own occupied band when those bands differ across the grid.
-            if (!HasMixedBasicBorderBands())
-                return null;
+            var gridRect = GetInnerRect(CalcStartingHeight(), cell);
             var borders = new BordersRenderer(cell.Borders, _gfx);
-            var left = borders.GetWidth(BorderType.Left).Point;
-            var right = borders.GetWidth(BorderType.Right).Point;
-            var top = borders.GetWidth(BorderType.Top).Point;
-            if (left <= 0 || right <= 0 || top <= 0 ||
-                borders.GetWidth(BorderType.Bottom).Point <= 0)
-                return null;
-            var raw = GetInnerRect(CalcStartingHeight(), cell);
-            var rowTopBand = HorizontalBoundaryBands(cell.Row.Index).Widest;
-            var rowBottomBand = HorizontalBoundaryBands(cell.Row.Index + 1).Widest;
-            var width = cell.Column.Width.Point;
-            var height = (rowEnd - rowStart).Point;
-            return new Rectangle(XUnitPt.FromPoint(raw.X.Point + left / 2),
-                XUnitPt.FromPoint(raw.Y.Point - rowTopBand + top),
-                XUnitPt.FromPoint(width - (left + right) / 2),
-                XUnitPt.FromPoint(height + rowTopBand - top - rowBottomBand));
+            var row = cell.Row.Index;
+            var rowPitch = _bottomBorderMap.TryGetValue(row, out var rowStart) &&
+                _bottomBorderMap.TryGetValue(row + 1, out var rowEnd)
+                ? (rowEnd - rowStart).Point : 0;
+            return callback(cell, new TableCellPlacementContext(
+                ToXRect(gridRect), ToXRect(defaultPaintRect), cell.Column.Width.Point, rowPitch,
+                HorizontalBoundaryBands(row).Widest, HorizontalBoundaryBands(row + 1).Widest,
+                borders.GetWidth(BorderType.Left).Point,
+                borders.GetWidth(BorderType.Right).Point,
+                borders.GetWidth(BorderType.Top).Point,
+                borders.GetWidth(BorderType.Bottom).Point,
+                cell.Column.LeftPadding.Point));
         }
 
-        bool HasMixedBasicBorderBands()
-        {
-            if (_wordMixedBasicBands.HasValue)
-                return _wordMixedBasicBands.Value;
-            var widthBands = new HashSet<double>();
-            foreach (var row in _table.Rows.Cast<Row>())
-                foreach (var candidate in row.Cells.Cast<Cell>())
-                {
-                    var candidateBorders = new BordersRenderer(candidate.Borders, _gfx);
-                    foreach (var side in new[] { BorderType.Left, BorderType.Right, BorderType.Top, BorderType.Bottom })
-                    {
-                        if (candidateBorders.GetStyle(side) is not (BorderStyle.Single or BorderStyle.Double or BorderStyle.Triple))
-                            return (_wordMixedBasicBands = false).Value;
-                        widthBands.Add(candidateBorders.GetWidth(side).Point);
-                    }
-                }
-            return (_wordMixedBasicBands = widthBands.Count > 1).Value;
-        }
+        static XRect ToXRect(Rectangle rect) =>
+            new(rect.X.Point, rect.Y.Point, rect.Width.Point, rect.Height.Point);
+
+        static Rectangle FromXRect(XRect rect) =>
+            new(XUnitPt.FromPoint(rect.X), XUnitPt.FromPoint(rect.Y),
+                XUnitPt.FromPoint(rect.Width), XUnitPt.FromPoint(rect.Height));
 
         XRect[] GetClosedRailMasks(Cell cell, BorderStyle style, XPen pen, double band)
         {
@@ -2438,7 +2414,6 @@ namespace MigraDoc.Rendering
         }
 
         readonly Table _table;
-        bool? _wordMixedBasicBands;
         MergedCellList _mergedCells = null!;  // Set in InitRendering.
         readonly Dictionary<int, (double Widest, double Narrowest)> _horizontalBoundaryWidths = new();
         Dictionary<Cell, FormattedCell> _formattedCells = null!;  // Set in InitRendering. //SortedList formattedCells;
