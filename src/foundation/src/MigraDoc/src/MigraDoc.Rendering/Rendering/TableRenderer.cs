@@ -46,6 +46,7 @@ namespace MigraDoc.Rendering
 
         void InitRendering()
         {
+            _horizontalBoundaryWidths.Clear();
             var formatInfo = (TableFormatInfo)_renderInfo.FormatInfo;
             _bottomBorderMap = formatInfo.BottomBorderMap ?? NRT.ThrowOnNull<Dictionary<int, XUnitPt>>();
             //_connectedRowsMap = formatInfo.ConnectedRowsMap ?? NRT.ThrowOnNull<Dictionary<int, int>>();
@@ -83,6 +84,7 @@ namespace MigraDoc.Rendering
             // _startRow is the index of the first content row on the page. Add this index as header insertion row index to _mergedCells, 
             // to enable considering repeated headers on PDF effective border determination in MergedCellList.
             _mergedCells.AddHeaderInsertionRowIndex(_startRow);
+            _horizontalBoundaryWidths.Clear();
             var firstBodyCells = new List<Cell>();
             for (var index = 0; index < count; index++)
             {
@@ -602,12 +604,42 @@ namespace MigraDoc.Rendering
         {
             var inner = GetInnerRect(CalcStartingHeight(), cell);
             var effectiveBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
-            var rightWidth = new BordersRenderer(effectiveBorders, _gfx).GetWidth(BorderType.Right).Point;
+            var effective = new BordersRenderer(effectiveBorders, _gfx);
+            var rightWidth = effective.GetWidth(BorderType.Right).Point;
+            var bottomWidth = effective.GetWidth(BorderType.Bottom).Point;
+            var row = cell.Row!.Index;
+            var topCenter = inner.Y.Point - HorizontalBoundaryWidth(row) / 2;
+            var bottomCenter = inner.Y.Point + inner.Height.Point + bottomWidth -
+                HorizontalBoundaryWidth(row + 1) / 2;
             // Layout uses the winning shared-edge width, which may belong to
             // another cell. Draw this cell's closed rails around its own band,
             // centered on the column boundaries instead.
             return new Rectangle(inner.X + XUnitPt.FromPoint(band / 2 - LeftBorderOffset.Point),
-                inner.Y, inner.Width + XUnitPt.FromPoint(rightWidth - band), inner.Height);
+                XUnitPt.FromPoint(topCenter + band / 2),
+                inner.Width + XUnitPt.FromPoint(rightWidth - band),
+                XUnitPt.FromPoint(bottomCenter - topCenter - band));
+        }
+
+        double HorizontalBoundaryWidth(int row)
+        {
+            if (_horizontalBoundaryWidths.TryGetValue(row, out var cached))
+                return cached;
+            var width = 0.0;
+            for (var column = 0; column < _table.Columns.Count; column++)
+            {
+                if (row > 0)
+                {
+                    var previous = _mergedCells.GetEffectiveBordersPdf(_table[row - 1, column], _lastHeaderRow);
+                    width = Math.Max(width, new BordersRenderer(previous, _gfx).GetWidth(BorderType.Bottom).Point);
+                }
+                if (row < _table.Rows.Count)
+                {
+                    var next = _mergedCells.GetEffectiveBordersPdf(_table[row, column], _lastHeaderRow);
+                    width = Math.Max(width, new BordersRenderer(next, _gfx).GetWidth(BorderType.Top).Point);
+                }
+            }
+            _horizontalBoundaryWidths.Add(row, width);
+            return width;
         }
 
         void RenderClosedMultiRailCell(Cell cell, BorderStyle style, XPen pen, double band)
@@ -726,6 +758,11 @@ namespace MigraDoc.Rendering
             else if (side == BorderType.Right)
                 start = inner.X.Point + inner.Width.Point + borderWidth -
                     LeftBorderOffset.Point - borderWidth / 2;
+            else if (side == BorderType.Top)
+                start = inner.Y.Point - HorizontalBoundaryWidth(cell.Row!.Index) / 2 - borderWidth / 2;
+            else if (side == BorderType.Bottom)
+                start = inner.Y.Point + inner.Height.Point + borderWidth -
+                    HorizontalBoundaryWidth(cell.Row!.Index + 1) / 2 - borderWidth / 2;
             var positions = new double[widths.Length];
             var offset = 0.0;
             for (var index = 0; index < widths.Length; index++)
@@ -1949,6 +1986,7 @@ namespace MigraDoc.Rendering
 
         readonly Table _table;
         MergedCellList _mergedCells = null!;  // Set in InitRendering.
+        readonly Dictionary<int, double> _horizontalBoundaryWidths = new();
         Dictionary<Cell, FormattedCell> _formattedCells = null!;  // Set in InitRendering. //SortedList formattedCells;
         Dictionary<int, XUnitPt> _bottomBorderMap = null!;  // Set in InitRendering. //SortedList bottomBorderMap;
         //Dictionary<int, int> _connectedRowsMap = null!;  // Set in InitRendering. //SortedList connectedRowsMap;
