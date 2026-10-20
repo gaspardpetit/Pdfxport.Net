@@ -619,6 +619,10 @@ namespace MigraDoc.Rendering
                 (profile.ThreeRails ? profile.First : 0);
         }
 
+        // A subpixel inset keeps the antialiased white gap at a uniform two-rail
+        // crossing the same visible width as the straight gap.
+        const double TwoRailJunctionInset = 0.025;
+
         sealed class JunctionArm
         {
             public BorderStyle Style { get; init; }
@@ -746,10 +750,11 @@ namespace MigraDoc.Rendering
 
             // The outer rails turn around the four cells.  An odd profile has
             // a middle rail, which continues through both directions.
-            DrawJunctionCorner(north, 0, west, 0, x0, y0, true, true);
-            DrawJunctionCorner(north, last, east, 0, x1, y0, false, true);
-            DrawJunctionCorner(south, 0, west, last, x0, y1, true, false);
-            DrawJunctionCorner(south, last, east, last, x1, y1, false, false);
+            var opticalInset = tightClear ? TwoRailJunctionInset : 0;
+            DrawJunctionCorner(north, 0, west, 0, x0, y0, true, true, opticalInset);
+            DrawJunctionCorner(north, last, east, 0, x1, y0, false, true, opticalInset);
+            DrawJunctionCorner(south, 0, west, last, x0, y1, true, false, opticalInset);
+            DrawJunctionCorner(south, last, east, last, x1, y1, false, false, opticalInset);
             if (last == 2)
             {
                 var vertical = new XPen(north.Pen.Color, north.Widths[1]);
@@ -764,10 +769,10 @@ namespace MigraDoc.Rendering
 
         void DrawJunctionCorner(JunctionArm vertical, int verticalIndex,
             JunctionArm horizontal, int horizontalIndex, double xBoundary, double yBoundary,
-            bool left, bool top)
+            bool left, bool top, double opticalInset)
         {
-            var x = vertical.Positions[verticalIndex];
-            var y = horizontal.Positions[horizontalIndex];
+            var x = vertical.Positions[verticalIndex] + (left ? opticalInset : -opticalInset);
+            var y = horizontal.Positions[horizontalIndex] + (top ? opticalInset : -opticalInset);
             var verticalPen = new XPen(vertical.Pen.Color, vertical.Widths[verticalIndex]);
             var horizontalPen = new XPen(horizontal.Pen.Color, horizontal.Widths[horizontalIndex]);
             DrawCompoundRail(verticalPen, x, top ? yBoundary - verticalPen.Width : y - horizontalPen.Width / 2,
@@ -1045,10 +1050,10 @@ namespace MigraDoc.Rendering
                 var inner = grid[(row, column)];
                 var x = inner.X.Point - borderWidth;
                 var y = inner.Y.Point - borderWidth;
-                _gfx.DrawRectangle(XBrushes.White, new XRect(x + firstWidth, y - overlap,
-                    gap, borderWidth + 2 * overlap));
-                _gfx.DrawRectangle(XBrushes.White, new XRect(x - overlap, y + firstWidth,
-                    borderWidth + 2 * overlap, gap));
+                _gfx.DrawRectangle(XBrushes.White, new XRect(x + firstWidth + TwoRailJunctionInset, y - overlap,
+                    gap - 2 * TwoRailJunctionInset, borderWidth + 2 * overlap));
+                _gfx.DrawRectangle(XBrushes.White, new XRect(x - overlap, y + firstWidth + TwoRailJunctionInset,
+                    borderWidth + 2 * overlap, gap - 2 * TwoRailJunctionInset));
             }
         }
 
