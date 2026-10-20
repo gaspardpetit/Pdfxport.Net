@@ -712,6 +712,38 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Closed_cell_yields_to_winning_rail_from_previous_page()
+        {
+            var document = new Document();
+            var section = document.AddSection();
+            section.PageSetup.PageHeight = Unit.FromPoint(180);
+            section.PageSetup.TopMargin = Unit.FromPoint(30);
+            section.PageSetup.BottomMargin = Unit.FromPoint(30);
+            var table = section.AddTable();
+            table.AddColumn("3cm");
+            foreach (var style in new[] { BorderStyle.Triple, BorderStyle.Double })
+            {
+                var row = table.AddRow();
+                row.Height = Unit.FromPoint(100);
+                row.HeightRule = MigraDoc.DocumentObjectModel.Tables.RowHeightRule.Exactly;
+                row[0].Borders.Style = style;
+                row[0].Borders.Width = style == BorderStyle.Triple ? 2 : 1;
+                row[0].AddParagraph("Cell");
+            }
+
+            var cells = new MigraDoc.DocumentObjectModel.Visitors.MergedCellList(table);
+            cells.GetEffectiveBordersPdf(table[1, 0], -1).Top.Style.Should().Be(BorderStyle.Triple);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.Pages.Count.Should().Be(2);
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 1);
+            content.Should().Contain("2 w", "the winning triple top edge is painted on this page");
+            content.Should().NotMatchRegex(@"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+S$",
+                "the losing double cell must not paint a closed box over its top edge");
+        }
+
+        [Fact]
         public void Merged_cell_terminal_border_prevents_a_closed_triple_box()
         {
             var document = new Document();
