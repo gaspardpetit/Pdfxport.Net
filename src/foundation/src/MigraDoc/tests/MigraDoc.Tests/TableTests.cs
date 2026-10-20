@@ -1630,5 +1630,97 @@ namespace MigraDoc.Tests
             content.Should().Contain(".102 .102 .102 RG");
             content.Should().Contain("0 0 0 RG");
         }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D, BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Emboss3D, BorderStyle.Engrave3D)]
+        [InlineData(BorderStyle.Engrave3D, BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D, BorderStyle.Engrave3D)]
+        public void Three_dimensional_edges_stop_at_their_junctions(
+            BorderStyle upperStyle, BorderStyle lowerStyle)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            for (var rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                var row = table.AddRow();
+                row.Height = "2cm";
+                for (var column = 0; column < 2; column++)
+                {
+                    var cell = row[column];
+                    cell.Borders.Style = rowIndex == 0 ? upperStyle : lowerStyle;
+                    cell.Borders.Width = 3;
+                    cell.AddParagraph("Cell");
+                }
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var verticalStrokes = BorderStrokes(content).Cast<Match>().Select(match =>
+                (Y1: double.Parse(match.Groups["y1"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                 Y2: double.Parse(match.Groups["y2"].Value, System.Globalization.CultureInfo.InvariantCulture)))
+                .Where(line => Math.Abs(line.Y2 - line.Y1) > .1).ToArray();
+            verticalStrokes.Should().NotBeEmpty();
+            verticalStrokes.Max(line => Math.Abs(line.Y2 - line.Y1)).Should().BeLessThan(60,
+                "each 3D border segment must end before the next junction");
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Three_dimensional_missing_edges_leave_the_corner_clear(BorderStyle style)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var cell = table.AddRow()[0];
+            cell.Borders.Style = style;
+            cell.Borders.Width = 3;
+            cell.Borders.Top.Visible = false;
+            cell.Borders.Left.Visible = false;
+            cell.AddParagraph("Cell");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            // The present right and bottom edges form one mitered corner;
+            // no top or left stroke extends across the missing quadrants.
+            BorderStrokes(content).Cast<Match>().Should().HaveCount(6);
+            content.Should().Contain("h f");
+        }
+
+        [Theory]
+        [InlineData(BorderStyle.Emboss3D)]
+        [InlineData(BorderStyle.Engrave3D)]
+        public void Three_dimensional_junction_omits_two_missing_arms(BorderStyle style)
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var top = table.AddRow();
+            var bottom = table.AddRow();
+            foreach (var row in new[] { top, bottom })
+            foreach (var cell in new[] { row[0], row[1] })
+            {
+                cell.Borders.Style = style;
+                cell.Borders.Width = 3;
+                cell.AddParagraph("Cell");
+            }
+            top[0].Borders.Right.Visible = false;
+            top[1].Borders.Left.Visible = false;
+            top[0].Borders.Bottom.Visible = false;
+            bottom[0].Borders.Top.Visible = false;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            // Ten grid spans remain after the two absent spans are removed;
+            // each has exactly three shaded strokes.
+            BorderStrokes(content).Cast<Match>().Should().HaveCount(30);
+        }
     }
 }
