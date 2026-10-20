@@ -684,6 +684,28 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void Closed_rail_cell_beside_vertical_merge_renders_across_boundary()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            table.AddColumn("3cm");
+            var first = table.AddRow();
+            first[0].Borders.Style = BorderStyle.Double;
+            first[0].Borders.Width = 2;
+            first[0].AddParagraph("Double");
+            first[1].MergeDown = 1;
+            first[1].AddParagraph("Merged");
+            var second = table.AddRow();
+            second[0].AddParagraph("Other");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            DoubleBorderBoxes(content).Should().HaveCount(2);
+        }
+
+        [Fact]
         public void Four_neighbor_double_junction_turns_both_rails_around_cell_corners()
         {
             var document = new Document();

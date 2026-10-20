@@ -389,7 +389,7 @@ namespace MigraDoc.Rendering
 
         void RenderHatch(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, XPen source)
         {
-            var tint = XColor.FromArgb(255,
+            var tint = XColor.FromArgb((int)Math.Round(source.Color.A * 255),
                 (int)Math.Round(((double)source.Color.R + 255) / 2),
                 (int)Math.Round(((double)source.Color.G + 255) / 2),
                 (int)Math.Round(((double)source.Color.B + 255) / 2));

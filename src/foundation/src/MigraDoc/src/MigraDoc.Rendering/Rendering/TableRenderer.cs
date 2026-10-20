@@ -719,21 +719,32 @@ namespace MigraDoc.Rendering
                 return cached;
             var widest = 0.0;
             var narrowest = double.MaxValue;
+            var measuredAbove = new HashSet<Cell>();
+            var measuredBelow = new HashSet<Cell>();
             for (var column = 0; column < _table.Columns.Count; column++)
             {
                 if (row > 0)
                 {
-                    var previous = _mergedCells.GetEffectiveBordersPdf(_table[row - 1, column], _lastHeaderRow);
-                    var width = new BordersRenderer(previous, _gfx).GetWidth(BorderType.Bottom).Point;
-                    widest = Math.Max(widest, width);
-                    if (width > 0) narrowest = Math.Min(narrowest, width);
+                    var cellAbove = _mergedCells.GetCoveringCell(_table[row - 1, column]);
+                    if (cellAbove != null && cellAbove.Row!.Index + cellAbove.MergeDown + 1 == row &&
+                        measuredAbove.Add(cellAbove))
+                    {
+                        var previous = _mergedCells.GetEffectiveBordersPdf(cellAbove, _lastHeaderRow);
+                        var width = new BordersRenderer(previous, _gfx).GetWidth(BorderType.Bottom).Point;
+                        widest = Math.Max(widest, width);
+                        if (width > 0) narrowest = Math.Min(narrowest, width);
+                    }
                 }
                 if (row < _table.Rows.Count)
                 {
-                    var next = _mergedCells.GetEffectiveBordersPdf(_table[row, column], _lastHeaderRow);
-                    var width = new BordersRenderer(next, _gfx).GetWidth(BorderType.Top).Point;
-                    widest = Math.Max(widest, width);
-                    if (width > 0) narrowest = Math.Min(narrowest, width);
+                    var cellBelow = _mergedCells.GetCoveringCell(_table[row, column]);
+                    if (cellBelow != null && cellBelow.Row!.Index == row && measuredBelow.Add(cellBelow))
+                    {
+                        var next = _mergedCells.GetEffectiveBordersPdf(cellBelow, _lastHeaderRow);
+                        var width = new BordersRenderer(next, _gfx).GetWidth(BorderType.Top).Point;
+                        widest = Math.Max(widest, width);
+                        if (width > 0) narrowest = Math.Min(narrowest, width);
+                    }
                 }
             }
             var bands = (widest, narrowest == double.MaxValue ? 0 : narrowest);
@@ -1129,7 +1140,7 @@ namespace MigraDoc.Rendering
                 cell => GetInnerRect(CalcStartingHeight(), cell));
             var first = grid[(0, 0)];
             var last = grid[(_table.Rows.Count - 1, _table.Columns.Count - 1)];
-            var thickness = XUnitPt.FromPoint(pen.Width);
+            var thickness = XUnitPt.FromPoint(pen.Width * 1.75);
             var left = first.X - thickness;
             var top = first.Y - thickness;
             var right = last.X + last.Width;
