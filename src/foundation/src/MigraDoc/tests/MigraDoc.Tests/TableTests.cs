@@ -738,6 +738,31 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void First_body_rail_masks_the_repeated_header_boundary()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("3cm");
+            var header = table.AddRow();
+            header.HeadingFormat = true;
+            header[0].Borders.Style = BorderStyle.Triple;
+            header[0].Borders.Width = 3;
+            header[0].AddParagraph("Header");
+            var body = table.AddRow();
+            body[0].Borders.Style = BorderStyle.Double;
+            body[0].Borders.Width = 4;
+            body[0].AddParagraph("Body");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().Contain("3 w").And.Contain("4 w");
+            // The body mask clips the header's lower rail before the body pass
+            // paints its own box at the shared boundary.
+            Regex.Matches(content, @"W\* n").Count.Should().Be(4);
+        }
+
+        [Fact]
         public void Isolated_triple_edge_wins_over_narrower_single_only_in_pdf()
         {
             var document = new Document();

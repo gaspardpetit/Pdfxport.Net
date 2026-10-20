@@ -567,12 +567,20 @@ namespace MigraDoc.Rendering
             var orderedClosed = closedCells.OrderBy(item => item.Band).ToArray();
             var closedMasks = orderedClosed.Select(item => GetClosedRailMasks(item.Cell, item.Style,
                 item.Pen, item.Band)).ToArray();
+            // Header and body cells are painted in separate passes. Let the first
+            // body row own its rail profile where it meets the repeated header.
+            var followingClosedMasks = new List<XRect>();
+            foreach (var cell in followingCells ?? Array.Empty<Cell>())
+                if (TryGetClosedCellRailPen(cell, out var pen, out var style))
+                    followingClosedMasks.AddRange(GetClosedRailMasks(cell, style, pen!,
+                        pen!.Width * ClosedRailWidthMultiplier(style)));
             var junctions = !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid
                 ? GetFourWayRailJunctions(cells)
                 : new List<(JunctionArm North, JunctionArm South, JunctionArm West, JunctionArm East)>();
             var junctionMasks = junctions.Select(junction => GetFourWayRailJunctionBounds(
                 junction.North, junction.South, junction.West, junction.East)).ToArray();
-            var allClosedMasks = closedMasks.SelectMany(mask => mask).Concat(junctionMasks).ToArray();
+            var allClosedMasks = closedMasks.SelectMany(mask => mask).Concat(junctionMasks)
+                .Concat(followingClosedMasks).ToArray();
             foreach (var cell in cells)
             {
                 var closed = closedByCell.TryGetValue(cell, out var closedBorder);
@@ -593,7 +601,7 @@ namespace MigraDoc.Rendering
             {
                 var closed = orderedClosed[index];
                 var exclusions = closedMasks.Skip(index + 1).SelectMany(mask => mask)
-                    .Concat(junctionMasks).ToArray();
+                    .Concat(junctionMasks).Concat(followingClosedMasks).ToArray();
                 XGraphicsState? state = null;
                 if (exclusions.Length > 0)
                 {
