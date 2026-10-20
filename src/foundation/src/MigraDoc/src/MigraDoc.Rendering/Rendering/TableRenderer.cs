@@ -99,13 +99,37 @@ namespace MigraDoc.Rendering
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingTopBorders,
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> precedingBottomBorders,
             HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingLeftBorders,
-            bool renderBorders = true, Rectangle? displayRect = null)
+            bool renderBorders = true, Rectangle? displayRect = null,
+            IReadOnlyList<XRect>? borderExclusions = null)
         {
             var innerRect = displayRect ?? GetInnerRect(CalcStartingHeight(), cell);
             RenderShading(cell, innerRect);
             RenderContent(cell, innerRect);
             if (renderBorders)
+            {
+                XGraphicsState? state = null;
+                if (borderExclusions is { Count: > 0 })
+                {
+                    state = _gfx.Save();
+                    ExcludeBorderRegions(borderExclusions);
+                }
                 RenderBorders(cell, innerRect, followingTopBorders, precedingBottomBorders, followingLeftBorders);
+                if (state != null)
+                    _gfx.Restore(state);
+            }
+        }
+
+        void ExcludeBorderRegions(IReadOnlyList<XRect>? regions)
+        {
+            if (regions == null)
+                return;
+            foreach (var region in regions)
+            {
+                var outside = new XGraphicsPath { FillMode = XFillMode.Alternate };
+                outside.AddRectangle(new XRect(-10000, -10000, 20000, 20000));
+                outside.AddRectangle(region);
+                _gfx.IntersectClip(outside);
+            }
         }
 
         static void EqualizeRoundedCornerBorders(Cell cell)
@@ -528,17 +552,29 @@ namespace MigraDoc.Rendering
                     precedingBottomBorders.Add(HorizontalBorderKey(cell, borders, bottomPen, false));
                 }
             }
-            var closedCells = new List<(Cell Cell, BorderStyle Style, XPen Pen)>();
+            var closedCells = new List<(Cell Cell, BorderStyle Style, XPen Pen, double Band)>();
+            if (!uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && !uniformThreeDimensionalGrid)
+            {
+                foreach (var cell in cells)
+                    if (TryGetClosedCellRailPen(cell, out var pen, out var style))
+                        closedCells.Add((cell, style, pen!, pen!.Width * ClosedRailWidthMultiplier(style)));
+            }
+            var closedByCell = closedCells.ToDictionary(item => item.Cell);
+            var orderedClosed = closedCells.OrderBy(item => item.Band).ToArray();
+            var closedMasks = orderedClosed.Select(item => GetClosedRailMasks(item.Cell, item.Style,
+                item.Pen, item.Band)).ToArray();
+            var junctions = !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && followingCells == null
+                ? GetFourWayRailJunctions(cells)
+                : new List<(JunctionArm North, JunctionArm South, JunctionArm West, JunctionArm East)>();
+            var junctionMasks = junctions.Select(junction => GetFourWayRailJunctionBounds(
+                junction.North, junction.South, junction.West, junction.East)).ToArray();
+            var allClosedMasks = closedMasks.SelectMany(mask => mask).Concat(junctionMasks).ToArray();
             foreach (var cell in cells)
             {
-                XPen? closedPen = null;
-                var closedStyle = BorderStyle.None;
-                var closed = !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && !uniformThreeDimensionalGrid &&
-                    TryGetClosedCellRailPen(cell, out closedPen, out closedStyle);
+                var closed = closedByCell.TryGetValue(cell, out var closedBorder);
                 Rectangle? displayRect = null;
                 if (closed)
-                    displayRect = GetClosedCellInnerRect(cell,
-                        closedPen!.Width * ClosedRailWidthMultiplier(closedStyle));
+                    displayRect = GetClosedCellInnerRect(cell, closedBorder.Band);
                 else if (centeredGridBand > 0)
                 {
                     var inner = GetInnerRect(CalcStartingHeight(), cell);
@@ -547,18 +583,25 @@ namespace MigraDoc.Rendering
                 }
                 RenderCell(cell, followingTopBorders, precedingBottomBorders, followingLeftBorders,
                     !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && !uniformThreeDimensionalGrid && !closed,
-                    displayRect);
-                if (closed)
-                    closedCells.Add((cell, closedStyle, closedPen!));
+                    displayRect, allClosedMasks);
             }
-            foreach (var closed in closedCells.OrderBy(item =>
-                         item.Pen.Width * ClosedRailWidthMultiplier(item.Style)))
+            for (var index = 0; index < orderedClosed.Length; index++)
             {
-                var band = closed.Pen.Width * ClosedRailWidthMultiplier(closed.Style);
-                RenderClosedMultiRailCell(closed.Cell, closed.Style, closed.Pen, band);
+                var closed = orderedClosed[index];
+                var exclusions = closedMasks.Skip(index + 1).SelectMany(mask => mask)
+                    .Concat(junctionMasks).ToArray();
+                XGraphicsState? state = null;
+                if (exclusions.Length > 0)
+                {
+                    state = _gfx.Save();
+                    ExcludeBorderRegions(exclusions);
+                }
+                RenderClosedMultiRailCell(closed.Cell, closed.Style, closed.Pen, closed.Band);
+                if (state != null)
+                    _gfx.Restore(state);
             }
-            if (!uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && followingCells == null)
-                RenderFourWayRailJunctions(cells);
+            foreach (var junction in junctions)
+                RenderFourWayRailJunction(junction.North, junction.South, junction.West, junction.East);
             if (centeredGridBand > 0)
             {
                 var state = _gfx.Save();
@@ -616,6 +659,47 @@ namespace MigraDoc.Rendering
                 XUnitPt.FromPoint(topCenter + band / 2),
                 inner.Width + XUnitPt.FromPoint(rightWidth - band),
                 XUnitPt.FromPoint(bottomCenter - topCenter - band));
+        }
+
+        XRect[] GetClosedRailMasks(Cell cell, BorderStyle style, XPen pen, double band)
+        {
+            var inner = GetClosedCellInnerRect(cell, band);
+            var borders = new BordersRenderer(cell.Borders, _gfx);
+            if (CompoundProfile(style) != null)
+            {
+                var left = inner.X.Point - borders.GetWidth(BorderType.Left).Point;
+                var top = inner.Y.Point - borders.GetWidth(BorderType.Top).Point;
+                var right = inner.X.Point + inner.Width.Point;
+                var bottom = inner.Y.Point + inner.Height.Point;
+                var outerBottom = bottom + borders.GetWidth(BorderType.Bottom).Point;
+                return new[]
+                {
+                    new XRect(left, top, band, outerBottom - top),
+                    new XRect(right, top, band, outerBottom - top),
+                    new XRect(inner.X.Point, top, inner.Width.Point, band),
+                    new XRect(inner.X.Point, bottom, inner.Width.Point, band)
+                };
+            }
+            var half = XUnitPt.FromPoint(pen.Width / 2);
+            var innerLeft = inner.X - half;
+            var innerTop = inner.Y - half;
+            var innerRight = inner.X + inner.Width + half;
+            var innerBottom = inner.Y + inner.Height + half;
+            var outerLeft = inner.X - borders.GetWidth(BorderType.Left) + half;
+            var outerTop = inner.Y - borders.GetWidth(BorderType.Top) + half;
+            var outerRight = inner.X + inner.Width + borders.GetWidth(BorderType.Right) - half;
+            var outerBottomRail = inner.Y + inner.Height + borders.GetWidth(BorderType.Bottom) - half;
+            return new[]
+            {
+                new XRect(outerLeft - half, outerTop - half,
+                    innerLeft - outerLeft + pen.Width, outerBottomRail - outerTop + pen.Width),
+                new XRect(innerRight - half, outerTop - half,
+                    outerRight - innerRight + pen.Width, outerBottomRail - outerTop + pen.Width),
+                new XRect(innerLeft + half, outerTop - half,
+                    innerRight - innerLeft - pen.Width, innerTop - outerTop + pen.Width),
+                new XRect(innerLeft + half, innerBottom - half,
+                    innerRight - innerLeft - pen.Width, outerBottomRail - innerBottom + pen.Width)
+            };
         }
 
         (double Widest, double Narrowest) HorizontalBoundaryBands(int row)
@@ -686,14 +770,6 @@ namespace MigraDoc.Rendering
             // neighboring single or narrower multi-rail border remains visible
             // through them at a four-way junction.  These strips cover only the
             // border band, leaving the cell's shaded content area intact.
-            _gfx.DrawRectangle(XBrushes.White, new XRect(outerLeft - half, outerTop - half,
-                left - outerLeft + pen.Width, outerBottom - outerTop + pen.Width));
-            _gfx.DrawRectangle(XBrushes.White, new XRect(right - half, outerTop - half,
-                outerRight - right + pen.Width, outerBottom - outerTop + pen.Width));
-            _gfx.DrawRectangle(XBrushes.White, new XRect(left + half, outerTop - half,
-                right - left - pen.Width, top - outerTop + pen.Width));
-            _gfx.DrawRectangle(XBrushes.White, new XRect(left + half, bottom - half,
-                right - left - pen.Width, outerBottom - bottom + pen.Width));
 
             _gfx.DrawRectangle(pen, new XRect(left, top, right - left, bottom - top));
             if (style == BorderStyle.Triple)
@@ -804,8 +880,10 @@ namespace MigraDoc.Rendering
             return b.BorderWidth >= a.BorderWidth ? b : a;
         }
 
-        void RenderFourWayRailJunctions(IReadOnlyList<Cell> cells)
+        List<(JunctionArm North, JunctionArm South, JunctionArm West, JunctionArm East)>
+            GetFourWayRailJunctions(IReadOnlyList<Cell> cells)
         {
+            var junctions = new List<(JunctionArm, JunctionArm, JunctionArm, JunctionArm)>();
             var grid = cells.Where(cell => cell.MergeRight == 0 && cell.MergeDown == 0 &&
                     cell.RoundedCorner == RoundedCorner.None)
                 .ToDictionary(cell => (cell.Row!.Index, cell.Column!.Index));
@@ -836,11 +914,12 @@ namespace MigraDoc.Rendering
                         Math.Abs(north.Positions[index] - south.Positions[index]) > 1 ||
                         Math.Abs(west.Positions[index] - east.Positions[index]) > 1))
                     continue;
-                RenderFourWayRailJunction(north, south, west, east);
+                junctions.Add((north, south, west, east));
             }
+            return junctions;
         }
 
-        void RenderFourWayRailJunction(JunctionArm north, JunctionArm south,
+        static XRect GetFourWayRailJunctionBounds(JunctionArm north, JunctionArm south,
             JunctionArm west, JunctionArm east)
         {
             var last = north.Positions.Length - 1;
@@ -849,7 +928,19 @@ namespace MigraDoc.Rendering
             var x1 = Math.Max(north.Positions[last], south.Positions[last]) + stroke;
             var y0 = Math.Min(west.Positions[0], east.Positions[0]) - stroke;
             var y1 = Math.Max(west.Positions[last], east.Positions[last]) + stroke;
-            _gfx.DrawRectangle(XBrushes.White, new XRect(x0, y0, x1 - x0, y1 - y0));
+            return new XRect(x0, y0, x1 - x0, y1 - y0);
+        }
+
+        void RenderFourWayRailJunction(JunctionArm north, JunctionArm south,
+            JunctionArm west, JunctionArm east)
+        {
+            var last = north.Positions.Length - 1;
+            var bounds = GetFourWayRailJunctionBounds(north, south, west, east);
+            var stroke = new[] { north, south, west, east }.SelectMany(arm => arm.Widths).Max();
+            var x0 = bounds.X;
+            var x1 = bounds.Right;
+            var y0 = bounds.Y;
+            var y1 = bounds.Bottom;
 
             // The outer rails turn around the four cells.  An odd profile has
             // a middle rail, which continues through both directions.
@@ -912,14 +1003,6 @@ namespace MigraDoc.Rendering
             var outerBottom = bottom + borders.GetWidth(BorderType.Bottom).Point;
             // Clear the full compound band before drawing.  Its gaps remain
             // empty when a narrower neighboring border meets this cell.
-            _gfx.DrawRectangle(XBrushes.White, new XRect(left, top,
-                XUnitPt.FromPoint(total), XUnitPt.FromPoint(outerBottom - top)));
-            _gfx.DrawRectangle(XBrushes.White, new XRect(XUnitPt.FromPoint(right), top,
-                XUnitPt.FromPoint(total), XUnitPt.FromPoint(outerBottom - top)));
-            _gfx.DrawRectangle(XBrushes.White, new XRect(inner.X, top, inner.Width,
-                XUnitPt.FromPoint(total)));
-            _gfx.DrawRectangle(XBrushes.White, new XRect(inner.X, XUnitPt.FromPoint(bottom),
-                inner.Width, XUnitPt.FromPoint(total)));
 
             var last = widths.Length - 1;
             for (var rail = 0; rail <= last; rail++)

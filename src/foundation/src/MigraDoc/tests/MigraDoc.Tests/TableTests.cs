@@ -572,11 +572,8 @@ namespace MigraDoc.Tests
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
-            var fills = Regex.Matches(content,
-                @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$");
-            fills.Should().NotBeEmpty();
-            var junction = content.Substring(fills[^1].Index + fills[^1].Length);
-            var lines = Regex.Matches(junction,
+            content.Should().Contain("W* n");
+            var lines = Regex.Matches(content,
                     @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
                 .Cast<Match>()
                 .Select(match => (
@@ -584,7 +581,7 @@ namespace MigraDoc.Tests
                     Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
                     X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
                     Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
-                .ToArray();
+                .TakeLast(10).ToArray();
             var vertical = lines.Where(line => Math.Abs(line.X1 - line.X2) < .01).ToArray();
             var horizontal = lines.Where(line => Math.Abs(line.Y1 - line.Y2) < .01).ToArray();
             vertical.Should().HaveCount(5);
@@ -626,11 +623,11 @@ namespace MigraDoc.Tests
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
-            // Two triple cells each clear four border bands.  The wider single
-            // border owns the north/west arms, so no ninth junction clearing
-            // rectangle may be added on top of it.
+            // The triple rails are clipped without painting an opaque band over
+            // the wider single border or the page background.
+            content.Should().Contain("W* n");
             Regex.Matches(content, @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$")
-                .Should().HaveCount(8);
+                .Should().BeEmpty();
         }
 
         [Fact]
@@ -656,11 +653,8 @@ namespace MigraDoc.Tests
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
             var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
-            var fills = Regex.Matches(content,
-                @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$");
-            fills.Should().NotBeEmpty();
-            var junction = content.Substring(fills[^1].Index + fills[^1].Length);
-            var lines = Regex.Matches(junction,
+            content.Should().Contain("W* n");
+            var lines = Regex.Matches(content,
                     @"(?m)(?<x1>-?[\d.]+) (?<y1>-?[\d.]+) m\s+(?<x2>-?[\d.]+) (?<y2>-?[\d.]+) l\s+S$")
                 .Cast<Match>()
                 .Select(match => (
@@ -668,7 +662,7 @@ namespace MigraDoc.Tests
                     Y1: double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture),
                     X2: double.Parse(match.Groups["x2"].Value, CultureInfo.InvariantCulture),
                     Y2: double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture)))
-                .ToArray();
+                .TakeLast(8).ToArray();
             lines.Count(line => Math.Abs(line.X1 - line.X2) < .01).Should().Be(4);
             lines.Count(line => Math.Abs(line.Y1 - line.Y2) < .01).Should().Be(4);
         }
@@ -713,34 +707,10 @@ namespace MigraDoc.Tests
             (tripleRails[0].X - tripleRails[1].X).Should().BeApproximately(6, .02);
             (tripleRails[1].X - tripleRails[2].X).Should().BeApproximately(6, .02);
 
-            var whiteBands = Regex.Matches(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0),
-                    @"(?m)(?<x>-?[\d.]+) (?<y>-?[\d.]+) (?<width>[\d.]+) (?<height>[\d.]+) re\s+f$")
-                .Cast<Match>()
-                .Select(match => (
-                    X: double.Parse(match.Groups["x"].Value, CultureInfo.InvariantCulture),
-                    Y: double.Parse(match.Groups["y"].Value, CultureInfo.InvariantCulture),
-                    Width: double.Parse(match.Groups["width"].Value, CultureInfo.InvariantCulture),
-                    Height: double.Parse(match.Groups["height"].Value, CultureInfo.InvariantCulture)))
-                .ToArray();
-            whiteBands.Should().HaveCount(8);
-            foreach (var group in new[] { doubleRails, tripleRails })
-            {
-                var outer = group[^1];
-                var inner = group[0];
-                var centerX = inner.X + inner.Width / 2;
-                var centerY = inner.Y + inner.Height / 2;
-                var topGap = (outer.Y + inner.Y) / 2;
-                var leftGap = (outer.X + inner.X) / 2;
-                whiteBands.Should().Contain(box => box.X < centerX && box.X + box.Width > centerX &&
-                    box.Y < topGap && box.Y + box.Height > topGap);
-                whiteBands.Should().Contain(box => box.Y < centerY && box.Y + box.Height > centerY &&
-                    box.X < leftGap && box.X + box.Width > leftGap);
-            }
-            var weakerRightRail = doubleRails[1].X + doubleRails[1].Width;
-            var sharedMidpointY = doubleRails[0].Y + doubleRails[0].Height / 2;
-            whiteBands.Should().Contain(box => box.X < weakerRightRail &&
-                box.X + box.Width > weakerRightRail && box.Y < sharedMidpointY &&
-                box.Y + box.Height > sharedMidpointY);
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            content.Should().Contain("W* n");
+            Regex.Matches(content, @"(?m)-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re\s+f$")
+                .Should().BeEmpty();
         }
 
         [Fact]
