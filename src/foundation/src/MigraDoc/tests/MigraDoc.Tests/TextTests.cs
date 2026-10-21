@@ -24,19 +24,22 @@ namespace MigraDoc.Tests
     [Collection("PDFsharp")]
     public class TextTests : IDisposable
     {
-        [Fact]
-        public void OptionalExtraSpaceDoesNotIndentWhenItStartsTheWrappedLine()
+        [Theory]
+        [InlineData(9)]
+        [InlineData(12)]
+        [InlineData(16)]
+        public void OptionalExtraSpaceDoesNotIndentWhenItStartsTheWrappedLine(double fontSize)
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
                 XGraphicsUnit.Point, XPageDirection.Downwards);
-            var font = new XFont("Arial", 12);
-            var bodyWidth = measure.MeasureString("AAAA BBBB", font).Width + 0.1;
+            var font = new XFont("Arial", fontSize);
+            var boundary = measure.MeasureString("AAAA BBBB", font).Width;
 
-            (double X, double Y) Render(bool extraSpace)
+            (double PreviousY, double WordX, double WordY) Render(double bodyWidth, bool extraSpace)
             {
                 var document = new Document();
                 document.Styles.Normal.Font.Name = "Arial";
-                document.Styles.Normal.Font.Size = 12;
+                document.Styles.Normal.Font.Size = fontSize;
                 var section = document.AddSection();
                 section.PageSetup.PageWidth = Unit.FromPoint(bodyWidth + 20);
                 section.PageSetup.LeftMargin = Unit.FromPoint(10);
@@ -51,15 +54,26 @@ namespace MigraDoc.Tests
                         ReferenceEquals(space, extra);
                 renderer.RenderDocument();
                 var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "BBBB", true, out var previous)
+                    .Should().BeTrue();
                 stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word)
                     .Should().BeTrue();
-                return (word!.X, word.Y);
+                return (previous!.Y, word!.X, word.Y);
             }
 
-            var control = Render(false);
-            var optional = Render(true);
-            optional.Y.Should().BeApproximately(control.Y, 0.1);
-            optional.X.Should().BeApproximately(control.X, 0.1);
+            var wrappedCases = 0;
+            foreach (var offset in new[] { -1.0, -0.5, 0.1, 0.5, 1.0, 2.0 })
+            {
+                var control = Render(boundary + offset, false);
+                var optional = Render(boundary + offset, true);
+                if (control.WordY == control.PreviousY)
+                    continue;
+                wrappedCases++;
+                optional.WordY.Should().BeApproximately(control.WordY, 0.1);
+                optional.WordX.Should().BeApproximately(control.WordX, 0.1,
+                    $"for font size {fontSize} and width offset {offset}");
+            }
+            wrappedCases.Should().BeGreaterThan(0);
         }
 
         [Fact]
