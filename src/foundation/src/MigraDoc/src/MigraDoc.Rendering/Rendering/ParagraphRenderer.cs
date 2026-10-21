@@ -2545,6 +2545,7 @@ namespace MigraDoc.Rendering
                 {
                     if (following.Current is BookmarkField or Text { Content.Length: 0 } or
                         ParagraphElements { Count: 0 } ||
+                        IsSoftHyphen(following.Current) ||
                         following.Current is InfoField emptyInfo &&
                         GetDocumentInfo(emptyInfo.Name).Length == 0)
                     {
