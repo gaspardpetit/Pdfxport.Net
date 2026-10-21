@@ -1682,6 +1682,7 @@ namespace MigraDoc.Rendering
             else
             {
                 var lastLine = prevParaFormatInfo.GetLastLineInfo();
+                _newLineStartedByBlankWrap = lastLine.NextLineStartedByBlankWrap;
                 _currentLeaf = lastLine.HasContinuationOverride
                     ? lastLine.ContinuationIter
                     : lastLine.EndIter?.GetNextLeaf();
@@ -1810,6 +1811,7 @@ namespace MigraDoc.Rendering
         internal override void Format(Area area, FormatInfo? previousFormatInfo)
         {
             _optionalSpaceDecisions.Clear();
+            _newLineStartedByBlankWrap = false;
             var formatInfo = ((ParagraphFormatInfo)_renderInfo.FormatInfo);
             if (!InitFormat(area, previousFormatInfo))
             {
@@ -1835,6 +1837,8 @@ namespace MigraDoc.Rendering
 
                     case FormatResult.NewLine:
                         lastResult = result;
+                        var wrappedAtBlank = !_currentLineEndsWithLineBreak &&
+                            _currentLeaf?.Current is Text blank && IsBlank(blank);
                         var rejectedTab = false;
                         if (!_currentLineEndsWithLineBreak && _currentLineWidth != XUnitPt.Zero &&
                             _currentLeaf?.Current is Character { SymbolName: SymbolName.Tab })
@@ -1845,12 +1849,13 @@ namespace MigraDoc.Rendering
                                 precedingLeaf = precedingLeaf.GetPreviousLeaf();
                             rejectedTab = precedingLeaf?.Current is not Character { SymbolName: SymbolName.Tab };
                         }
-                        StoreLineInformation(rejectedTab);
+                        StoreLineInformation(rejectedTab, wrappedAtBlank);
                         if (rejectedTab)
                             _currentLeaf = _currentLeaf?.GetNextLeaf();
                         // StartNewLine() no longer gives the signal to start a new page. We don’t know the line height yet and therefore can’t decide,
                         // if it will fit on the page. Page fitting is only checked by FormatElement() now, when the height of the new line is known.
                         StartNewLine();
+                        _newLineStartedByBlankWrap = wrappedAtBlank;
                         break;
                 }
                 if (result == FormatResult.NewArea)
@@ -2559,11 +2564,7 @@ namespace MigraDoc.Rendering
                 var following = _currentLeaf?.GetNextLeaf();
                 while (following != null)
                 {
-                    if (following.Current is BookmarkField or Text { Content.Length: 0 } or
-                        ParagraphElements { Count: 0 } ||
-                        IsSoftHyphen(following.Current) ||
-                        following.Current is InfoField emptyInfo &&
-                        GetDocumentInfo(emptyInfo.Name).Length == 0)
+                    if (IsTransparentOptionalSpaceLeaf(following.Current))
                     {
                         following = following.GetNextLeaf();
                         continue;
@@ -2592,7 +2593,8 @@ namespace MigraDoc.Rendering
                 }
                 var collapse = following != null &&
                     TryGetFollowingWord(following.Current, out var word) &&
-                    FollowingWordWrapsAfterSpaces(spaces, following, word);
+                    (SelectedSpaceStartedWrappedLine() ||
+                     FollowingWordWrapsAfterSpaces(spaces, following, word));
                 foreach (var (_, space, selected, _) in spaces)
                 {
                     if (space == null)
@@ -2607,6 +2609,17 @@ namespace MigraDoc.Rendering
                     return FormatResult.Ignore;
             }
             return FormatAsWord(width, fittingRect);
+        }
+
+        bool IsTransparentOptionalSpaceLeaf(DocumentObject element) =>
+            element is BookmarkField or Text { Content.Length: 0 } or
+                ParagraphElements { Count: 0 } ||
+            IsSoftHyphen(element) ||
+            element is InfoField info && GetDocumentInfo(info.Name).Length == 0;
+
+        bool SelectedSpaceStartedWrappedLine()
+        {
+            return _newLineStartedByBlankWrap && _currentLineWidth == 0;
         }
 
         bool TryGetFollowingWord(DocumentObject element, out string word)
@@ -2975,7 +2988,7 @@ namespace MigraDoc.Rendering
         /// <summary>
         /// Stores all line information.
         /// </summary>
-        void StoreLineInformation(bool rejectedTab = false)
+        void StoreLineInformation(bool rejectedTab = false, bool nextLineStartedByBlankWrap = false)
         {
             PopSavedBlankWidth();
 
@@ -3065,6 +3078,7 @@ namespace MigraDoc.Rendering
             lineInfo.TabOffsets = _tabOffsets;
             lineInfo.ReMeasureLine = _reMeasureLine;
             lineInfo.LineEndsWithLineBreak = _currentLineEndsWithLineBreak;
+            lineInfo.NextLineStartedByBlankWrap = nextLineStartedByBlankWrap;
             lineInfo.CollapsedSpaces = _collapsedSpacesOnLine;
 
             _savedWordWidth = 0;
@@ -3501,6 +3515,7 @@ namespace MigraDoc.Rendering
 
         readonly Dictionary<Character, bool> _optionalSpaceDecisions = [];
         HashSet<Character> _collapsedSpacesOnLine = [];
+        bool _newLineStartedByBlankWrap;
 
         XUnitPt _currentWordsWidth;
         int _currentBlankCount;
