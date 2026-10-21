@@ -459,6 +459,152 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void RejectedTabDoesNotIndentTheFollowingLine()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.DefaultTabStop = Unit.FromPoint(36);
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(180);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("First long segment");
+            paragraph.AddTab();
+            paragraph.AddText("Second");
+            section.AddParagraph("Control");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.Options.CompressContentStreams = false;
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+
+            stream.Text.MoveAndGetNext(info => info.Text == "Second", true, out var second).Should().BeTrue();
+            stream.Text.MoveAndGetNext(info => info.Text == "Control", true, out var control).Should().BeTrue();
+            second!.IsAtXPosition(control!.X).Should().BeTrue();
+        }
+
+        [Fact]
+        public void RejectedTabDoesNotIndentAfterPageBreak()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.DefaultTabStop = Unit.FromPoint(36);
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(180);
+            section.PageSetup.PageHeight = Unit.FromPoint(60);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            section.PageSetup.TopMargin = Unit.FromPoint(20);
+            section.PageSetup.BottomMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("First long segment");
+            paragraph.AddTab();
+            paragraph.AddText("Second");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.PageCount.Should().Be(2);
+            renderer.PdfDocument.Options.CompressContentStreams = false;
+            var firstPage = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            var secondPage = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 1);
+
+            firstPage.Text.MoveAndGetNext(info => true, true, out var first)
+                .Should().BeTrue();
+            secondPage.Text.MoveAndGetNext(info => info.Text == "Second", true, out var second)
+                .Should().BeTrue();
+            second!.IsAtXPosition(first!.X).Should().BeTrue();
+        }
+
+        [Fact]
+        public void TabAfterExplicitLineBreakKeepsItsIndent()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.DefaultTabStop = Unit.FromPoint(36);
+            var section = document.AddSection();
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("First");
+            paragraph.AddLineBreak();
+            paragraph.AddTab();
+            paragraph.AddText("Second");
+            var control = section.AddParagraph("Control");
+            control.Format.LeftIndent = Unit.FromPoint(36);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            stream.Text.MoveAndGetNext(info => info.Text == "Second", true, out var second).Should().BeTrue();
+            stream.Text.MoveAndGetNext(info => info.Text == "Control", true, out var controlText)
+                .Should().BeTrue();
+            second!.IsAtXPosition(controlText!.X).Should().BeTrue();
+        }
+
+        [Fact]
+        public void ConsecutiveTabAtLineEndStartsNextLineAtTabStop()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.DefaultTabStop = Unit.FromPoint(36);
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(180);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("A");
+            paragraph.AddTab();
+            paragraph.AddTab();
+            paragraph.AddTab();
+            paragraph.AddTab();
+            paragraph.AddText("B");
+            var control = section.AddParagraph("Control");
+            control.Format.LeftIndent = Unit.FromPoint(36);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.Options.CompressContentStreams = false;
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+
+            stream.Text.MoveAndGetNext(info => info.Text == "B", true, out var afterTab).Should().BeTrue();
+            stream.Text.MoveAndGetNext(info => info.Text == "Control", true, out var controlText).Should().BeTrue();
+            afterTab!.IsAtXPosition(controlText!.X).Should().BeTrue();
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void IgnoredElementBetweenConsecutiveTabsPreservesNextLineTabStop(bool bookmark)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.DefaultTabStop = Unit.FromPoint(36);
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(180);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("A");
+            paragraph.AddTab();
+            paragraph.AddTab();
+            paragraph.AddTab();
+            if (bookmark)
+                paragraph.AddBookmark("betweenTabs", prepend: false);
+            else
+                paragraph.AddText(" ");
+            paragraph.AddTab();
+            paragraph.AddText("B");
+            var control = section.AddParagraph("Control");
+            control.Format.LeftIndent = Unit.FromPoint(36);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            stream.Text.MoveAndGetNext(info => info.Text == "B", true, out var afterTab).Should().BeTrue();
+            stream.Text.MoveAndGetNext(info => info.Text == "Control", true, out var controlText).Should().BeTrue();
+            afterTab!.IsAtXPosition(controlText!.X).Should().BeTrue();
+        }
+
+        [Fact]
         public void IgnoredBlankAfterTabDoesNotWrapFittingText()
         {
             var document = new Document();

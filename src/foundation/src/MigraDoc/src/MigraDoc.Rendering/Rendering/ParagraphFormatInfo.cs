@@ -33,6 +33,8 @@ namespace MigraDoc.Rendering
     {
         public ParagraphIterator? StartIter;
         public ParagraphIterator? EndIter;
+        public ParagraphIterator? ContinuationIter;
+        public bool HasContinuationOverride;
         public XUnitPt WordsWidth;
         public XUnitPt LineWidth;
         public XUnitPt ClippedTrailingWidth;
