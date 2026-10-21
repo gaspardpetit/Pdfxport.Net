@@ -2154,6 +2154,45 @@ namespace MigraDoc.Rendering
         {
             XUnitPt wordWidth = MeasureString(word);
             XUnitPt width = wordWidth + GetLeadingKerningAfterBlank(word);
+            if (_phase == Phase.Formatting && _currentLeaf?.Current is Text &&
+                _currentXPosition > StartXPosition + Tolerance && IsLatinWord(word))
+            {
+                var previous = _currentLeaf.GetPreviousLeaf();
+                while (previous?.Current is BookmarkField)
+                    previous = previous.GetPreviousLeaf();
+                if (previous == null || IsBlank(previous.Current) || IsTab(previous.Current))
+                {
+                    var original = _currentLeaf;
+                    var next = original.GetNextLeaf();
+                    var sequenceWidth = width;
+                    var hasContinuation = false;
+                    try
+                    {
+                        while (next != null)
+                        {
+                            if (next.Current is BookmarkField)
+                            {
+                                next = next.GetNextLeaf();
+                                continue;
+                            }
+                            if (next.Current is not Text text || !IsLatinWord(text.Content))
+                                break;
+                            _currentLeaf = next;
+                            sequenceWidth += MeasureString(text.Content);
+                            hasContinuation = true;
+                            next = next.GetNextLeaf();
+                        }
+                    }
+                    finally
+                    {
+                        _currentLeaf = original;
+                    }
+                    var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+                    if (hasContinuation && sequenceWidth <= right - StartXPosition &&
+                        _currentXPosition + sequenceWidth > right)
+                        return FormatResult.NewLine;
+                }
+            }
             if (_phase == Phase.Formatting && word.Contains('\u00a0') &&
                 _paragraph.Format.MoveOversizedNoBreakGroupToNextLine &&
                 _currentXPosition > StartXPosition + Tolerance &&
@@ -2268,6 +2307,13 @@ namespace MigraDoc.Rendering
                 _savedWordWidth = wordWidth;
             return result;
         }
+
+        static bool IsLatinWord(string text) => text.Length > 0 && text.All(character =>
+            character is >= '0' and <= '9' ||
+            char.IsLetter(character) &&
+            (character is >= 'A' and <= 'z' or >= '\u00c0' and <= '\u024f' or
+                >= '\u1e00' and <= '\u1eff' or >= '\u2c60' and <= '\u2c7f' or
+                >= '\ua720' and <= '\ua7ff' or >= '\uab30' and <= '\uab6f'));
 
         XUnitPt _savedWordWidth = 0;
 
