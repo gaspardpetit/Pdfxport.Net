@@ -2544,7 +2544,8 @@ namespace MigraDoc.Rendering
                 var following = _currentLeaf?.GetNextLeaf();
                 while (following != null)
                 {
-                    if (following.Current is BookmarkField or Text { Content.Length: 0 } ||
+                    if (following.Current is BookmarkField or Text { Content.Length: 0 } or
+                        ParagraphElements { Count: 0 } ||
                         following.Current is InfoField emptyInfo &&
                         GetDocumentInfo(emptyInfo.Name).Length == 0)
                     {
