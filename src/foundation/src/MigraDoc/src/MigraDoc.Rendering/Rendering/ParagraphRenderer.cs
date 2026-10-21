@@ -1804,6 +1804,7 @@ namespace MigraDoc.Rendering
         /// <param name="previousFormatInfo">The format info that was obtained on formatting the same paragraph on a previous area.</param>
         internal override void Format(Area area, FormatInfo? previousFormatInfo)
         {
+            _optionalSpaceDecisions.Clear();
             var formatInfo = ((ParagraphFormatInfo)_renderInfo.FormatInfo);
             if (!InitFormat(area, previousFormatInfo))
             {
@@ -2532,18 +2533,49 @@ namespace MigraDoc.Rendering
                     return _documentRenderer.CollapsedSpaces.Contains(character)
                         ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
 
+                if (_optionalSpaceDecisions.TryGetValue(character, out var alreadyCollapsed))
+                    return alreadyCollapsed ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
+
+                var spaces = new List<Character> { character };
+                var groupWidth = width;
                 var following = _currentLeaf?.GetNextLeaf();
-                while (following?.Current is BookmarkField)
-                    following = following.GetNextLeaf();
-                if (following != null && TryGetFollowingWord(following.Current, out var word))
+                while (following != null)
                 {
-                    if (FollowingWordWrapsAfterSpace(following, word, width, fittingRect))
+                    if (following.Current is BookmarkField)
                     {
-                        _documentRenderer.CollapsedSpaces.Add(character);
-                        return FormatResult.Ignore;
+                        following = following.GetNextLeaf();
+                        continue;
                     }
+                    if (following.Current is not Character nextSpace ||
+                        !IsSpaceCharacter(nextSpace) ||
+                        _documentRenderer.CollapsibleSpaceBeforeWrap(_paragraph, nextSpace) != true)
+                        break;
+                    spaces.Add(nextSpace);
+                    var savedLeaf = _currentLeaf;
+                    try
+                    {
+                        _currentLeaf = following;
+                        groupWidth += GetSpaceWidth(nextSpace);
+                    }
+                    finally
+                    {
+                        _currentLeaf = savedLeaf;
+                    }
+                    following = following.GetNextLeaf();
                 }
-                _documentRenderer.CollapsedSpaces.Remove(character);
+                var collapse = following != null &&
+                    TryGetFollowingWord(following.Current, out var word) &&
+                    FollowingWordWrapsAfterSpace(following, word, groupWidth, fittingRect);
+                foreach (var space in spaces)
+                {
+                    _optionalSpaceDecisions[space] = collapse;
+                    if (collapse)
+                        _documentRenderer.CollapsedSpaces.Add(space);
+                    else
+                        _documentRenderer.CollapsedSpaces.Remove(space);
+                }
+                if (collapse)
+                    return FormatResult.Ignore;
             }
             return FormatAsWord(width, fittingRect);
         }
@@ -3401,6 +3433,8 @@ namespace MigraDoc.Rendering
         /// The paragraph to format or render.
         /// </summary>
         readonly Paragraph _paragraph;
+
+        readonly Dictionary<Character, bool> _optionalSpaceDecisions = [];
 
         XUnitPt _currentWordsWidth;
         int _currentBlankCount;
