@@ -2536,8 +2536,10 @@ namespace MigraDoc.Rendering
                 if (_optionalSpaceDecisions.TryGetValue(character, out var alreadyCollapsed))
                     return alreadyCollapsed ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
 
-                var spaces = new List<Character> { character };
-                var groupWidth = width;
+                var spaces = new List<(ParagraphIterator Leaf, Character Space, XUnitPt Width)>
+                {
+                    (_currentLeaf!, character, width)
+                };
                 var following = _currentLeaf?.GetNextLeaf();
                 while (following != null)
                 {
@@ -2550,12 +2552,11 @@ namespace MigraDoc.Rendering
                         !IsSpaceCharacter(nextSpace) ||
                         _documentRenderer.CollapsibleSpaceBeforeWrap(_paragraph, nextSpace) != true)
                         break;
-                    spaces.Add(nextSpace);
                     var savedLeaf = _currentLeaf;
                     try
                     {
                         _currentLeaf = following;
-                        groupWidth += GetSpaceWidth(nextSpace);
+                        spaces.Add((following, nextSpace, GetSpaceWidth(nextSpace)));
                     }
                     finally
                     {
@@ -2565,8 +2566,8 @@ namespace MigraDoc.Rendering
                 }
                 var collapse = following != null &&
                     TryGetFollowingWord(following.Current, out var word) &&
-                    FollowingWordWrapsAfterSpace(following, word, groupWidth, fittingRect);
-                foreach (var space in spaces)
+                    FollowingWordWrapsAfterSpaces(spaces, following, word, fittingRect);
+                foreach (var (_, space, _) in spaces)
                 {
                     _optionalSpaceDecisions[space] = collapse;
                     if (collapse)
@@ -2595,8 +2596,9 @@ namespace MigraDoc.Rendering
             return word.Length > 0;
         }
 
-        bool FollowingWordWrapsAfterSpace(ParagraphIterator following, string word,
-            XUnitPt spaceWidth, Rectangle fittingRect)
+        bool FollowingWordWrapsAfterSpaces(
+            List<(ParagraphIterator Leaf, Character Space, XUnitPt Width)> spaces,
+            ParagraphIterator following, string word, Rectangle fittingRect)
         {
             var savedLeaf = _currentLeaf;
             var savedX = _currentXPosition;
@@ -2614,8 +2616,14 @@ namespace MigraDoc.Rendering
             {
                 // Use the same line formatter as the real word, including overhang,
                 // justified shrink and the available float segments.
-                if (FormatAsWord(spaceWidth, fittingRect) == FormatResult.NewLine)
-                    return true;
+                foreach (var (leaf, _, spaceWidth) in spaces)
+                {
+                    _currentLeaf = leaf;
+                    var spaceRect = _currentSegmentIndex > 0 && _currentSecondaryRect != null
+                        ? _currentSecondaryRect : fittingRect;
+                    if (FormatAsWord(spaceWidth, spaceRect) == FormatResult.NewLine)
+                        return true;
+                }
                 _currentLeaf = following;
                 var nextVerticalInfo = CalcVerticalInfo(CurrentFont);
                 var nextRect = _currentSegmentIndex > 0 && _currentSecondaryRect != null
