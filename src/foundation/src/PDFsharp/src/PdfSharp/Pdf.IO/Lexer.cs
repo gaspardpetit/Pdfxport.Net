@@ -31,6 +31,8 @@ namespace PdfSharp.Pdf.IO
             _logger = logger ?? PdfSharpLogHost.PdfReadingLogger;
         }
 
+        internal Stream InputStream => _pdfStream;
+
         /// <summary>
         /// Gets or sets the logical current position within the PDF stream.<br/>
         /// When got, the logical position of the stream pointer is returned.

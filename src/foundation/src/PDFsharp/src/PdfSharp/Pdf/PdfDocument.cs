@@ -296,11 +296,24 @@ namespace PdfSharp.Pdf
             // Get security handler if document gets encrypted.
             var effectiveSecurityHandler = SecuritySettings.EffectiveSecurityHandler;
 
+            // Complete the PDF before replacing its source stream, so a failed save leaves it intact.
+            using MemoryStream? stagedOutput = ReferenceEquals(_lexer?.InputStream, stream)
+                ? new MemoryStream()
+                : null;
             PdfWriter? writer = null;
             try
             {
-                writer = new(stream, this, effectiveSecurityHandler);
+                writer = new(stagedOutput ?? stream, this, effectiveSecurityHandler);
                 await DoSaveAsync(writer).ConfigureAwait(false);
+
+                if (stagedOutput != null)
+                {
+                    stream.Position = 0;
+                    stream.SetLength(0);
+                    stagedOutput.Position = 0;
+                    await stagedOutput.CopyToAsync(stream).ConfigureAwait(false);
+                    await stream.FlushAsync().ConfigureAwait(false);
+                }
             }
             finally
             {
@@ -317,7 +330,7 @@ namespace PdfSharp.Pdf
                     }
                 }
 
-                writer?.Close(closeStream);
+                writer?.Close(stagedOutput == null && closeStream);
             }
         }
 
