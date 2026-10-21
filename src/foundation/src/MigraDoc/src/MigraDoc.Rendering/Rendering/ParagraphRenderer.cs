@@ -2532,11 +2532,10 @@ namespace MigraDoc.Rendering
             if (_phase == Phase.Rendering)
                 return _collapsedSpacesOnLine.Contains(character)
                     ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
+            if (_optionalSpaceDecisions.TryGetValue(character, out var alreadyCollapsed))
+                return alreadyCollapsed ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
             if (_documentRenderer.CollapsibleSpaceBeforeWrap?.Invoke(_paragraph, character) == true)
             {
-                if (_optionalSpaceDecisions.TryGetValue(character, out var alreadyCollapsed))
-                    return alreadyCollapsed ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
-
                 var spaces = new List<(ParagraphIterator Leaf, Character? Space, XUnitPt Width)>
                 {
                     (_currentLeaf!, character, width)

@@ -151,6 +151,30 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void GroupedOptionalSpaceUsesItsCachedSelection()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 12;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(102);
+            section.PageSetup.LeftMargin = Unit.FromPoint(10);
+            section.PageSetup.RightMargin = Unit.FromPoint(10);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("AAAA BBBB ");
+            var first = paragraph.AddSpace(1);
+            var second = paragraph.AddSpace(1);
+            paragraph.AddText("Delta");
+            var secondCalls = 0;
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                ReferenceEquals(space, first) ||
+                ReferenceEquals(space, second) && ++secondCalls == 1;
+            renderer.RenderDocument();
+            secondCalls.Should().Be(1);
+        }
+
+        [Fact]
         public void OptionalSpaceDecisionIsScopedToEachInheritedHeader()
         {
             (double X, double Y)[] Render(bool extraSpace)
