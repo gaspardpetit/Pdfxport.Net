@@ -25,6 +25,73 @@ namespace MigraDoc.Tests
     public class TextTests : IDisposable
     {
         [Fact]
+        public void OptionalExtraSpaceDoesNotIndentWhenItStartsTheWrappedLine()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            var bodyWidth = measure.MeasureString("AAAA BBBB", font).Width + 0.1;
+
+            (double X, double Y) Render(bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(bodyWidth + 20);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("AAAA BBBB ");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddText("Delta");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word)
+                    .Should().BeTrue();
+                return (word!.X, word.Y);
+            }
+
+            var control = Render(false);
+            var optional = Render(true);
+            optional.Y.Should().BeApproximately(control.Y, 0.1);
+            optional.X.Should().BeApproximately(control.X, 0.1);
+        }
+
+        [Fact]
+        public void OptionalExtraSpaceRemainsAfterExplicitLineBreak()
+        {
+            double Render(bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("AAAA");
+                paragraph.AddLineBreak();
+                paragraph.AddText(" ");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddText("Delta");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word)
+                    .Should().BeTrue();
+                return word!.X;
+            }
+
+            Render(true).Should().BeGreaterThan(Render(false) + 2);
+        }
+
+        [Fact]
         public void OptionalExtraSpaceKeepsItsAdvanceUntilTheFollowingWordWraps()
         {
             (double X, double Y) Render(double bodyWidth, bool extraSpace)

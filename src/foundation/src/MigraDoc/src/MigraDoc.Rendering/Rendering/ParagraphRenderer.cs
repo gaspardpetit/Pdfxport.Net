@@ -2592,7 +2592,8 @@ namespace MigraDoc.Rendering
                 }
                 var collapse = following != null &&
                     TryGetFollowingWord(following.Current, out var word) &&
-                    FollowingWordWrapsAfterSpaces(spaces, following, word);
+                    (SelectedSpaceStartedWrappedLine() ||
+                     FollowingWordWrapsAfterSpaces(spaces, following, word));
                 foreach (var (_, space, selected, _) in spaces)
                 {
                     if (space == null)
@@ -2607,6 +2608,19 @@ namespace MigraDoc.Rendering
                     return FormatResult.Ignore;
             }
             return FormatAsWord(width, fittingRect);
+        }
+
+        bool SelectedSpaceStartedWrappedLine()
+        {
+            if (_isFirstLine || _currentLineWidth != 0)
+                return false;
+
+            var previous = _currentLeaf?.GetPreviousLeaf();
+            while (previous != null && (IsBlank(previous.Current) ||
+                   previous.Current is Character space && IsSpaceCharacter(space) ||
+                   previous.Current is BookmarkField))
+                previous = previous.GetPreviousLeaf();
+            return previous != null && IsWordLikeElement(previous.Current);
         }
 
         bool TryGetFollowingWord(DocumentObject element, out string word)
