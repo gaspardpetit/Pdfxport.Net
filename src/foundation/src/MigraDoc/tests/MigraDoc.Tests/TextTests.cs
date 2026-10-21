@@ -175,6 +175,44 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void OptionalSpaceCanLookPastAnUnselectedExplicitSpace()
+        {
+            (double X, double Y) Render(double bodyWidth, bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(bodyWidth + 20);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("AAAA BBBB ");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddSpace(1);
+                paragraph.AddText("Delta");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word)
+                    .Should().BeTrue();
+                return (word!.X, word.Y);
+            }
+
+            var wrappedControl = Render(82, false);
+            var wrappedExtra = Render(82, true);
+            wrappedExtra.X.Should().BeApproximately(wrappedControl.X, 0.1);
+            wrappedExtra.Y.Should().BeApproximately(wrappedControl.Y, 0.1);
+            var fittingControl = Render(200, false);
+            var fittingExtra = Render(200, true);
+            fittingExtra.X.Should().BeGreaterThan(fittingControl.X + 2);
+            fittingExtra.Y.Should().BeApproximately(fittingControl.Y, 0.1);
+        }
+
+        [Fact]
         public void OptionalSpaceDecisionIsScopedToEachInheritedHeader()
         {
             (double X, double Y)[] Render(bool extraSpace)

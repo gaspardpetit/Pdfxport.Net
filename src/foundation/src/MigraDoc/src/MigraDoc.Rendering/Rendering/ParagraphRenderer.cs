@@ -2536,9 +2536,10 @@ namespace MigraDoc.Rendering
                 return alreadyCollapsed ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
             if (_documentRenderer.CollapsibleSpaceBeforeWrap?.Invoke(_paragraph, character) == true)
             {
-                var spaces = new List<(ParagraphIterator Leaf, Character? Space, XUnitPt Width)>
+                var spaces = new List<(ParagraphIterator Leaf, Character? Space,
+                    bool Selected, XUnitPt Width)>
                 {
-                    (_currentLeaf!, character, width)
+                    (_currentLeaf!, character, true, width)
                 };
                 var following = _currentLeaf?.GetNextLeaf();
                 while (following != null)
@@ -2554,19 +2555,19 @@ namespace MigraDoc.Rendering
                     }
                     if (IsBlank(following.Current))
                     {
-                        spaces.Add((following, null, 0));
+                        spaces.Add((following, null, false, 0));
                         following = following.GetNextLeaf();
                         continue;
                     }
                     if (following.Current is not Character nextSpace ||
-                        !IsSpaceCharacter(nextSpace) ||
-                        _documentRenderer.CollapsibleSpaceBeforeWrap(_paragraph, nextSpace) != true)
+                        !IsSpaceCharacter(nextSpace))
                         break;
+                    var selected = _documentRenderer.CollapsibleSpaceBeforeWrap(_paragraph, nextSpace);
                     var savedLeaf = _currentLeaf;
                     try
                     {
                         _currentLeaf = following;
-                        spaces.Add((following, nextSpace, GetSpaceWidth(nextSpace)));
+                        spaces.Add((following, nextSpace, selected, GetSpaceWidth(nextSpace)));
                     }
                     finally
                     {
@@ -2577,12 +2578,12 @@ namespace MigraDoc.Rendering
                 var collapse = following != null &&
                     TryGetFollowingWord(following.Current, out var word) &&
                     FollowingWordWrapsAfterSpaces(spaces, following, word);
-                foreach (var (_, space, _) in spaces)
+                foreach (var (_, space, selected, _) in spaces)
                 {
                     if (space == null)
                         continue;
-                    _optionalSpaceDecisions[space] = collapse;
-                    if (collapse)
+                    _optionalSpaceDecisions[space] = selected && collapse;
+                    if (selected && collapse)
                         _collapsedSpacesOnLine.Add(space);
                     else
                         _collapsedSpacesOnLine.Remove(space);
@@ -2609,7 +2610,7 @@ namespace MigraDoc.Rendering
         }
 
         bool FollowingWordWrapsAfterSpaces(
-            List<(ParagraphIterator Leaf, Character? Space, XUnitPt Width)> spaces,
+            List<(ParagraphIterator Leaf, Character? Space, bool Selected, XUnitPt Width)> spaces,
             ParagraphIterator following, string word)
         {
             var savedLeaf = _currentLeaf;
@@ -2634,7 +2635,7 @@ namespace MigraDoc.Rendering
             {
                 // Use the same line formatter as the real word, including overhang,
                 // justified shrink and the available float segments.
-                foreach (var (leaf, selectedSpace, spaceWidth) in spaces)
+                foreach (var (leaf, explicitSpace, _, spaceWidth) in spaces)
                 {
                     _currentLeaf = leaf;
                     var spaceVerticalInfo = CalcVerticalInfo(CurrentFont);
@@ -2644,7 +2645,7 @@ namespace MigraDoc.Rendering
                             spaceVerticalInfo.Height + BottomBorderOffset);
                     if (spaceRect == null)
                         return false;
-                    var result = selectedSpace == null
+                    var result = explicitSpace == null
                         ? FormatBlank(spaceRect)
                         : FormatAsWord(spaceWidth, spaceRect);
                     if (result == FormatResult.NewLine)
