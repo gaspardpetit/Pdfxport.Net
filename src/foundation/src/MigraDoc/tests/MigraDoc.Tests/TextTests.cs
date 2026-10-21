@@ -1107,6 +1107,7 @@ namespace MigraDoc.Tests
         [InlineData("1", "5", "0", 0)]
         [InlineData("A", "b", "c", 0)]
         [InlineData("É", "t", "é", 0)]
+        [InlineData("caf", "e\u0301", "x", 0)]
         [InlineData("1", "é", "0", 0)]
         [InlineData("A", "b", "c", 1)]
         [InlineData("É", "t", "é", 2)]
@@ -1143,10 +1144,17 @@ namespace MigraDoc.Tests
             var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
             stream.Text.MoveAndGetNext(item => item.Text == "number", true, out var prefix).Should().BeTrue();
             stream.Text.MoveAndGetNext(item => item.Text == firstText, true, out var first).Should().BeTrue();
-            stream.Text.MoveAndGetNext(item => item.Text == secondText, true, out var second).Should().BeTrue();
+            double? secondY = null;
+            if (secondText != "e\u0301")
+            {
+                stream.Text.MoveAndGetNext(item => item.Text == secondText, true, out var second)
+                    .Should().BeTrue();
+                secondY = second!.Y;
+            }
             stream.Text.MoveAndGetNext(item => item.Text == thirdText, true, out var third).Should().BeTrue();
             first!.IsAtYPosition(prefix!.Y).Should().BeFalse();
-            second!.IsAtYPosition(first.Y).Should().BeTrue();
+            if (secondY.HasValue)
+                secondY.Value.Should().BeApproximately(first.Y, 0.1);
             third!.IsAtYPosition(first.Y).Should().BeTrue();
         }
 
@@ -1184,14 +1192,17 @@ namespace MigraDoc.Tests
             second!.IsAtYPosition(first.Y).Should().BeTrue();
         }
 
-        [Fact]
-        public void AdjacentStyledRunsMoveTogetherToSecondaryFloatInterval()
+        [Theory]
+        [InlineData(240, false)]
+        [InlineData(200, true)]
+        public void AdjacentStyledRunsMoveTogetherToSecondaryFloatInterval(double pageWidth,
+            bool useTerminalOverhang)
         {
             var document = new Document();
             document.Styles.Normal.Font.Name = "Arial";
             document.Styles.Normal.Font.Size = 12;
             var section = document.AddSection();
-            section.PageSetup.PageWidth = Unit.FromPoint(240);
+            section.PageSetup.PageWidth = Unit.FromPoint(pageWidth);
             section.PageSetup.LeftMargin = Unit.FromPoint(10);
             section.PageSetup.RightMargin = Unit.FromPoint(10);
             section.PageSetup.TopMargin = Unit.FromPoint(10);
@@ -1209,14 +1220,18 @@ namespace MigraDoc.Tests
             var paragraph = section.AddParagraph();
             paragraph.AddText("Prefix ");
             paragraph.AddFormattedText("Contin");
-            paragraph.AddFormattedText("uation").Bold = true;
+            var lastRun = useTerminalOverhang ? "uation." : "uation";
+            paragraph.AddFormattedText(lastRun).Bold = true;
 
             var renderer = new PdfDocumentRenderer { Document = document };
+            if (useTerminalOverhang)
+                renderer.DocumentRenderer.LineEndOverhang = (_, word, _) =>
+                    word == lastRun ? 40 : null;
             renderer.RenderDocument();
             var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
             stream.Text.MoveAndGetNext(item => item.Text == "Prefix", true, out var prefix).Should().BeTrue();
             stream.Text.MoveAndGetNext(item => item.Text == "Contin", true, out var first).Should().BeTrue();
-            stream.Text.MoveAndGetNext(item => item.Text == "uation", true, out var second).Should().BeTrue();
+            stream.Text.MoveAndGetNext(item => item.Text == lastRun, true, out var second).Should().BeTrue();
             first!.IsAtYPosition(prefix!.Y).Should().BeTrue();
             first.X.Should().BeGreaterThan(140);
             second!.IsAtYPosition(first.Y).Should().BeTrue();

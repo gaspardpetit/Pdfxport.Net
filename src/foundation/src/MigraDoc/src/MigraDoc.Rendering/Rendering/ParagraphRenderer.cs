@@ -2223,8 +2223,7 @@ namespace MigraDoc.Rendering
                     var nextLineWidth = sequenceWidth - (width - wordWidth);
                     var nextLineCapacity = right - nextLineStart;
                     var overhangAllowance = 0.0;
-                    if (hasContinuation && nextLineWidth > nextLineCapacity &&
-                        lastWordLeaf.Current is Text lastText &&
+                    if (hasContinuation && lastWordLeaf.Current is Text lastText &&
                         _documentRenderer.LineEndOverhang is { } lineEndOverhang)
                     {
                         _currentLeaf = lastWordLeaf;
@@ -2240,7 +2239,7 @@ namespace MigraDoc.Rendering
                         }
                     }
                     if (hasContinuation && _currentXPosition + sequenceWidth - shrinkAllowance > right &&
-                        TryMoveToSecondary(nextLineWidth))
+                        TryMoveToSecondary(nextLineWidth - overhangAllowance))
                     {
                         fittingRect = _currentSecondaryRect!;
                         width = wordWidth;
@@ -2369,7 +2368,7 @@ namespace MigraDoc.Rendering
             return result;
         }
 
-        static bool IsLatinWord(string text) => text.Length > 0 && text.All(IsLatinWordCharacter);
+        static bool IsLatinWord(string text) => IsLatinWordContinuation(text, out var endsWord) && !endsWord;
 
         bool IsLatinWordStart(string text)
         {
@@ -2402,6 +2401,11 @@ namespace MigraDoc.Rendering
                     hasLatinCharacter = true;
                     continue;
                 }
+                if (hasLatinCharacter && char.GetUnicodeCategory(text[index]) is
+                    System.Globalization.UnicodeCategory.NonSpacingMark or
+                    System.Globalization.UnicodeCategory.SpacingCombiningMark or
+                    System.Globalization.UnicodeCategory.EnclosingMark)
+                    continue;
                 if (text[index] is '\'' or '\u2019' && index + 1 < wordEnd &&
                     IsLatinWordCharacter(text[index + 1]))
                     continue;
