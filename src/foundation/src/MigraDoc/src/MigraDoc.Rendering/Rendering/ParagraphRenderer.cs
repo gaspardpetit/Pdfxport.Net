@@ -2160,7 +2160,8 @@ namespace MigraDoc.Rendering
                 var previous = _currentLeaf.GetPreviousLeaf();
                 while (previous?.Current is BookmarkField)
                     previous = previous.GetPreviousLeaf();
-                if (previous == null || IsBlank(previous.Current) || IsTab(previous.Current))
+                if (previous == null || IsBlank(previous.Current) ||
+                    IsSpaceCharacter(previous.Current) || IsTab(previous.Current))
                 {
                     var original = _currentLeaf;
                     var next = original.GetNextLeaf();
@@ -2238,7 +2239,13 @@ namespace MigraDoc.Rendering
                             _currentLeaf = original;
                         }
                     }
-                    if (hasContinuation && nextLineWidth - overhangAllowance <= nextLineCapacity &&
+                    if (hasContinuation && _currentXPosition + sequenceWidth - shrinkAllowance > right &&
+                        TryMoveToSecondary(nextLineWidth))
+                    {
+                        fittingRect = _currentSecondaryRect!;
+                        width = wordWidth;
+                    }
+                    else if (hasContinuation && nextLineWidth - overhangAllowance <= nextLineCapacity &&
                         _currentXPosition + sequenceWidth - shrinkAllowance > right)
                     {
                         while (_currentLeaf.GetPreviousLeaf() is { Current: BookmarkField } bookmark)

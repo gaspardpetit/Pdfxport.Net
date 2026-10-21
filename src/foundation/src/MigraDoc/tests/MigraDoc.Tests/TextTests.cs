@@ -1151,6 +1151,78 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void ExplicitSpaceKeepsAdjacentStyledRunsTogether()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 9;
+            using var graphics = XGraphics.CreateMeasureContext(new XSize(100, 100),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var normal = new XFont("Arial", 9);
+            var bold = new XFont("Arial", 9, XFontStyleEx.Bold);
+            var contentWidth = graphics.MeasureString("Reference number ", normal).Width +
+                graphics.MeasureString("Se", normal).Width +
+                graphics.MeasureString("cond", bold).Width - 4;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("Reference number");
+            paragraph.AddSpace(1);
+            paragraph.AddFormattedText("Se");
+            paragraph.AddFormattedText("cond").Bold = true;
+            paragraph.AddText(" February");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            stream.Text.MoveAndGetNext(item => item.Text == "number", true, out var prefix).Should().BeTrue();
+            stream.Text.MoveAndGetNext(item => item.Text == "Se", true, out var first).Should().BeTrue();
+            stream.Text.MoveAndGetNext(item => item.Text == "cond", true, out var second).Should().BeTrue();
+            first!.IsAtYPosition(prefix!.Y).Should().BeFalse();
+            second!.IsAtYPosition(first.Y).Should().BeTrue();
+        }
+
+        [Fact]
+        public void AdjacentStyledRunsMoveTogetherToSecondaryFloatInterval()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 12;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(240);
+            section.PageSetup.LeftMargin = Unit.FromPoint(10);
+            section.PageSetup.RightMargin = Unit.FromPoint(10);
+            section.PageSetup.TopMargin = Unit.FromPoint(10);
+            var image = section.AddImage(
+                "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+            image.RelativeHorizontal = RelativeHorizontal.Margin;
+            image.RelativeVertical = RelativeVertical.Margin;
+            image.Left = Unit.FromPoint(80);
+            image.Top = Unit.FromPoint(0);
+            image.Width = Unit.FromPoint(50);
+            image.Height = Unit.FromPoint(60);
+            image.WrapFormat.Style = WrapStyle.BothSides;
+            image.WrapFormat.DistanceLeft = Unit.FromPoint(4);
+            image.WrapFormat.DistanceRight = Unit.FromPoint(4);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("Prefix ");
+            paragraph.AddFormattedText("Contin");
+            paragraph.AddFormattedText("uation").Bold = true;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            stream.Text.MoveAndGetNext(item => item.Text == "Prefix", true, out var prefix).Should().BeTrue();
+            stream.Text.MoveAndGetNext(item => item.Text == "Contin", true, out var first).Should().BeTrue();
+            stream.Text.MoveAndGetNext(item => item.Text == "uation", true, out var second).Should().BeTrue();
+            first!.IsAtYPosition(prefix!.Y).Should().BeTrue();
+            first.X.Should().BeGreaterThan(140);
+            second!.IsAtYPosition(first.Y).Should().BeTrue();
+        }
+
+        [Fact]
         public void LeadingBookmarkFollowsStyledWordAcrossPageBreak()
         {
             var document = new Document();
