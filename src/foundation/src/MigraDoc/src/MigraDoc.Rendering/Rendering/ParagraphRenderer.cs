@@ -2527,12 +2527,11 @@ namespace MigraDoc.Rendering
         FormatResult FormatSpace(Character character, Rectangle fittingRect)
         {
             XUnitPt width = GetSpaceWidth(character);
+            if (_phase == Phase.Rendering)
+                return _documentRenderer.CollapsedSpaces.Contains(character)
+                    ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
             if (_documentRenderer.CollapsibleSpaceBeforeWrap?.Invoke(_paragraph, character) == true)
             {
-                if (_phase == Phase.Rendering)
-                    return _documentRenderer.CollapsedSpaces.Contains(character)
-                        ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
-
                 if (_optionalSpaceDecisions.TryGetValue(character, out var alreadyCollapsed))
                     return alreadyCollapsed ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
 

@@ -65,7 +65,8 @@ namespace MigraDoc.Tests
         [Fact]
         public void OptionalExtraSpaceUsesTheFollowingFieldsActualLineBreak()
         {
-            (double X, double Y) Render(double bodyWidth, bool extraSpace)
+            (double X, double Y) Render(double bodyWidth, bool extraSpace,
+                bool clearSelectorAfterLayout = false)
             {
                 var document = new Document();
                 document.Styles.Normal.Font.Name = "Arial";
@@ -82,7 +83,14 @@ namespace MigraDoc.Tests
                 if (extra != null)
                     renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
                         ReferenceEquals(space, extra);
-                renderer.RenderDocument();
+                if (clearSelectorAfterLayout)
+                {
+                    renderer.PrepareRenderPages();
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = null;
+                    renderer.RenderPages(1, renderer.PageCount);
+                }
+                else
+                    renderer.RenderDocument();
                 var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
                 stream.Text.MoveAndGetNext(info => info.Text == "1", true, out var field)
                     .Should().BeTrue();
@@ -93,6 +101,9 @@ namespace MigraDoc.Tests
             var wrappedExtra = Render(75, true);
             wrappedExtra.X.Should().BeApproximately(wrappedControl.X, 0.1);
             wrappedExtra.Y.Should().BeApproximately(wrappedControl.Y, 0.1);
+            var wrappedAfterSelectorCleared = Render(75, true, true);
+            wrappedAfterSelectorCleared.X.Should().BeApproximately(wrappedExtra.X, 0.1);
+            wrappedAfterSelectorCleared.Y.Should().BeApproximately(wrappedExtra.Y, 0.1);
 
             var fittingControl = Render(200, false);
             var fittingExtra = Render(200, true);
