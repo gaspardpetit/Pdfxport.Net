@@ -1275,6 +1275,12 @@ namespace MigraDoc.Rendering
 
         void RenderSpace(Character character)
         {
+            if (_documentRenderer.CollapsedSpaces.Contains(character))
+            {
+                RenderUnderline(0, false);
+                RealizeHyperlink(0);
+                return;
+            }
             XUnitPt width = GetSpaceWidth(character);
             RenderUnderline(width, false);
             RealizeHyperlink(width);
@@ -2520,6 +2526,33 @@ namespace MigraDoc.Rendering
         FormatResult FormatSpace(Character character, Rectangle fittingRect)
         {
             XUnitPt width = GetSpaceWidth(character);
+            if (_documentRenderer.CollapsibleSpaceBeforeWrap?.Invoke(_paragraph, character) == true)
+            {
+                var following = _currentLeaf?.GetNextLeaf();
+                while (following?.Current is Text { Content: " " } or BookmarkField)
+                    following = following.GetNextLeaf();
+                if (following?.Current is Text { Content: not " " } word)
+                {
+                    var savedLeaf = _currentLeaf;
+                    _currentLeaf = following;
+                    XUnitPt wordWidth;
+                    try
+                    {
+                        wordWidth = MeasureString(word.Content);
+                    }
+                    finally
+                    {
+                        _currentLeaf = savedLeaf;
+                    }
+                    if (_currentXPosition + width + wordWidth >
+                        fittingRect.X + fittingRect.Width - RightIndent + Tolerance)
+                    {
+                        _documentRenderer.CollapsedSpaces.Add(character);
+                        return FormatResult.Ignore;
+                    }
+                }
+                _documentRenderer.CollapsedSpaces.Remove(character);
+            }
             return FormatAsWord(width, fittingRect);
         }
 
