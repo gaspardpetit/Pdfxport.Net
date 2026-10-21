@@ -1216,6 +1216,106 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void StyledWordFitsTheLineAfterFirstLineIndent()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 9);
+            var bold = new XFont("Arial", 9, XFontStyleEx.Bold);
+            var firstIndent = 20.0;
+            var contentWidth = firstIndent + measure.MeasureString("A ", font).Width +
+                measure.MeasureString("ipsum", font).Width + 1;
+            contentWidth.Should().BeGreaterThan(measure.MeasureString("ipsum", font).Width +
+                measure.MeasureString("lorem", bold).Width);
+
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 9;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.Format.FirstLineIndent = Unit.FromPoint(firstIndent);
+            paragraph.AddText("A ");
+            paragraph.AddFormattedText("ipsum");
+            paragraph.AddFormattedText("lorem").Bold = true;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var text = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            text.Text.MoveAndGetNext(item => item.Text == "A", true, out var prefix).Should().BeTrue();
+            text.Text.MoveAndGetNext(item => item.Text == "ipsum", true, out var first).Should().BeTrue();
+            text.Text.MoveAndGetNext(item => item.Text == "lorem", true, out var second).Should().BeTrue();
+            first!.IsAtYPosition(prefix!.Y).Should().BeFalse();
+            second!.IsAtYPosition(first.Y).Should().BeTrue();
+        }
+
+        [Theory]
+        [InlineData("hel", "lo.")]
+        [InlineData("don", "'t")]
+        public void StyledWordKeepsTerminalPunctuationWithItsLetters(string firstText, string secondText)
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 9);
+            var contentWidth = measure.MeasureString("Intro ", font).Width +
+                measure.MeasureString(firstText, font).Width + 0.5;
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 9;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("Intro ");
+            paragraph.AddFormattedText(firstText);
+            paragraph.AddFormattedText(secondText).Bold = true;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var text = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            text.Text.MoveAndGetNext(item => item.Text == "Intro", true, out var prefix).Should().BeTrue();
+            text.Text.MoveAndGetNext(item => item.Text == firstText, true, out var first).Should().BeTrue();
+            text.Text.MoveAndGetNext(item => item.Text == secondText, true, out var second).Should().BeTrue();
+            first!.IsAtYPosition(prefix!.Y).Should().BeFalse();
+            second!.IsAtYPosition(first.Y).Should().BeTrue();
+        }
+
+        [Fact]
+        public void StyledWordNextLineFitExcludesLeadingKerning()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 9);
+            var bold = new XFont("Arial", 9, XFontStyleEx.Bold);
+            var contentWidth = measure.MeasureString("he", font).Width +
+                measure.MeasureString("lloWorld", bold).Width + 1;
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 9;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("A ");
+            paragraph.AddFormattedText("he");
+            paragraph.AddFormattedText("lloWorld").Bold = true;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.LeadingKerningAfterBlank = (_, word, _) => word == "he" ? 5 : null;
+            renderer.RenderDocument();
+            var text = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            text.Text.MoveAndGetNext(item => item.Text == "A", true, out var prefix).Should().BeTrue();
+            text.Text.MoveAndGetNext(item => item.Text == "he", true, out var first).Should().BeTrue();
+            text.Text.MoveAndGetNext(item => item.Text == "lloWorld", true, out var second).Should().BeTrue();
+            first!.IsAtYPosition(prefix!.Y).Should().BeFalse();
+            second!.IsAtYPosition(first.Y).Should().BeTrue();
+        }
+
+        [Fact]
         public void RejectedTabDoesNotIndentTheFollowingLine()
         {
             var document = new Document();

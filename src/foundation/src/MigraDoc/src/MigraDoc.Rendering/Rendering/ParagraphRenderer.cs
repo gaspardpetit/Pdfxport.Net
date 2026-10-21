@@ -2176,13 +2176,16 @@ namespace MigraDoc.Rendering
                                 next = next.GetNextLeaf();
                                 continue;
                             }
-                            if (next.Current is not Text text || !IsLatinWord(text.Content))
+                            if (next.Current is not Text text ||
+                                !IsLatinWordContinuation(text.Content, out var endsWord))
                                 break;
                             _currentLeaf = next;
                             sequenceWidth += MeasureString(text.Content);
                             lastWordLeaf = next;
                             hasContinuation = true;
                             next = next.GetNextLeaf();
+                            if (endsWord)
+                                break;
                         }
                     }
                     finally
@@ -2212,7 +2215,12 @@ namespace MigraDoc.Rendering
                             }
                         }
                     }
-                    if (hasContinuation && sequenceWidth <= right - StartXPosition &&
+                    var nextLineStart = StartXPosition;
+                    var firstLineExtra = LeftIndent - _paragraph.Format.LeftIndent.Point;
+                    if (_isFirstLine && firstLineExtra > 0)
+                        nextLineStart -= firstLineExtra;
+                    var nextLineWidth = sequenceWidth - (width - wordWidth);
+                    if (hasContinuation && nextLineWidth <= right - nextLineStart &&
                         _currentXPosition + sequenceWidth - shrinkAllowance > right)
                     {
                         while (_currentLeaf.GetPreviousLeaf() is { Current: BookmarkField } bookmark)
@@ -2336,12 +2344,39 @@ namespace MigraDoc.Rendering
             return result;
         }
 
-        static bool IsLatinWord(string text) => text.Length > 0 && text.All(character =>
+        static bool IsLatinWord(string text) => text.Length > 0 && text.All(IsLatinWordCharacter);
+
+        static bool IsLatinWordContinuation(string text, out bool endsWord)
+        {
+            var wordEnd = text.Length;
+            while (wordEnd > 0 && text[wordEnd - 1] is '.' or ',' or ';' or ':' or '!' or '?')
+                wordEnd--;
+            endsWord = wordEnd < text.Length;
+            if (wordEnd == 0)
+                return false;
+
+            var hasLatinCharacter = false;
+            for (var index = 0; index < wordEnd; index++)
+            {
+                if (IsLatinWordCharacter(text[index]))
+                {
+                    hasLatinCharacter = true;
+                    continue;
+                }
+                if (text[index] is '\'' or '\u2019' && index + 1 < wordEnd &&
+                    IsLatinWordCharacter(text[index + 1]))
+                    continue;
+                return false;
+            }
+            return hasLatinCharacter;
+        }
+
+        static bool IsLatinWordCharacter(char character) =>
             character is >= '0' and <= '9' ||
             char.IsLetter(character) &&
             (character is >= 'A' and <= 'z' or >= '\u00c0' and <= '\u024f' or
                 >= '\u1e00' and <= '\u1eff' or >= '\u2c60' and <= '\u2c7f' or
-                >= '\ua720' and <= '\ua7ff' or >= '\uab30' and <= '\uab6f'));
+                >= '\ua720' and <= '\ua7ff' or >= '\uab30' and <= '\uab6f');
 
         XUnitPt _savedWordWidth = 0;
 
