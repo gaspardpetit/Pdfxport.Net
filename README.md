@@ -1,13 +1,14 @@
 # Pdfxport.Net
 
-Pdfxport.Net is an independent fork of PDFsharp and MigraDoc, based on the
-MIT-licensed 7.0.0 Preview 1 line before the upstream project changed to
-AGPL/commercial licensing in 7.0.0 Preview 2. It retains the original Git
-history and copyright notices. This fork is maintained separately from the
-PDFsharp Team; the documentation below describes the inherited project and
-may still refer to upstream PDFsharp.
-
-The source in this repository is distributed under the [MIT License](LICENSE).
+> [!NOTE]  
+> Pdfxport.Net is an independent fork of PDFsharp and MigraDoc, based on the
+> MIT-licensed 7.0.0 Preview 1 line before the upstream project changed to
+> AGPL/commercial licensing in 7.0.0 Preview 2. It retains the original Git
+> history and copyright notices. This fork is maintained separately from the
+> PDFsharp Team; the documentation below describes the inherited project and
+> may still refer to upstream PDFsharp.
+>
+> The source in this repository is distributed under the [MIT License](LICENSE).
 
 ## NuGet packages
 
