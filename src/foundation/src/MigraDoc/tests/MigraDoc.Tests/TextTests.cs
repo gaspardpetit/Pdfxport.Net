@@ -196,6 +196,40 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void OptionalSpaceCanLookPastAnEmptyInfoField()
+        {
+            (double X, double Y) Render(bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(102);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("AAAA BBBB ");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddInfoField(InfoFieldType.Title);
+                paragraph.AddText("Delta");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word)
+                    .Should().BeTrue();
+                return (word!.X, word.Y);
+            }
+
+            var control = Render(false);
+            var actual = Render(true);
+            actual.X.Should().BeApproximately(control.X, 0.1);
+            actual.Y.Should().BeApproximately(control.Y, 0.1);
+        }
+
+        [Fact]
         public void OptionalExtraSpaceHonorsTheFollowingWordsOverhang()
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
