@@ -2528,24 +2528,17 @@ namespace MigraDoc.Rendering
             XUnitPt width = GetSpaceWidth(character);
             if (_documentRenderer.CollapsibleSpaceBeforeWrap?.Invoke(_paragraph, character) == true)
             {
+                if (_phase == Phase.Rendering)
+                    return _documentRenderer.CollapsedSpaces.Contains(character)
+                        ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
+
                 var following = _currentLeaf?.GetNextLeaf();
-                while (following?.Current is Text { Content: " " } or BookmarkField)
+                while (following != null &&
+                       (IsBlank(following.Current) || following.Current is BookmarkField))
                     following = following.GetNextLeaf();
-                if (following?.Current is Text { Content: not " " } word)
+                if (following != null && TryGetFollowingWord(following.Current, out var word))
                 {
-                    var savedLeaf = _currentLeaf;
-                    _currentLeaf = following;
-                    XUnitPt wordWidth;
-                    try
-                    {
-                        wordWidth = MeasureString(word.Content);
-                    }
-                    finally
-                    {
-                        _currentLeaf = savedLeaf;
-                    }
-                    if (_currentXPosition + width + wordWidth >
-                        fittingRect.X + fittingRect.Width - RightIndent + Tolerance)
+                    if (FollowingWordWrapsAfterSpace(following, word, width, fittingRect))
                     {
                         _documentRenderer.CollapsedSpaces.Add(character);
                         return FormatResult.Ignore;
@@ -2554,6 +2547,69 @@ namespace MigraDoc.Rendering
                 _documentRenderer.CollapsedSpaces.Remove(character);
             }
             return FormatAsWord(width, fittingRect);
+        }
+
+        bool TryGetFollowingWord(DocumentObject element, out string word)
+        {
+            word = element switch
+            {
+                Text text => text.Content,
+                DateField date => FormatDateTimeForField(
+                    new DateTimeOffset(2999, 08, 28, 22, 28, 28, TimeSpan.Zero), date),
+                InfoField info => GetDocumentInfo(info.Name),
+                NumericFieldBase field => GetFieldValue(field),
+                Character symbol when IsSymbol(symbol) => GetSymbol(symbol),
+                _ => ""
+            };
+            return word.Length > 0;
+        }
+
+        bool FollowingWordWrapsAfterSpace(ParagraphIterator following, string word,
+            XUnitPt spaceWidth, Rectangle fittingRect)
+        {
+            var savedLeaf = _currentLeaf;
+            var savedX = _currentXPosition;
+            var savedLineWidth = _currentLineWidth;
+            var savedWordsWidth = _currentWordsWidth;
+            var savedBlankCount = _currentBlankCount;
+            var savedBlankWidth = _savedBlankWidth;
+            var savedClippedWidth = _currentClippedTrailingWidth;
+            var savedWordWidth = _savedWordWidth;
+            var savedMinWidth = _minWidth;
+            var savedSecondaryRect = _currentSecondaryRect;
+            var savedSegmentIndex = _currentSegmentIndex;
+            var savedTransitionCount = _currentSegmentTransitions.Count;
+            try
+            {
+                // Use the same line formatter as the real word, including overhang,
+                // justified shrink and the available float segments.
+                if (FormatAsWord(spaceWidth, fittingRect) == FormatResult.NewLine)
+                    return true;
+                _currentLeaf = following;
+                var nextVerticalInfo = CalcVerticalInfo(CurrentFont);
+                var nextRect = _currentSegmentIndex > 0 && _currentSecondaryRect != null
+                    ? _currentSecondaryRect
+                    : _formattingArea.GetFittingRect(_currentYPosition,
+                        nextVerticalInfo.Height + BottomBorderOffset);
+                return nextRect != null && FormatWord(word, nextRect) == FormatResult.NewLine;
+            }
+            finally
+            {
+                _currentLeaf = savedLeaf;
+                _currentXPosition = savedX;
+                _currentLineWidth = savedLineWidth;
+                _currentWordsWidth = savedWordsWidth;
+                _currentBlankCount = savedBlankCount;
+                _savedBlankWidth = savedBlankWidth;
+                _currentClippedTrailingWidth = savedClippedWidth;
+                _savedWordWidth = savedWordWidth;
+                _minWidth = savedMinWidth;
+                _currentSecondaryRect = savedSecondaryRect;
+                _currentSegmentIndex = savedSegmentIndex;
+                if (_currentSegmentTransitions.Count > savedTransitionCount)
+                    _currentSegmentTransitions.RemoveRange(savedTransitionCount,
+                        _currentSegmentTransitions.Count - savedTransitionCount);
+            }
         }
 
         static string GetSymbol(Character character)

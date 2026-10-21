@@ -63,6 +63,91 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void OptionalExtraSpaceUsesTheFollowingFieldsActualLineBreak()
+        {
+            (double X, double Y) Render(double bodyWidth, bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(bodyWidth + 20);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("AAAA BBBB ");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddPageField();
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "1", true, out var field)
+                    .Should().BeTrue();
+                return (field!.X, field.Y);
+            }
+
+            var wrappedControl = Render(75, false);
+            var wrappedExtra = Render(75, true);
+            wrappedExtra.X.Should().BeApproximately(wrappedControl.X, 0.1);
+            wrappedExtra.Y.Should().BeApproximately(wrappedControl.Y, 0.1);
+
+            var fittingControl = Render(200, false);
+            var fittingExtra = Render(200, true);
+            fittingExtra.Y.Should().BeApproximately(fittingControl.Y, 0.1);
+            fittingExtra.X.Should().BeGreaterThan(fittingControl.X + 2);
+        }
+
+        [Fact]
+        public void OptionalExtraSpaceHonorsTheFollowingWordsOverhang()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            var lineWidth = measure.MeasureString("Alpha", font).Width +
+                2 * measure.MeasureString(" ", font).Width +
+                measure.MeasureString("Bravo.", font).Width - 4;
+
+            (double AlphaY, double BravoY, double BravoX) Render(double? allowance,
+                bool extraSpace = true)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(lineWidth + 40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(20);
+                section.PageSetup.RightMargin = Unit.FromPoint(20);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("Alpha ");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddText("Bravo.");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                if (allowance.HasValue)
+                    renderer.DocumentRenderer.LineEndOverhang = (_, word, _) =>
+                        word == "Bravo." ? allowance : null;
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "Alpha", true, out var alpha)
+                    .Should().BeTrue();
+                stream.Text.MoveAndGetNext(info => info.Text == "Bravo.", true, out var bravo)
+                    .Should().BeTrue();
+                return (alpha!.Y, bravo!.Y, bravo.X);
+            }
+
+            var without = Render(null);
+            without.BravoY.Should().NotBe(without.AlphaY);
+            var with = Render(8);
+            with.BravoY.Should().BeApproximately(with.AlphaY, 0.1);
+            with.BravoX.Should().BeGreaterThan(Render(8, false).BravoX + 2);
+        }
+
+        [Fact]
         public void OversizedNoBreakGroupSettingMovesGroupAndSurvivesDdl()
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
