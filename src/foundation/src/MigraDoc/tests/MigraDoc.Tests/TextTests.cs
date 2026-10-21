@@ -1151,6 +1151,71 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void LeadingBookmarkFollowsStyledWordAcrossPageBreak()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(150);
+            section.PageSetup.PageHeight = Unit.FromPoint(60);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            section.PageSetup.TopMargin = Unit.FromPoint(20);
+            section.PageSetup.BottomMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("First long segment ");
+            paragraph.AddBookmark("beforeWord", prepend: false);
+            paragraph.AddFormattedText("Se");
+            paragraph.AddFormattedText("cond").Bold = true;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.PageCount.Should().Be(2);
+            var destination = renderer.PdfDocument.Internals.Catalog.Names!.NameTree!
+                .GetValue("beforeWord", true).Should().BeOfType<PdfSharp.Pdf.PdfArray>().Subject;
+            destination.Elements[0].Should().BeSameAs(renderer.PdfDocument.Pages[1].Reference);
+        }
+
+        [Fact]
+        public void StyledFinalWordUsesJustifiedSpaceContraction()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var normal = new XFont("Arial", 12);
+            var bold = new XFont("Arial", 12, XFontStyleEx.Bold);
+            var contentWidth = measure.MeasureString("Alpha ", normal).Width +
+                measure.MeasureString("Brav", normal).Width + measure.MeasureString("o", bold).Width - 0.5;
+
+            bool SameLine(double? shrinkFactor)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(20);
+                section.PageSetup.RightMargin = Unit.FromPoint(20);
+                var paragraph = section.AddParagraph();
+                paragraph.Format.Alignment = ParagraphAlignment.Justify;
+                paragraph.AddText("Alpha ");
+                paragraph.AddFormattedText("Brav");
+                paragraph.AddFormattedText("o").Bold = true;
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = _ => shrinkFactor;
+                renderer.RenderDocument();
+                var text = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                text.Text.MoveAndGetNext(item => item.Text == "Alpha", true, out var prefix).Should().BeTrue();
+                text.Text.MoveAndGetNext(item => item.Text == "Brav", true, out var first).Should().BeTrue();
+                text.Text.MoveAndGetNext(item => item.Text == "o", true, out var last).Should().BeTrue();
+                first!.IsAtYPosition(last!.Y).Should().BeTrue();
+                return first.IsAtYPosition(prefix!.Y);
+            }
+
+            SameLine(null).Should().BeFalse();
+            SameLine(0.75).Should().BeTrue();
+        }
+
+        [Fact]
         public void RejectedTabDoesNotIndentTheFollowingLine()
         {
             var document = new Document();

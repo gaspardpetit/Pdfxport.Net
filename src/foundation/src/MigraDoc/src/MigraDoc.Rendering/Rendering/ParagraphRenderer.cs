@@ -2164,6 +2164,7 @@ namespace MigraDoc.Rendering
                 {
                     var original = _currentLeaf;
                     var next = original.GetNextLeaf();
+                    var lastWordLeaf = original;
                     var sequenceWidth = width;
                     var hasContinuation = false;
                     try
@@ -2179,6 +2180,7 @@ namespace MigraDoc.Rendering
                                 break;
                             _currentLeaf = next;
                             sequenceWidth += MeasureString(text.Content);
+                            lastWordLeaf = next;
                             hasContinuation = true;
                             next = next.GetNextLeaf();
                         }
@@ -2188,9 +2190,35 @@ namespace MigraDoc.Rendering
                         _currentLeaf = original;
                     }
                     var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+                    var shrinkAllowance = 0.0;
+                    var trailingLeaf = next;
+                    while (trailingLeaf != null && IsBlank(trailingLeaf.Current))
+                        trailingLeaf = trailingLeaf.GetNextLeaf();
+                    if (trailingLeaf == null && _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
+                        _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1
+                            and var shrinkFactor)
+                    {
+                        var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
+                        if (blankCount > 0)
+                        {
+                            _currentLeaf = lastWordLeaf;
+                            try
+                            {
+                                shrinkAllowance = (1 - shrinkFactor) * MeasureString(" ") * blankCount;
+                            }
+                            finally
+                            {
+                                _currentLeaf = original;
+                            }
+                        }
+                    }
                     if (hasContinuation && sequenceWidth <= right - StartXPosition &&
-                        _currentXPosition + sequenceWidth > right)
+                        _currentXPosition + sequenceWidth - shrinkAllowance > right)
+                    {
+                        while (_currentLeaf.GetPreviousLeaf() is { Current: BookmarkField } bookmark)
+                            _currentLeaf = bookmark;
                         return FormatResult.NewLine;
+                    }
                 }
             }
             if (_phase == Phase.Formatting && word.Contains('\u00a0') &&
