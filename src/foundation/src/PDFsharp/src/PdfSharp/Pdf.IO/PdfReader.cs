@@ -452,9 +452,6 @@ namespace PdfSharp.Pdf.IO
                             PdfEncoders.RawEncoding.GetString(agTemp, 0, agTemp.Length);
                     }
 
-                    // Change modification date.
-                    _document.Info.ModificationDate = DateTimeOffset.Now;
-
                     // Remove all unreachable objects.
                     int removed = _document.IrefTable.Compact();
                     if (removed != 0)

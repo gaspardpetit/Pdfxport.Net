@@ -113,12 +113,15 @@ namespace PdfSharp.Pdf
             get => Elements.GetDateTime(Keys.ModDate, null);
             set
             {
+                ModificationDateSetByCaller = true;
                 if (value == null)
                     Elements.Remove(Keys.ModDate);
                 else
                     Elements.SetDateTime(Keys.ModDate, value.Value);
             }
         }
+
+        internal bool ModificationDateSetByCaller { get; private set; }
 
         // TODO CustomProperties and metadata
 

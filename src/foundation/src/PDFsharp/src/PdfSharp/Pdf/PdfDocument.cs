@@ -478,6 +478,10 @@ namespace PdfSharp.Pdf
         /// </summary>
         void PrepareForSave()
         {
+            // Date a modified imported document when it is written. Preserve a date set by the caller.
+            if (IsImported && OpenMode == PdfDocumentOpenMode.Modify && !Info.ModificationDateSetByCaller)
+                Info.Elements.SetDateTime(PdfDocumentInformation.Keys.ModDate, DateTimeOffset.Now);
+
             // The Creator is called “Application” in Acrobat.
             // The Producer is call “Created by” in Acrobat.
 
