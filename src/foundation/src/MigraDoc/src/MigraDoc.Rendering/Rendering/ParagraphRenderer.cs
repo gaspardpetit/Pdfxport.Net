@@ -117,6 +117,7 @@ namespace MigraDoc.Rendering
             {
                 LineInfo lineInfo = parFormatInfo.GetLineInfo(idx);
                 _isLastLine = idx == parFormatInfo.LineCount - 1;
+                _collapsedSpacesOnLine = lineInfo.CollapsedSpaces ?? [];
 
                 _lastTabPosition = 0;
                 if (lineInfo.ReMeasureLine)
@@ -1275,6 +1276,12 @@ namespace MigraDoc.Rendering
 
         void RenderSpace(Character character)
         {
+            if (_collapsedSpacesOnLine.Contains(character))
+            {
+                RenderUnderline(0, false);
+                RealizeHyperlink(0);
+                return;
+            }
             XUnitPt width = GetSpaceWidth(character);
             RenderUnderline(width, false);
             RealizeHyperlink(width);
@@ -1649,6 +1656,7 @@ namespace MigraDoc.Rendering
             _currentLineWidth = 0;
             _currentClippedTrailingWidth = 0;
             _currentLineEndsWithLineBreak = false;
+            _collapsedSpacesOnLine = [];
         }
 
         /// <summary>
@@ -1801,6 +1809,7 @@ namespace MigraDoc.Rendering
         /// <param name="previousFormatInfo">The format info that was obtained on formatting the same paragraph on a previous area.</param>
         internal override void Format(Area area, FormatInfo? previousFormatInfo)
         {
+            _optionalSpaceDecisions.Clear();
             var formatInfo = ((ParagraphFormatInfo)_renderInfo.FormatInfo);
             if (!InitFormat(area, previousFormatInfo))
             {
@@ -2535,7 +2544,161 @@ namespace MigraDoc.Rendering
         FormatResult FormatSpace(Character character, Rectangle fittingRect)
         {
             XUnitPt width = GetSpaceWidth(character);
+            if (_phase == Phase.Rendering)
+                return _collapsedSpacesOnLine.Contains(character)
+                    ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
+            if (_optionalSpaceDecisions.TryGetValue(character, out var alreadyCollapsed))
+                return alreadyCollapsed ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
+            if (_documentRenderer.CollapsibleSpaceBeforeWrap?.Invoke(_paragraph, character) == true)
+            {
+                var spaces = new List<(ParagraphIterator Leaf, Character? Space,
+                    bool Selected, XUnitPt Width)>
+                {
+                    (_currentLeaf!, character, true, width)
+                };
+                var following = _currentLeaf?.GetNextLeaf();
+                while (following != null)
+                {
+                    if (following.Current is BookmarkField or Text { Content.Length: 0 } or
+                        ParagraphElements { Count: 0 } ||
+                        IsSoftHyphen(following.Current) ||
+                        following.Current is InfoField emptyInfo &&
+                        GetDocumentInfo(emptyInfo.Name).Length == 0)
+                    {
+                        following = following.GetNextLeaf();
+                        continue;
+                    }
+                    if (IsBlank(following.Current))
+                    {
+                        spaces.Add((following, null, false, 0));
+                        following = following.GetNextLeaf();
+                        continue;
+                    }
+                    if (following.Current is not Character nextSpace ||
+                        !IsSpaceCharacter(nextSpace))
+                        break;
+                    var selected = _documentRenderer.CollapsibleSpaceBeforeWrap(_paragraph, nextSpace);
+                    var savedLeaf = _currentLeaf;
+                    try
+                    {
+                        _currentLeaf = following;
+                        spaces.Add((following, nextSpace, selected, GetSpaceWidth(nextSpace)));
+                    }
+                    finally
+                    {
+                        _currentLeaf = savedLeaf;
+                    }
+                    following = following.GetNextLeaf();
+                }
+                var collapse = following != null &&
+                    TryGetFollowingWord(following.Current, out var word) &&
+                    FollowingWordWrapsAfterSpaces(spaces, following, word);
+                foreach (var (_, space, selected, _) in spaces)
+                {
+                    if (space == null)
+                        continue;
+                    _optionalSpaceDecisions[space] = selected && collapse;
+                    if (selected && collapse)
+                        _collapsedSpacesOnLine.Add(space);
+                    else
+                        _collapsedSpacesOnLine.Remove(space);
+                }
+                if (collapse)
+                    return FormatResult.Ignore;
+            }
             return FormatAsWord(width, fittingRect);
+        }
+
+        bool TryGetFollowingWord(DocumentObject element, out string word)
+        {
+            word = element switch
+            {
+                Text text => text.Content,
+                DateField date => FormatDateTimeForField(
+                    new DateTimeOffset(2999, 08, 28, 22, 28, 28, TimeSpan.Zero), date),
+                InfoField info => GetDocumentInfo(info.Name),
+                NumericFieldBase field => GetFieldValue(field),
+                Character symbol when IsSymbol(symbol) => GetSymbol(symbol),
+                _ => ""
+            };
+            return word.Length > 0;
+        }
+
+        bool FollowingWordWrapsAfterSpaces(
+            List<(ParagraphIterator Leaf, Character? Space, bool Selected, XUnitPt Width)> spaces,
+            ParagraphIterator following, string word)
+        {
+            var savedLeaf = _currentLeaf;
+            var savedX = _currentXPosition;
+            var savedLineWidth = _currentLineWidth;
+            var savedWordsWidth = _currentWordsWidth;
+            var savedBlankCount = _currentBlankCount;
+            var savedBlankWidth = _savedBlankWidth;
+            var savedClippedWidth = _currentClippedTrailingWidth;
+            var savedWordWidth = _savedWordWidth;
+            var savedMinWidth = _minWidth;
+            var savedSecondaryRect = _currentSecondaryRect;
+            var savedSegmentIndex = _currentSegmentIndex;
+            var savedTransitionCount = _currentSegmentTransitions.Count;
+            var savedVerticalInfo = _currentVerticalInfo;
+            var savedNaturalFontHeight = _currentLineNaturalFontHeight;
+            var exclusion = _formattingArea as SideExclusionArea;
+            var savedExclusionFontHeight = exclusion?.NaturalFontHeight;
+            var savedBlankWidthCache = _blankWidth;
+            var savedLastFont = _lastFont;
+            try
+            {
+                // Use the same line formatter as the real word, including overhang,
+                // justified shrink and the available float segments.
+                foreach (var (leaf, explicitSpace, _, spaceWidth) in spaces)
+                {
+                    _currentLeaf = leaf;
+                    var spaceVerticalInfo = CalcVerticalInfo(CurrentFont);
+                    var spaceRect = _currentSegmentIndex > 0 && _currentSecondaryRect != null
+                        ? _currentSecondaryRect
+                        : _formattingArea.GetFittingRect(_currentYPosition,
+                            spaceVerticalInfo.Height + BottomBorderOffset);
+                    if (spaceRect == null)
+                        return false;
+                    var result = explicitSpace == null
+                        ? FormatBlank(spaceRect)
+                        : FormatAsWord(spaceWidth, spaceRect);
+                    if (result == FormatResult.NewLine)
+                        return true;
+                    if (result == FormatResult.Continue)
+                        _currentVerticalInfo = spaceVerticalInfo;
+                }
+                _currentLeaf = following;
+                var nextVerticalInfo = CalcVerticalInfo(CurrentFont);
+                var nextRect = _currentSegmentIndex > 0 && _currentSecondaryRect != null
+                    ? _currentSecondaryRect
+                    : _formattingArea.GetFittingRect(_currentYPosition,
+                        nextVerticalInfo.Height + BottomBorderOffset);
+                return nextRect != null && FormatWord(word, nextRect) == FormatResult.NewLine;
+            }
+            finally
+            {
+                _currentLeaf = savedLeaf;
+                _currentXPosition = savedX;
+                _currentLineWidth = savedLineWidth;
+                _currentWordsWidth = savedWordsWidth;
+                _currentBlankCount = savedBlankCount;
+                _savedBlankWidth = savedBlankWidth;
+                _currentClippedTrailingWidth = savedClippedWidth;
+                _savedWordWidth = savedWordWidth;
+                _minWidth = savedMinWidth;
+                _currentSecondaryRect = savedSecondaryRect;
+                _currentSegmentIndex = savedSegmentIndex;
+                _currentVerticalInfo = savedVerticalInfo;
+                _currentLineNaturalFontHeight = savedNaturalFontHeight;
+                _blankWidth = savedBlankWidthCache;
+                _lastFont = savedLastFont;
+                if (exclusion != null && savedExclusionFontHeight.HasValue)
+                    exclusion.NaturalFontHeight = savedExclusionFontHeight.Value;
+                if (_currentSegmentTransitions.Count > savedTransitionCount)
+                    _currentSegmentTransitions.RemoveRange(savedTransitionCount,
+                        _currentSegmentTransitions.Count - savedTransitionCount);
+            }
         }
 
         static string GetSymbol(Character character)
@@ -2806,6 +2969,7 @@ namespace MigraDoc.Rendering
             _currentLineWidth = 0;
             _currentClippedTrailingWidth = 0;
             _currentLineEndsWithLineBreak = false;
+            _collapsedSpacesOnLine = [];
         }
 
         /// <summary>
@@ -2901,6 +3065,7 @@ namespace MigraDoc.Rendering
             lineInfo.TabOffsets = _tabOffsets;
             lineInfo.ReMeasureLine = _reMeasureLine;
             lineInfo.LineEndsWithLineBreak = _currentLineEndsWithLineBreak;
+            lineInfo.CollapsedSpaces = _collapsedSpacesOnLine;
 
             _savedWordWidth = 0;
             _reMeasureLine = false;
@@ -3333,6 +3498,9 @@ namespace MigraDoc.Rendering
         /// The paragraph to format or render.
         /// </summary>
         readonly Paragraph _paragraph;
+
+        readonly Dictionary<Character, bool> _optionalSpaceDecisions = [];
+        HashSet<Character> _collapsedSpacesOnLine = [];
 
         XUnitPt _currentWordsWidth;
         int _currentBlankCount;
