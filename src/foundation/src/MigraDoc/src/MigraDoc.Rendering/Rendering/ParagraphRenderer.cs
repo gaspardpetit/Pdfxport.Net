@@ -1810,6 +1810,7 @@ namespace MigraDoc.Rendering
         internal override void Format(Area area, FormatInfo? previousFormatInfo)
         {
             _optionalSpaceDecisions.Clear();
+            _newLineStartedByBlankWrap = false;
             var formatInfo = ((ParagraphFormatInfo)_renderInfo.FormatInfo);
             if (!InitFormat(area, previousFormatInfo))
             {
@@ -1835,6 +1836,8 @@ namespace MigraDoc.Rendering
 
                     case FormatResult.NewLine:
                         lastResult = result;
+                        var wrappedAtBlank = !_currentLineEndsWithLineBreak &&
+                            _currentLeaf?.Current is Text blank && IsBlank(blank);
                         var rejectedTab = false;
                         if (!_currentLineEndsWithLineBreak && _currentLineWidth != XUnitPt.Zero &&
                             _currentLeaf?.Current is Character { SymbolName: SymbolName.Tab })
@@ -1851,6 +1854,7 @@ namespace MigraDoc.Rendering
                         // StartNewLine() no longer gives the signal to start a new page. We don’t know the line height yet and therefore can’t decide,
                         // if it will fit on the page. Page fitting is only checked by FormatElement() now, when the height of the new line is known.
                         StartNewLine();
+                        _newLineStartedByBlankWrap = wrappedAtBlank;
                         break;
                 }
                 if (result == FormatResult.NewArea)
@@ -2614,16 +2618,7 @@ namespace MigraDoc.Rendering
 
         bool SelectedSpaceStartedWrappedLine()
         {
-            if (_isFirstLine || _currentLineWidth != 0)
-                return false;
-
-            var previous = _currentLeaf?.GetPreviousLeaf();
-            while (previous != null && (IsTransparentOptionalSpaceLeaf(previous.Current) ||
-                   IsBlank(previous.Current) ||
-                   previous.Current is Character space && IsSpaceCharacter(space) ||
-                   previous.Current is BookmarkField))
-                previous = previous.GetPreviousLeaf();
-            return previous != null && IsWordLikeElement(previous.Current);
+            return _newLineStartedByBlankWrap && _currentLineWidth == 0;
         }
 
         bool TryGetFollowingWord(DocumentObject element, out string word)
@@ -3518,6 +3513,7 @@ namespace MigraDoc.Rendering
 
         readonly Dictionary<Character, bool> _optionalSpaceDecisions = [];
         HashSet<Character> _collapsedSpacesOnLine = [];
+        bool _newLineStartedByBlankWrap;
 
         XUnitPt _currentWordsWidth;
         int _currentBlankCount;

@@ -111,6 +111,52 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void OptionalExtraSpaceAfterInlineImageDoesNotIndentWrappedWord()
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            var bodyWidth = measure.MeasureString("AAAA", font).Width + 24.1;
+
+            (double ImageLineY, double WordX, double WordY) Render(bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(bodyWidth + 20);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("AAAA");
+                var image = paragraph.AddImage(
+                    "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+                image.Width = Unit.FromPoint(24);
+                image.Height = Unit.FromPoint(12);
+                paragraph.AddText(" ");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddText("Delta");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "AAAA", true, out var first)
+                    .Should().BeTrue();
+                stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word)
+                    .Should().BeTrue();
+                return (first!.Y, word!.X, word.Y);
+            }
+
+            var control = Render(false);
+            var optional = Render(true);
+            control.WordY.Should().NotBe(control.ImageLineY);
+            optional.WordY.Should().BeApproximately(control.WordY, 0.1);
+            optional.WordX.Should().BeApproximately(control.WordX, 0.1);
+        }
+
+        [Fact]
         public void OptionalExtraSpaceKeepsItsAdvanceUntilTheFollowingWordWraps()
         {
             (double X, double Y) Render(double bodyWidth, bool extraSpace)
