@@ -1827,7 +1827,7 @@ namespace MigraDoc.Rendering
                     case FormatResult.NewLine:
                         lastResult = result;
                         var rejectedTab = false;
-                        if (_currentLineWidth != XUnitPt.Zero &&
+                        if (!_currentLineEndsWithLineBreak && _currentLineWidth != XUnitPt.Zero &&
                             _currentLeaf?.Current is Character { SymbolName: SymbolName.Tab })
                         {
                             var precedingLeaf = _currentLeaf.GetPreviousLeaf();

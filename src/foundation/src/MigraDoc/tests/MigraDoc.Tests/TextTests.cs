@@ -517,6 +517,30 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void TabAfterExplicitLineBreakKeepsItsIndent()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.DefaultTabStop = Unit.FromPoint(36);
+            var section = document.AddSection();
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("First");
+            paragraph.AddLineBreak();
+            paragraph.AddTab();
+            paragraph.AddText("Second");
+            var control = section.AddParagraph("Control");
+            control.Format.LeftIndent = Unit.FromPoint(36);
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            stream.Text.MoveAndGetNext(info => info.Text == "Second", true, out var second).Should().BeTrue();
+            stream.Text.MoveAndGetNext(info => info.Text == "Control", true, out var controlText)
+                .Should().BeTrue();
+            second!.IsAtXPosition(controlText!.X).Should().BeTrue();
+        }
+
+        [Fact]
         public void ConsecutiveTabAtLineEndStartsNextLineAtTabStop()
         {
             var document = new Document();
