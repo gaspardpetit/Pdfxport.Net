@@ -2178,7 +2178,8 @@ namespace MigraDoc.Rendering
                                 continue;
                             }
                             if (next.Current is not Text text ||
-                                !IsLatinWordContinuation(text.Content, out var endsWord))
+                                !IsLatinWordContinuation(text.Content, out var endsWord,
+                                    continuesPreviousLeaf: true))
                                 break;
                             _currentLeaf = next;
                             sequenceWidth += MeasureString(text.Content);
@@ -2384,16 +2385,17 @@ namespace MigraDoc.Rendering
                 IsLatinWordCharacter(continuation[0]);
         }
 
-        static bool IsLatinWordContinuation(string text, out bool endsWord)
+        static bool IsLatinWordContinuation(string text, out bool endsWord,
+            bool continuesPreviousLeaf = false)
         {
             var wordEnd = text.Length;
             while (wordEnd > 0 && text[wordEnd - 1] is '.' or ',' or ';' or ':' or '!' or '?')
                 wordEnd--;
             endsWord = wordEnd < text.Length;
             if (wordEnd == 0)
-                return false;
+                return continuesPreviousLeaf && endsWord;
 
-            var hasLatinCharacter = false;
+            var hasLatinCharacter = continuesPreviousLeaf;
             for (var index = 0; index < wordEnd; index++)
             {
                 if (IsLatinWordCharacter(text[index]))

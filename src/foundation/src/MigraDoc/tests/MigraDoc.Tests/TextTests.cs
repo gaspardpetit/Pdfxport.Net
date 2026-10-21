@@ -1108,6 +1108,8 @@ namespace MigraDoc.Tests
         [InlineData("A", "b", "c", 0)]
         [InlineData("É", "t", "é", 0)]
         [InlineData("caf", "e\u0301", "x", 0)]
+        [InlineData("cafe", "\u0301ine", "x", 0)]
+        [InlineData("hel", "lo", ".", 0)]
         [InlineData("1", "é", "0", 0)]
         [InlineData("A", "b", "c", 1)]
         [InlineData("É", "t", "é", 2)]
@@ -1145,7 +1147,7 @@ namespace MigraDoc.Tests
             stream.Text.MoveAndGetNext(item => item.Text == "number", true, out var prefix).Should().BeTrue();
             stream.Text.MoveAndGetNext(item => item.Text == firstText, true, out var first).Should().BeTrue();
             double? secondY = null;
-            if (secondText != "e\u0301")
+            if (!secondText.Contains('\u0301'))
             {
                 stream.Text.MoveAndGetNext(item => item.Text == secondText, true, out var second)
                     .Should().BeTrue();
