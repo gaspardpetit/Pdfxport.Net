@@ -230,6 +230,57 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void OptionalSpaceProbeRestoresTallFontMetricsBesideAFloat()
+        {
+            (double FirstY, double WordX, double WordY) Render(bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 9;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(120);
+                section.PageSetup.PageHeight = Unit.FromPoint(200);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                section.PageSetup.TopMargin = Unit.FromPoint(10);
+                section.PageSetup.BottomMargin = Unit.FromPoint(10);
+                var image = section.AddImage(
+                    "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+                image.RelativeHorizontal = RelativeHorizontal.Margin;
+                image.RelativeVertical = RelativeVertical.Margin;
+                image.Left = Unit.FromPoint(0);
+                image.Top = Unit.FromPoint(0);
+                image.Width = Unit.FromPoint(50);
+                image.Height = Unit.FromPoint(60);
+                image.WrapFormat.Style = WrapStyle.BothSides;
+                image.WrapFormat.DistanceRight = Unit.FromPoint(6);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("AAAA ");
+                var tall = paragraph.AddFormattedText("");
+                tall.Size = 20;
+                var extra = extraSpace ? tall.AddSpace(1) : null;
+                paragraph.AddText("Delta");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "AAAA", true, out var first)
+                    .Should().BeTrue();
+                stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word)
+                    .Should().BeTrue();
+                return (first!.Y, word!.X, word.Y);
+            }
+
+            var control = Render(false);
+            var actual = Render(true);
+            control.WordY.Should().NotBe(control.FirstY);
+            actual.WordX.Should().BeApproximately(control.WordX, 0.1);
+            actual.WordY.Should().BeApproximately(control.WordY, 0.1);
+        }
+
+        [Fact]
         public void OptionalExtraSpaceHonorsTheFollowingWordsOverhang()
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),

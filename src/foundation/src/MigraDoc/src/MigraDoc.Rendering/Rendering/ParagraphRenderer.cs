@@ -2569,7 +2569,7 @@ namespace MigraDoc.Rendering
                 }
                 var collapse = following != null &&
                     TryGetFollowingWord(following.Current, out var word) &&
-                    FollowingWordWrapsAfterSpaces(spaces, following, word, fittingRect);
+                    FollowingWordWrapsAfterSpaces(spaces, following, word);
                 foreach (var (_, space, _) in spaces)
                 {
                     _optionalSpaceDecisions[space] = collapse;
@@ -2601,7 +2601,7 @@ namespace MigraDoc.Rendering
 
         bool FollowingWordWrapsAfterSpaces(
             List<(ParagraphIterator Leaf, Character Space, XUnitPt Width)> spaces,
-            ParagraphIterator following, string word, Rectangle fittingRect)
+            ParagraphIterator following, string word)
         {
             var savedLeaf = _currentLeaf;
             var savedX = _currentXPosition;
@@ -2615,6 +2615,10 @@ namespace MigraDoc.Rendering
             var savedSecondaryRect = _currentSecondaryRect;
             var savedSegmentIndex = _currentSegmentIndex;
             var savedTransitionCount = _currentSegmentTransitions.Count;
+            var savedVerticalInfo = _currentVerticalInfo;
+            var savedNaturalFontHeight = _currentLineNaturalFontHeight;
+            var exclusion = _formattingArea as SideExclusionArea;
+            var savedExclusionFontHeight = exclusion?.NaturalFontHeight;
             try
             {
                 // Use the same line formatter as the real word, including overhang,
@@ -2622,10 +2626,16 @@ namespace MigraDoc.Rendering
                 foreach (var (leaf, _, spaceWidth) in spaces)
                 {
                     _currentLeaf = leaf;
+                    var spaceVerticalInfo = CalcVerticalInfo(CurrentFont);
                     var spaceRect = _currentSegmentIndex > 0 && _currentSecondaryRect != null
-                        ? _currentSecondaryRect : fittingRect;
+                        ? _currentSecondaryRect
+                        : _formattingArea.GetFittingRect(_currentYPosition,
+                            spaceVerticalInfo.Height + BottomBorderOffset);
+                    if (spaceRect == null)
+                        return false;
                     if (FormatAsWord(spaceWidth, spaceRect) == FormatResult.NewLine)
                         return true;
+                    _currentVerticalInfo = spaceVerticalInfo;
                 }
                 _currentLeaf = following;
                 var nextVerticalInfo = CalcVerticalInfo(CurrentFont);
@@ -2648,6 +2658,10 @@ namespace MigraDoc.Rendering
                 _minWidth = savedMinWidth;
                 _currentSecondaryRect = savedSecondaryRect;
                 _currentSegmentIndex = savedSegmentIndex;
+                _currentVerticalInfo = savedVerticalInfo;
+                _currentLineNaturalFontHeight = savedNaturalFontHeight;
+                if (exclusion != null && savedExclusionFontHeight.HasValue)
+                    exclusion.NaturalFontHeight = savedExclusionFontHeight.Value;
                 if (_currentSegmentTransitions.Count > savedTransitionCount)
                     _currentSegmentTransitions.RemoveRange(savedTransitionCount,
                         _currentSegmentTransitions.Count - savedTransitionCount);
