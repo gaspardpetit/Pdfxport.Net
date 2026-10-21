@@ -1682,6 +1682,7 @@ namespace MigraDoc.Rendering
             else
             {
                 var lastLine = prevParaFormatInfo.GetLastLineInfo();
+                _newLineStartedByBlankWrap = lastLine.NextLineStartedByBlankWrap;
                 _currentLeaf = lastLine.HasContinuationOverride
                     ? lastLine.ContinuationIter
                     : lastLine.EndIter?.GetNextLeaf();
@@ -1848,7 +1849,7 @@ namespace MigraDoc.Rendering
                                 precedingLeaf = precedingLeaf.GetPreviousLeaf();
                             rejectedTab = precedingLeaf?.Current is not Character { SymbolName: SymbolName.Tab };
                         }
-                        StoreLineInformation(rejectedTab);
+                        StoreLineInformation(rejectedTab, wrappedAtBlank);
                         if (rejectedTab)
                             _currentLeaf = _currentLeaf?.GetNextLeaf();
                         // StartNewLine() no longer gives the signal to start a new page. We don’t know the line height yet and therefore can’t decide,
@@ -2987,7 +2988,7 @@ namespace MigraDoc.Rendering
         /// <summary>
         /// Stores all line information.
         /// </summary>
-        void StoreLineInformation(bool rejectedTab = false)
+        void StoreLineInformation(bool rejectedTab = false, bool nextLineStartedByBlankWrap = false)
         {
             PopSavedBlankWidth();
 
@@ -3077,6 +3078,7 @@ namespace MigraDoc.Rendering
             lineInfo.TabOffsets = _tabOffsets;
             lineInfo.ReMeasureLine = _reMeasureLine;
             lineInfo.LineEndsWithLineBreak = _currentLineEndsWithLineBreak;
+            lineInfo.NextLineStartedByBlankWrap = nextLineStartedByBlankWrap;
             lineInfo.CollapsedSpaces = _collapsedSpacesOnLine;
 
             _savedWordWidth = 0;

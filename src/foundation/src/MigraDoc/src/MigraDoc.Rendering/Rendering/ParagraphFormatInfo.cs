@@ -39,6 +39,7 @@ namespace MigraDoc.Rendering
         public XUnitPt LineWidth;
         public XUnitPt ClippedTrailingWidth;
         public bool LineEndsWithLineBreak;
+        public bool NextLineStartedByBlankWrap;
         public int BlankCount;
         public VerticalLineInfo Vertical;
         public List<TabOffset> TabOffsets;

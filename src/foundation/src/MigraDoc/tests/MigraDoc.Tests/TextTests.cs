@@ -244,6 +244,49 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void OptionalExtraSpaceDoesNotIndentAfterAFullPageWrap()
+        {
+            (int Page, double X) Render(bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(102);
+                section.PageSetup.PageHeight = Unit.FromPoint(40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                section.PageSetup.TopMargin = Unit.FromPoint(10);
+                section.PageSetup.BottomMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("AAAA BBBB ");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddText("Delta");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var firstPage = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                firstPage.Text.MoveAndGetNext(info => info.Text == "BBBB", true, out _)
+                    .Should().BeTrue("the word before the wrapping blank must remain on page one");
+                for (var page = 0; page < renderer.PdfDocument.PageCount; page++)
+                {
+                    var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, page);
+                    if (stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word))
+                        return (page, word!.X);
+                }
+                throw new InvalidOperationException("Delta was not rendered.");
+            }
+
+            var control = Render(false);
+            var actual = Render(true);
+            actual.Page.Should().Be(1);
+            actual.Page.Should().Be(control.Page);
+            actual.X.Should().BeApproximately(control.X, 0.1);
+        }
+
+        [Fact]
         public void ConsecutiveOptionalSpacesCollapseTogetherWhenTheWordWraps()
         {
             (double X, double Y) Render(double bodyWidth, bool extraSpaces)
