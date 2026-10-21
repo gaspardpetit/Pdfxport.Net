@@ -823,6 +823,10 @@ namespace PdfSharp.Pdf.IO
                     break;
                 }
 
+                // An unterminated hex string must stop at EOF instead of scanning it forever.
+                if (_currChar == Chars.EOF)
+                    break;
+
                 // IMPROVE Handle EOF correctly. Check if other methods must also handle EOF.
 
                 var hex = _currChar switch
