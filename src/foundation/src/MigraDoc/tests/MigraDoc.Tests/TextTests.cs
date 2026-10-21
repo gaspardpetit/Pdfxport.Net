@@ -485,6 +485,38 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void RejectedTabDoesNotIndentAfterPageBreak()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.DefaultTabStop = Unit.FromPoint(36);
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(180);
+            section.PageSetup.PageHeight = Unit.FromPoint(60);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            section.PageSetup.TopMargin = Unit.FromPoint(20);
+            section.PageSetup.BottomMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("First long segment");
+            paragraph.AddTab();
+            paragraph.AddText("Second");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PdfDocument.PageCount.Should().Be(2);
+            renderer.PdfDocument.Options.CompressContentStreams = false;
+            var firstPage = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            var secondPage = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 1);
+
+            firstPage.Text.MoveAndGetNext(info => true, true, out var first)
+                .Should().BeTrue();
+            secondPage.Text.MoveAndGetNext(info => info.Text == "Second", true, out var second)
+                .Should().BeTrue();
+            second!.IsAtXPosition(first!.X).Should().BeTrue();
+        }
+
+        [Fact]
         public void ConsecutiveTabAtLineEndStartsNextLineAtTabStop()
         {
             var document = new Document();
