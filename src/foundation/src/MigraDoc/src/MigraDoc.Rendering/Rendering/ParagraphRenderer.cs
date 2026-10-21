@@ -2533,8 +2533,7 @@ namespace MigraDoc.Rendering
                         ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
 
                 var following = _currentLeaf?.GetNextLeaf();
-                while (following != null &&
-                       (IsBlank(following.Current) || following.Current is BookmarkField))
+                while (following?.Current is BookmarkField)
                     following = following.GetNextLeaf();
                 if (following != null && TryGetFollowingWord(following.Current, out var word))
                 {
