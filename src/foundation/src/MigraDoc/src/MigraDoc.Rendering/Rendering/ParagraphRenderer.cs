@@ -2155,7 +2155,7 @@ namespace MigraDoc.Rendering
             XUnitPt wordWidth = MeasureString(word);
             XUnitPt width = wordWidth + GetLeadingKerningAfterBlank(word);
             if (_phase == Phase.Formatting && _currentLeaf?.Current is Text &&
-                _currentXPosition > StartXPosition + Tolerance && IsLatinWord(word))
+                _currentXPosition > StartXPosition + Tolerance && IsLatinWordStart(word))
             {
                 var previous = _currentLeaf.GetPreviousLeaf();
                 while (previous?.Current is BookmarkField)
@@ -2217,10 +2217,28 @@ namespace MigraDoc.Rendering
                     }
                     var nextLineStart = StartXPosition;
                     var firstLineExtra = LeftIndent - _paragraph.Format.LeftIndent.Point;
-                    if (_isFirstLine && firstLineExtra > 0)
+                    if (_isFirstLine)
                         nextLineStart -= firstLineExtra;
                     var nextLineWidth = sequenceWidth - (width - wordWidth);
-                    if (hasContinuation && nextLineWidth <= right - nextLineStart &&
+                    var nextLineCapacity = right - nextLineStart;
+                    var overhangAllowance = 0.0;
+                    if (hasContinuation && nextLineWidth > nextLineCapacity &&
+                        lastWordLeaf.Current is Text lastText &&
+                        _documentRenderer.LineEndOverhang is { } lineEndOverhang)
+                    {
+                        _currentLeaf = lastWordLeaf;
+                        try
+                        {
+                            if (lineEndOverhang(_paragraph, lastText.Content, CurrentFont) is double allowance &&
+                                allowance > 0 && IsFinite(allowance))
+                                overhangAllowance = allowance;
+                        }
+                        finally
+                        {
+                            _currentLeaf = original;
+                        }
+                    }
+                    if (hasContinuation && nextLineWidth - overhangAllowance <= nextLineCapacity &&
                         _currentXPosition + sequenceWidth - shrinkAllowance > right)
                     {
                         while (_currentLeaf.GetPreviousLeaf() is { Current: BookmarkField } bookmark)
@@ -2345,6 +2363,20 @@ namespace MigraDoc.Rendering
         }
 
         static bool IsLatinWord(string text) => text.Length > 0 && text.All(IsLatinWordCharacter);
+
+        bool IsLatinWordStart(string text)
+        {
+            if (IsLatinWordContinuation(text, out var endsWord) && !endsWord)
+                return true;
+            if (text.Length < 2 || text[^1] is not ('\'' or '\u2019') ||
+                !IsLatinWord(text[..^1]))
+                return false;
+            var next = _currentLeaf?.GetNextLeaf();
+            while (next?.Current is BookmarkField)
+                next = next.GetNextLeaf();
+            return next?.Current is Text { Content: { Length: > 0 } continuation } &&
+                IsLatinWordCharacter(continuation[0]);
+        }
 
         static bool IsLatinWordContinuation(string text, out bool endsWord)
         {
