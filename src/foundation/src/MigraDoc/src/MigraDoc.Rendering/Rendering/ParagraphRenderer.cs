@@ -117,6 +117,7 @@ namespace MigraDoc.Rendering
             {
                 LineInfo lineInfo = parFormatInfo.GetLineInfo(idx);
                 _isLastLine = idx == parFormatInfo.LineCount - 1;
+                _collapsedSpacesOnLine = lineInfo.CollapsedSpaces ?? [];
 
                 _lastTabPosition = 0;
                 if (lineInfo.ReMeasureLine)
@@ -1275,7 +1276,7 @@ namespace MigraDoc.Rendering
 
         void RenderSpace(Character character)
         {
-            if (_documentRenderer.CollapsedSpaces.Contains(character))
+            if (_collapsedSpacesOnLine.Contains(character))
             {
                 RenderUnderline(0, false);
                 RealizeHyperlink(0);
@@ -1655,6 +1656,7 @@ namespace MigraDoc.Rendering
             _currentLineWidth = 0;
             _currentClippedTrailingWidth = 0;
             _currentLineEndsWithLineBreak = false;
+            _collapsedSpacesOnLine = [];
         }
 
         /// <summary>
@@ -2528,7 +2530,7 @@ namespace MigraDoc.Rendering
         {
             XUnitPt width = GetSpaceWidth(character);
             if (_phase == Phase.Rendering)
-                return _documentRenderer.CollapsedSpaces.Contains(character)
+                return _collapsedSpacesOnLine.Contains(character)
                     ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
             if (_documentRenderer.CollapsibleSpaceBeforeWrap?.Invoke(_paragraph, character) == true)
             {
@@ -2570,9 +2572,9 @@ namespace MigraDoc.Rendering
                 {
                     _optionalSpaceDecisions[space] = collapse;
                     if (collapse)
-                        _documentRenderer.CollapsedSpaces.Add(space);
+                        _collapsedSpacesOnLine.Add(space);
                     else
-                        _documentRenderer.CollapsedSpaces.Remove(space);
+                        _collapsedSpacesOnLine.Remove(space);
                 }
                 if (collapse)
                     return FormatResult.Ignore;
@@ -2918,6 +2920,7 @@ namespace MigraDoc.Rendering
             _currentLineWidth = 0;
             _currentClippedTrailingWidth = 0;
             _currentLineEndsWithLineBreak = false;
+            _collapsedSpacesOnLine = [];
         }
 
         /// <summary>
@@ -3008,6 +3011,7 @@ namespace MigraDoc.Rendering
             lineInfo.TabOffsets = _tabOffsets;
             lineInfo.ReMeasureLine = _reMeasureLine;
             lineInfo.LineEndsWithLineBreak = _currentLineEndsWithLineBreak;
+            lineInfo.CollapsedSpaces = _collapsedSpacesOnLine;
 
             _savedWordWidth = 0;
             _reMeasureLine = false;
@@ -3442,6 +3446,7 @@ namespace MigraDoc.Rendering
         readonly Paragraph _paragraph;
 
         readonly Dictionary<Character, bool> _optionalSpaceDecisions = [];
+        HashSet<Character> _collapsedSpacesOnLine = [];
 
         XUnitPt _currentWordsWidth;
         int _currentBlankCount;

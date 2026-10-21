@@ -151,6 +151,51 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void OptionalSpaceDecisionIsScopedToEachInheritedHeader()
+        {
+            (double X, double Y)[] Render(bool extraSpace)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var narrow = document.AddSection();
+                narrow.PageSetup.PageWidth = Unit.FromPoint(102);
+                narrow.PageSetup.LeftMargin = Unit.FromPoint(10);
+                narrow.PageSetup.RightMargin = Unit.FromPoint(10);
+                var header = narrow.Headers.Primary.AddParagraph();
+                header.AddText("AAAA BBBB ");
+                var extra = extraSpace ? header.AddSpace(1) : null;
+                header.AddText("Delta");
+                narrow.AddParagraph("First section");
+                var wide = document.AddSection();
+                wide.PageSetup.PageWidth = Unit.FromPoint(220);
+                wide.PageSetup.LeftMargin = Unit.FromPoint(10);
+                wide.PageSetup.RightMargin = Unit.FromPoint(10);
+                wide.AddParagraph("Second section");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) =>
+                        ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                renderer.PdfDocument.PageCount.Should().Be(2);
+                return Enumerable.Range(0, 2).Select(page =>
+                {
+                    var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, page);
+                    stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word)
+                        .Should().BeTrue();
+                    return (word!.X, word.Y);
+                }).ToArray();
+            }
+
+            var control = Render(false);
+            var actual = Render(true);
+            actual[0].X.Should().BeApproximately(control[0].X, 0.1);
+            actual[0].Y.Should().BeApproximately(control[0].Y, 0.1);
+            actual[1].Y.Should().BeApproximately(control[1].Y, 0.1);
+            actual[1].X.Should().BeGreaterThan(control[1].X + 2);
+        }
+
+        [Fact]
         public void OptionalExtraSpaceHonorsTheFollowingWordsOverhang()
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),

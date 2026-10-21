@@ -205,7 +205,6 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Func<Paragraph, Character, bool>? CollapsibleSpaceBeforeWrap { get; set; }
 
-        internal HashSet<Character> CollapsedSpaces { get; } = [];
         /// <summary>
         /// Optional vertical paint offset in points for an inline image; positive values move it down.
         /// </summary>
@@ -217,7 +216,6 @@ namespace MigraDoc.Rendering
         /// </summary>
         public void PrepareDocument(RenderEvents? renderEvents = null)
         {
-            CollapsedSpaces.Clear();
             var visitor = new PdfFlattenVisitor();
             visitor.Visit(_document);
             _previousListNumbers[ListType.NumberList1] = 0;

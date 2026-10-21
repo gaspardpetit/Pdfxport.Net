@@ -45,6 +45,7 @@ namespace MigraDoc.Rendering
         public Rectangle? FittingRect;
         public List<LineSegmentInfo>? SegmentTransitions;
         public XUnitPt GapBefore;
+        public HashSet<Character>? CollapsedSpaces;
     }
 
     readonly record struct LineSegmentInfo(Rectangle Rect, ParagraphIterator? StartIter,
