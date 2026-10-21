@@ -1823,7 +1823,19 @@ namespace MigraDoc.Rendering
 
                     case FormatResult.NewLine:
                         lastResult = result;
+                        var rejectedTab = false;
+                        if (_currentLineWidth != XUnitPt.Zero &&
+                            _currentLeaf?.Current is Character { SymbolName: SymbolName.Tab })
+                        {
+                            var precedingLeaf = _currentLeaf.GetPreviousLeaf();
+                            while (precedingLeaf != null &&
+                                   (precedingLeaf.Current is BookmarkField || IsBlank(precedingLeaf.Current)))
+                                precedingLeaf = precedingLeaf.GetPreviousLeaf();
+                            rejectedTab = precedingLeaf?.Current is not Character { SymbolName: SymbolName.Tab };
+                        }
                         StoreLineInformation();
+                        if (rejectedTab)
+                            _currentLeaf = _currentLeaf?.GetNextLeaf();
                         // StartNewLine() no longer gives the signal to start a new page. We don’t know the line height yet and therefore can’t decide,
                         // if it will fit on the page. Page fitting is only checked by FormatElement() now, when the height of the new line is known.
                         StartNewLine();
