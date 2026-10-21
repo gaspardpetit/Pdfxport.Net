@@ -2537,7 +2537,7 @@ namespace MigraDoc.Rendering
                 if (_optionalSpaceDecisions.TryGetValue(character, out var alreadyCollapsed))
                     return alreadyCollapsed ? FormatResult.Ignore : FormatAsWord(width, fittingRect);
 
-                var spaces = new List<(ParagraphIterator Leaf, Character Space, XUnitPt Width)>
+                var spaces = new List<(ParagraphIterator Leaf, Character? Space, XUnitPt Width)>
                 {
                     (_currentLeaf!, character, width)
                 };
@@ -2549,6 +2549,12 @@ namespace MigraDoc.Rendering
                         following.Current is InfoField emptyInfo &&
                         GetDocumentInfo(emptyInfo.Name).Length == 0)
                     {
+                        following = following.GetNextLeaf();
+                        continue;
+                    }
+                    if (IsBlank(following.Current))
+                    {
+                        spaces.Add((following, null, 0));
                         following = following.GetNextLeaf();
                         continue;
                     }
@@ -2573,6 +2579,8 @@ namespace MigraDoc.Rendering
                     FollowingWordWrapsAfterSpaces(spaces, following, word);
                 foreach (var (_, space, _) in spaces)
                 {
+                    if (space == null)
+                        continue;
                     _optionalSpaceDecisions[space] = collapse;
                     if (collapse)
                         _collapsedSpacesOnLine.Add(space);
@@ -2601,7 +2609,7 @@ namespace MigraDoc.Rendering
         }
 
         bool FollowingWordWrapsAfterSpaces(
-            List<(ParagraphIterator Leaf, Character Space, XUnitPt Width)> spaces,
+            List<(ParagraphIterator Leaf, Character? Space, XUnitPt Width)> spaces,
             ParagraphIterator following, string word)
         {
             var savedLeaf = _currentLeaf;
@@ -2620,11 +2628,13 @@ namespace MigraDoc.Rendering
             var savedNaturalFontHeight = _currentLineNaturalFontHeight;
             var exclusion = _formattingArea as SideExclusionArea;
             var savedExclusionFontHeight = exclusion?.NaturalFontHeight;
+            var savedBlankWidthCache = _blankWidth;
+            var savedLastFont = _lastFont;
             try
             {
                 // Use the same line formatter as the real word, including overhang,
                 // justified shrink and the available float segments.
-                foreach (var (leaf, _, spaceWidth) in spaces)
+                foreach (var (leaf, selectedSpace, spaceWidth) in spaces)
                 {
                     _currentLeaf = leaf;
                     var spaceVerticalInfo = CalcVerticalInfo(CurrentFont);
@@ -2634,9 +2644,13 @@ namespace MigraDoc.Rendering
                             spaceVerticalInfo.Height + BottomBorderOffset);
                     if (spaceRect == null)
                         return false;
-                    if (FormatAsWord(spaceWidth, spaceRect) == FormatResult.NewLine)
+                    var result = selectedSpace == null
+                        ? FormatBlank(spaceRect)
+                        : FormatAsWord(spaceWidth, spaceRect);
+                    if (result == FormatResult.NewLine)
                         return true;
-                    _currentVerticalInfo = spaceVerticalInfo;
+                    if (result == FormatResult.Continue)
+                        _currentVerticalInfo = spaceVerticalInfo;
                 }
                 _currentLeaf = following;
                 var nextVerticalInfo = CalcVerticalInfo(CurrentFont);
@@ -2661,6 +2675,8 @@ namespace MigraDoc.Rendering
                 _currentSegmentIndex = savedSegmentIndex;
                 _currentVerticalInfo = savedVerticalInfo;
                 _currentLineNaturalFontHeight = savedNaturalFontHeight;
+                _blankWidth = savedBlankWidthCache;
+                _lastFont = savedLastFont;
                 if (exclusion != null && savedExclusionFontHeight.HasValue)
                     exclusion.NaturalFontHeight = savedExclusionFontHeight.Value;
                 if (_currentSegmentTransitions.Count > savedTransitionCount)
