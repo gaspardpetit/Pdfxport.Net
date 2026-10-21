@@ -459,6 +459,62 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
+        public void IgnoredBlankAfterTabDoesNotWrapFittingText()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.DefaultTabStop = Unit.FromPoint(36);
+            var section = document.AddSection();
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("DOCVARIABLE Var1");
+            paragraph.AddTab();
+            paragraph.AddText(" DOCVARIABLE Var1 one");
+            var control = section.AddParagraph("DOCVARIABLE Var1 DOCVARIABLE Var1 one");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+
+            var paragraphs = renderer.DocumentRenderer.FormattedDocument!.GetRenderInfos(1)!
+                .OfType<ParagraphRenderInfo>().ToArray();
+            var tabbedHeight = paragraphs.Single(info => ReferenceEquals(info.DocumentObject, paragraph))
+                .LayoutInfo.ContentArea.Height;
+            var controlHeight = paragraphs.Single(info => ReferenceEquals(info.DocumentObject, control))
+                .LayoutInfo.ContentArea.Height;
+            tabbedHeight.Should().Be(controlHeight);
+        }
+
+        [Theory]
+        [InlineData(TabAlignment.Left, true)]
+        [InlineData(TabAlignment.Right, false)]
+        [InlineData(TabAlignment.Right, true)]
+        [InlineData(TabAlignment.Center, false)]
+        [InlineData(TabAlignment.Center, true)]
+        public void IgnoredElementsAfterAlignedTabDoNotForceLineBreak(TabAlignment alignment, bool bookmark)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            var paragraph = section.AddParagraph();
+            paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(250), alignment);
+            paragraph.AddText("Before");
+            paragraph.AddTab();
+            if (bookmark)
+                paragraph.AddBookmark("afterTab", prepend: false);
+            paragraph.AddText(" After tab");
+            var control = section.AddParagraph("Before After tab");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var paragraphs = renderer.DocumentRenderer.FormattedDocument!.GetRenderInfos(1)!
+                .OfType<ParagraphRenderInfo>().ToArray();
+            var tabbedHeight = paragraphs.Single(info => ReferenceEquals(info.DocumentObject, paragraph))
+                .LayoutInfo.ContentArea.Height;
+            var controlHeight = paragraphs.Single(info => ReferenceEquals(info.DocumentObject, control))
+                .LayoutInfo.ContentArea.Height;
+            tabbedHeight.Should().Be(controlHeight);
+        }
+
+        [Fact]
         public void DefaultTabStopNearRightEdgeUsesFormattingAreaWidth()
         {
             var document = new Document();
