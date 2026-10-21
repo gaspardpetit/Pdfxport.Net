@@ -25,10 +25,12 @@ namespace MigraDoc.Tests
     public class TextTests : IDisposable
     {
         [Theory]
-        [InlineData(9)]
-        [InlineData(12)]
-        [InlineData(16)]
-        public void OptionalExtraSpaceDoesNotIndentWhenItStartsTheWrappedLine(double fontSize)
+        [InlineData(9, false)]
+        [InlineData(12, false)]
+        [InlineData(16, false)]
+        [InlineData(12, true)]
+        public void OptionalExtraSpaceDoesNotIndentWhenItStartsTheWrappedLine(double fontSize,
+            bool ignoredLeaf)
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
                 XGraphicsUnit.Point, XPageDirection.Downwards);
@@ -45,7 +47,10 @@ namespace MigraDoc.Tests
                 section.PageSetup.LeftMargin = Unit.FromPoint(10);
                 section.PageSetup.RightMargin = Unit.FromPoint(10);
                 var paragraph = section.AddParagraph();
-                paragraph.AddText("AAAA BBBB ");
+                paragraph.AddText("AAAA BBBB");
+                if (ignoredLeaf)
+                    paragraph.AddText("\u00AD");
+                paragraph.AddText(" ");
                 var extra = extraSpace ? paragraph.AddSpace(1) : null;
                 paragraph.AddText("Delta");
                 var renderer = new PdfDocumentRenderer { Document = document };

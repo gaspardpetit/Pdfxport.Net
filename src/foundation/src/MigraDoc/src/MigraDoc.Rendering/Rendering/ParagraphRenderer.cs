@@ -2559,11 +2559,7 @@ namespace MigraDoc.Rendering
                 var following = _currentLeaf?.GetNextLeaf();
                 while (following != null)
                 {
-                    if (following.Current is BookmarkField or Text { Content.Length: 0 } or
-                        ParagraphElements { Count: 0 } ||
-                        IsSoftHyphen(following.Current) ||
-                        following.Current is InfoField emptyInfo &&
-                        GetDocumentInfo(emptyInfo.Name).Length == 0)
+                    if (IsTransparentOptionalSpaceLeaf(following.Current))
                     {
                         following = following.GetNextLeaf();
                         continue;
@@ -2610,13 +2606,20 @@ namespace MigraDoc.Rendering
             return FormatAsWord(width, fittingRect);
         }
 
+        bool IsTransparentOptionalSpaceLeaf(DocumentObject element) =>
+            element is BookmarkField or Text { Content.Length: 0 } or
+                ParagraphElements { Count: 0 } ||
+            IsSoftHyphen(element) ||
+            element is InfoField info && GetDocumentInfo(info.Name).Length == 0;
+
         bool SelectedSpaceStartedWrappedLine()
         {
             if (_isFirstLine || _currentLineWidth != 0)
                 return false;
 
             var previous = _currentLeaf?.GetPreviousLeaf();
-            while (previous != null && (IsBlank(previous.Current) ||
+            while (previous != null && (IsTransparentOptionalSpaceLeaf(previous.Current) ||
+                   IsBlank(previous.Current) ||
                    previous.Current is Character space && IsSpaceCharacter(space) ||
                    previous.Current is BookmarkField))
                 previous = previous.GetPreviousLeaf();
