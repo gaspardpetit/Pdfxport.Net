@@ -2154,6 +2154,106 @@ namespace MigraDoc.Rendering
         {
             XUnitPt wordWidth = MeasureString(word);
             XUnitPt width = wordWidth + GetLeadingKerningAfterBlank(word);
+            if (_phase == Phase.Formatting && _currentLeaf?.Current is Text &&
+                _currentXPosition > StartXPosition + Tolerance && IsLatinWordStart(word))
+            {
+                var previous = _currentLeaf.GetPreviousLeaf();
+                while (previous?.Current is BookmarkField)
+                    previous = previous.GetPreviousLeaf();
+                if (previous == null || IsBlank(previous.Current) ||
+                    IsSpaceCharacter(previous.Current) || IsTab(previous.Current))
+                {
+                    var original = _currentLeaf;
+                    var next = original.GetNextLeaf();
+                    var lastWordLeaf = original;
+                    var sequenceWidth = width;
+                    var hasContinuation = false;
+                    try
+                    {
+                        while (next != null)
+                        {
+                            if (next.Current is BookmarkField)
+                            {
+                                next = next.GetNextLeaf();
+                                continue;
+                            }
+                            if (next.Current is not Text text ||
+                                !IsLatinWordContinuation(text.Content, out var endsWord,
+                                    continuesPreviousLeaf: true))
+                                break;
+                            _currentLeaf = next;
+                            sequenceWidth += MeasureString(text.Content);
+                            lastWordLeaf = next;
+                            hasContinuation = true;
+                            next = next.GetNextLeaf();
+                            if (endsWord)
+                                break;
+                        }
+                    }
+                    finally
+                    {
+                        _currentLeaf = original;
+                    }
+                    var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+                    var shrinkAllowance = 0.0;
+                    var trailingLeaf = next;
+                    while (trailingLeaf != null && IsBlank(trailingLeaf.Current))
+                        trailingLeaf = trailingLeaf.GetNextLeaf();
+                    if (trailingLeaf == null && _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
+                        _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1
+                            and var shrinkFactor)
+                    {
+                        var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
+                        if (blankCount > 0)
+                        {
+                            _currentLeaf = lastWordLeaf;
+                            try
+                            {
+                                shrinkAllowance = (1 - shrinkFactor) * MeasureString(" ") * blankCount;
+                            }
+                            finally
+                            {
+                                _currentLeaf = original;
+                            }
+                        }
+                    }
+                    var nextLineStart = StartXPosition;
+                    var firstLineExtra = LeftIndent - _paragraph.Format.LeftIndent.Point;
+                    if (_isFirstLine)
+                        nextLineStart -= firstLineExtra;
+                    var nextLineWidth = sequenceWidth - (width - wordWidth);
+                    var nextLineCapacity = right - nextLineStart;
+                    var overhangAllowance = 0.0;
+                    if (hasContinuation && lastWordLeaf.Current is Text lastText &&
+                        _documentRenderer.LineEndOverhang is { } lineEndOverhang)
+                    {
+                        _currentLeaf = lastWordLeaf;
+                        try
+                        {
+                            if (lineEndOverhang(_paragraph, lastText.Content, CurrentFont) is double allowance &&
+                                allowance > 0 && IsFinite(allowance))
+                                overhangAllowance = allowance;
+                        }
+                        finally
+                        {
+                            _currentLeaf = original;
+                        }
+                    }
+                    if (hasContinuation && _currentXPosition + sequenceWidth - shrinkAllowance > right &&
+                        TryMoveToSecondary(nextLineWidth - overhangAllowance))
+                    {
+                        fittingRect = _currentSecondaryRect!;
+                        width = wordWidth;
+                    }
+                    else if (hasContinuation && nextLineWidth - overhangAllowance <= nextLineCapacity &&
+                        _currentXPosition + sequenceWidth - shrinkAllowance > right)
+                    {
+                        while (_currentLeaf.GetPreviousLeaf() is { Current: BookmarkField } bookmark)
+                            _currentLeaf = bookmark;
+                        return FormatResult.NewLine;
+                    }
+                }
+            }
             if (_phase == Phase.Formatting && word.Contains('\u00a0') &&
                 _paragraph.Format.MoveOversizedNoBreakGroupToNextLine &&
                 _currentXPosition > StartXPosition + Tolerance &&
@@ -2268,6 +2368,60 @@ namespace MigraDoc.Rendering
                 _savedWordWidth = wordWidth;
             return result;
         }
+
+        static bool IsLatinWord(string text) => IsLatinWordContinuation(text, out var endsWord) && !endsWord;
+
+        bool IsLatinWordStart(string text)
+        {
+            if (IsLatinWordContinuation(text, out var endsWord) && !endsWord)
+                return true;
+            if (text.Length < 2 || text[^1] is not ('\'' or '\u2019') ||
+                !IsLatinWord(text[..^1]))
+                return false;
+            var next = _currentLeaf?.GetNextLeaf();
+            while (next?.Current is BookmarkField)
+                next = next.GetNextLeaf();
+            return next?.Current is Text { Content: { Length: > 0 } continuation } &&
+                IsLatinWordCharacter(continuation[0]);
+        }
+
+        static bool IsLatinWordContinuation(string text, out bool endsWord,
+            bool continuesPreviousLeaf = false)
+        {
+            var wordEnd = text.Length;
+            while (wordEnd > 0 && text[wordEnd - 1] is '.' or ',' or ';' or ':' or '!' or '?')
+                wordEnd--;
+            endsWord = wordEnd < text.Length;
+            if (wordEnd == 0)
+                return continuesPreviousLeaf && endsWord;
+
+            var hasLatinCharacter = continuesPreviousLeaf;
+            for (var index = 0; index < wordEnd; index++)
+            {
+                if (IsLatinWordCharacter(text[index]))
+                {
+                    hasLatinCharacter = true;
+                    continue;
+                }
+                if (hasLatinCharacter && char.GetUnicodeCategory(text[index]) is
+                    System.Globalization.UnicodeCategory.NonSpacingMark or
+                    System.Globalization.UnicodeCategory.SpacingCombiningMark or
+                    System.Globalization.UnicodeCategory.EnclosingMark)
+                    continue;
+                if (text[index] is '\'' or '\u2019' && index + 1 < wordEnd &&
+                    IsLatinWordCharacter(text[index + 1]))
+                    continue;
+                return false;
+            }
+            return hasLatinCharacter;
+        }
+
+        static bool IsLatinWordCharacter(char character) =>
+            character is >= '0' and <= '9' ||
+            char.IsLetter(character) &&
+            (character is >= 'A' and <= 'z' or >= '\u00c0' and <= '\u024f' or
+                >= '\u1e00' and <= '\u1eff' or >= '\u2c60' and <= '\u2c7f' or
+                >= '\ua720' and <= '\ua7ff' or >= '\uab30' and <= '\uab6f');
 
         XUnitPt _savedWordWidth = 0;
 
