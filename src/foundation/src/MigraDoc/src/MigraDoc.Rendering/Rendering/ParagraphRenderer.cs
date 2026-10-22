@@ -1697,7 +1697,7 @@ namespace MigraDoc.Rendering
             _formattingArea = area;
             if (area is SideExclusionArea sideExclusion)
                 sideExclusion.NaturalFontHeight = _currentLineNaturalFontHeight;
-            var rect = _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height);
+            var rect = GetFittingRectForLine(_currentYPosition, _currentVerticalInfo);
             if (rect == null)
                 return false;
 
@@ -1956,7 +1956,7 @@ namespace MigraDoc.Rendering
             // Check for available space in the area must be made for each element and explicitly for the last paragraph’s element, because in formatting phase,
             // BottomBorderOffset contains the actual last line’s bottom border offset value only for the last paragraph’s object.
             var newVertInfo = CalcVerticalInfo(CurrentFont);
-            var fittingRect = _formattingArea.GetFittingRect(_currentYPosition, newVertInfo.Height + BottomBorderOffset);
+            var fittingRect = GetFittingRectForLine(_currentYPosition, newVertInfo, BottomBorderOffset);
             if (_currentSegmentIndex > 0 && _currentSecondaryRect != null)
                 fittingRect = _currentSecondaryRect;
             if (fittingRect != null && fittingRect.Width <= 0 && _currentLineWidth == 0 &&
@@ -3022,15 +3022,15 @@ namespace MigraDoc.Rendering
                 contentArea = _formattingArea.GetFittingRect(_formattingArea.Y, topBorderOffset);
 
             if (contentArea == null)
-                contentArea = _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height);
+                contentArea = GetFittingRectForLine(_currentYPosition, _currentVerticalInfo);
             else
-                contentArea = contentArea.Unite(_formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height) ?? NRT.ThrowOnNull<Rectangle>());
+                contentArea = contentArea.Unite(GetFittingRectForLine(_currentYPosition, _currentVerticalInfo) ?? NRT.ThrowOnNull<Rectangle>());
 
             var lineInfo = new LineInfo
             {
                 Vertical = _currentVerticalInfo,
                 FittingRect = _formattingArea is SideExclusionArea
-                    ? _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height)
+                    ? GetFittingRectForLine(_currentYPosition, _currentVerticalInfo)
                     : null,
                 SegmentTransitions = [.. _currentSegmentTransitions],
                 GapBefore = _currentLineGap
@@ -3152,6 +3152,20 @@ namespace MigraDoc.Rendering
         VerticalLineInfo CalcCurrentVerticalInfo()
         {
             return CalcVerticalInfo(CurrentFont);
+        }
+
+        Rectangle? GetFittingRectForLine(XUnitPt y, VerticalLineInfo line, XUnitPt bottomBorder = default)
+        {
+            // The additional leading of a multiple-spaced line determines the next
+            // line's position. Word does not require that trailing leading to fit
+            // inside the bottom margin when this is the last line on a page.
+            XUnitPt fitHeight = _paragraph.Format.LineSpacingRule == LineSpacingRule.Multiple
+                ? XUnitPt.FromPoint(Math.Min(line.Height.Point, line.InherentLineSpace.Point))
+                : line.Height;
+            var rect = _formattingArea.GetFittingRect(y, fitHeight + bottomBorder);
+            if (rect != null)
+                rect.Height = line.Height + bottomBorder;
+            return rect;
         }
 
         VerticalLineInfo CalcVerticalInfo(XFont font, bool isListSymbol = false)
