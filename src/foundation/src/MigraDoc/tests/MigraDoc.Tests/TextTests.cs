@@ -712,6 +712,89 @@ namespace MigraDoc.Tests
             adjusted[0].Should().NotBe(adjusted[1]);
         }
 
+        [Fact]
+        public void JustifiedFinalWordCanUseContractedSpaces()
+        {
+            (int PageCount, double[] Positions, string[] PageContents) Render(
+                Func<Paragraph, double?>? shrinkFactor)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                document.Styles.Normal.Font.Size = 12;
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(95);
+                section.PageSetup.PageHeight = Unit.FromPoint(40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(10);
+                section.PageSetup.RightMargin = Unit.FromPoint(10);
+                section.PageSetup.TopMargin = Unit.FromPoint(10);
+                section.PageSetup.BottomMargin = Unit.FromPoint(10);
+                var paragraph = section.AddParagraph("a a a a a a a a");
+                paragraph.Format.Alignment = ParagraphAlignment.Justify;
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = shrinkFactor;
+                renderer.RenderDocument();
+                var streamEnumerator = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                var positions = new List<double>();
+                while (streamEnumerator.Text.MoveAndGetNext(true, out var textInfo))
+                    positions.Add(textInfo!.X);
+                var pageContents = Enumerable.Range(0, renderer.PdfDocument.PageCount)
+                    .Select(index => PdfFileHelper.GetPageContentStream(renderer.PdfDocument, index)).ToArray();
+                return (renderer.PdfDocument.PageCount, positions.ToArray(), pageContents);
+            }
+
+            var defaultRender = Render(null);
+            var unchangedRender = Render(_ => 1);
+            var nullRender = Render(_ => null);
+            var contractedRender = Render(_ => 0.75);
+            defaultRender.PageCount.Should().Be(2);
+            unchangedRender.PageCount.Should().Be(2);
+            nullRender.PageCount.Should().Be(2);
+            contractedRender.PageCount.Should().Be(1);
+            unchangedRender.Positions.Should().Equal(defaultRender.Positions);
+            unchangedRender.PageContents.Should().Equal(defaultRender.PageContents);
+            nullRender.PageContents.Should().Equal(defaultRender.PageContents);
+            contractedRender.Positions.Should().HaveCount(defaultRender.Positions.Length + 1);
+            (contractedRender.Positions[1] - contractedRender.Positions[0]).Should()
+                .BeLessThan(defaultRender.Positions[1] - defaultRender.Positions[0]);
+            contractedRender.Positions[^1].Should().BeApproximately(defaultRender.Positions[^1], 0.01);
+        }
+
+        [Fact]
+        public void CenteredTextFrameContentMovesTextWithoutMovingFrame()
+        {
+            (string Content, int Pages) Render(bool centered)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var frame = document.AddSection().AddTextFrame();
+                frame.Width = Unit.FromPoint(180);
+                frame.Height = Unit.FromPoint(90);
+                frame.AddParagraph("Centered frame text");
+                frame.LineFormat.Visible = true;
+                frame.CenterContentVertically = centered;
+                ((TextFrame)frame.Clone()).CenterContentVertically.Should().Be(centered);
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.RenderDocument();
+                return (PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0),
+                    renderer.PdfDocument.PageCount);
+            }
+
+            var normal = Render(false);
+            var centered = Render(true);
+            centered.Pages.Should().Be(normal.Pages);
+            centered.Content.Should().Contain("(Centered) Tj");
+            var frameRectangles = @"(?m)^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re$";
+            Regex.Matches(normal.Content, frameRectangles).Count.Should().BeGreaterThan(0);
+            Regex.Matches(centered.Content, frameRectangles).Cast<Match>().Select(match => match.Value)
+                .Should().Equal(Regex.Matches(normal.Content, frameRectangles).Cast<Match>().Select(match => match.Value));
+            var normalTranslations = Regex.Matches(normal.Content, @"(?m)^1 0 0 1 (?<x>-?[\d.]+) (?<y>-?[\d.]+) cm$");
+            var centeredTranslations = Regex.Matches(centered.Content, @"(?m)^1 0 0 1 (?<x>-?[\d.]+) (?<y>-?[\d.]+) cm$");
+            centeredTranslations.Count.Should().Be(normalTranslations.Count);
+            var normalY = double.Parse(normalTranslations[^1].Groups["y"].Value, CultureInfo.InvariantCulture);
+            var centeredY = double.Parse(centeredTranslations[^1].Groups["y"].Value, CultureInfo.InvariantCulture);
+            centeredY.Should().BeGreaterThan(normalY + 10);
+        }
+
         [Theory]
         [InlineData("authors.\u201d")]
         [InlineData("authors.\u2019")]
@@ -843,144 +926,6 @@ namespace MigraDoc.Tests
         }
 
         [Fact]
-        public void TextWidthAdjustmentIsScopedToParagraph()
-        {
-            var document = new Document();
-            document.Styles.Normal.Font.Name = "Arial";
-            var section = document.AddSection();
-            section.PageSetup.PageWidth = Unit.FromPoint(200);
-            section.PageSetup.LeftMargin = Unit.FromPoint(65);
-            section.PageSetup.RightMargin = Unit.FromPoint(65);
-            var adjusted = section.AddParagraph("Longword marker");
-            var unchanged = section.AddParagraph("Longword marker");
-            var widened = section.AddParagraph("Tiny words");
-            var widenedControl = section.AddParagraph("Tiny words");
-            var renderer = new PdfDocumentRenderer { Document = document };
-            renderer.DocumentRenderer.TextWidthAdjustment = (paragraph, word, _) =>
-                ReferenceEquals(paragraph, adjusted) && word == "marker" ? -30 :
-                ReferenceEquals(paragraph, widened) && word == "words" ? 30 : null;
-
-            renderer.RenderDocument();
-
-            var paragraphs = renderer.DocumentRenderer.FormattedDocument!.GetRenderInfos(1)!
-                .OfType<ParagraphRenderInfo>().ToArray();
-            double Height(Paragraph paragraph) => paragraphs.Single(info => ReferenceEquals(info.DocumentObject, paragraph))
-                .LayoutInfo.ContentArea.Height.Point;
-            Height(adjusted).Should().BeLessThan(Height(unchanged));
-            Height(widened).Should().BeGreaterThan(Height(widenedControl));
-        }
-
-        [Fact]
-        public void TextWidthAdjustmentDoesNotChangePaintedAdvances()
-        {
-            string Render(double? adjustment)
-            {
-                var document = new Document();
-                document.Styles.Normal.Font.Name = "Arial";
-                var paragraph = document.AddSection().AddParagraph("before after");
-                var renderer = new PdfDocumentRenderer { Document = document };
-                if (adjustment is not null)
-                    renderer.DocumentRenderer.TextWidthAdjustment = (candidate, word, _) =>
-                        ReferenceEquals(candidate, paragraph) && word == "before" ? adjustment : null;
-                renderer.RenderDocument();
-                return PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
-            }
-
-            Render(-2).Should().Be(Render(null));
-            Render(double.NaN).Should().Be(Render(null));
-            Render(double.PositiveInfinity).Should().Be(Render(null));
-            Render(-1000).Should().Be(Render(null));
-        }
-
-        [Fact]
-        public void TextWidthAdjustmentForSuperscriptUsesFinalPointWidth()
-        {
-            double Height(double contentWidth, double adjustment)
-            {
-                var document = new Document();
-                document.Styles.Normal.Font.Name = "Arial";
-                var section = document.AddSection();
-                section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
-                section.PageSetup.LeftMargin = Unit.FromPoint(20);
-                section.PageSetup.RightMargin = Unit.FromPoint(20);
-                var paragraph = section.AddParagraph();
-                paragraph.AddText("before ");
-                paragraph.AddFormattedText("marker").Font.Superscript = true;
-                var renderer = new PdfDocumentRenderer { Document = document };
-                renderer.DocumentRenderer.TextWidthAdjustment = (_, word, _) =>
-                    word == "marker" ? adjustment : null;
-                renderer.RenderDocument();
-                return renderer.DocumentRenderer.FormattedDocument!.GetRenderInfos(1)!
-                    .OfType<ParagraphRenderInfo>().Single().LayoutInfo.ContentArea.Height.Point;
-            }
-
-            double MinimumWidth(double adjustment)
-            {
-                var oneLineHeight = Height(120, adjustment);
-                var lower = 30.0;
-                var upper = 120.0;
-                for (var iteration = 0; iteration < 12; iteration++)
-                {
-                    var middle = (lower + upper) / 2;
-                    if (Height(middle, adjustment) > oneLineHeight + 1)
-                        lower = middle;
-                    else
-                        upper = middle;
-                }
-                return upper;
-            }
-
-            (MinimumWidth(5) - MinimumWidth(0)).Should().BeApproximately(5, 0.1);
-        }
-
-        [Fact]
-        public void JustifiedFinalWordCanUseContractedSpaces()
-        {
-            (int PageCount, double[] Positions, string[] PageContents) Render(
-                Func<Paragraph, double?>? shrinkFactor)
-            {
-                var document = new Document();
-                document.Styles.Normal.Font.Name = "Arial";
-                document.Styles.Normal.Font.Size = 12;
-                var section = document.AddSection();
-                section.PageSetup.PageWidth = Unit.FromPoint(95);
-                section.PageSetup.PageHeight = Unit.FromPoint(40);
-                section.PageSetup.LeftMargin = Unit.FromPoint(10);
-                section.PageSetup.RightMargin = Unit.FromPoint(10);
-                section.PageSetup.TopMargin = Unit.FromPoint(10);
-                section.PageSetup.BottomMargin = Unit.FromPoint(10);
-                var paragraph = section.AddParagraph("a a a a a a a a");
-                paragraph.Format.Alignment = ParagraphAlignment.Justify;
-                var renderer = new PdfDocumentRenderer { Document = document };
-                renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = shrinkFactor;
-                renderer.RenderDocument();
-                var streamEnumerator = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
-                var positions = new List<double>();
-                while (streamEnumerator.Text.MoveAndGetNext(true, out var textInfo))
-                    positions.Add(textInfo!.X);
-                var pageContents = Enumerable.Range(0, renderer.PdfDocument.PageCount)
-                    .Select(index => PdfFileHelper.GetPageContentStream(renderer.PdfDocument, index)).ToArray();
-                return (renderer.PdfDocument.PageCount, positions.ToArray(), pageContents);
-            }
-
-            var defaultRender = Render(null);
-            var unchangedRender = Render(_ => 1);
-            var nullRender = Render(_ => null);
-            var contractedRender = Render(_ => 0.75);
-            defaultRender.PageCount.Should().Be(2);
-            unchangedRender.PageCount.Should().Be(2);
-            nullRender.PageCount.Should().Be(2);
-            contractedRender.PageCount.Should().Be(1);
-            unchangedRender.Positions.Should().Equal(defaultRender.Positions);
-            unchangedRender.PageContents.Should().Equal(defaultRender.PageContents);
-            nullRender.PageContents.Should().Equal(defaultRender.PageContents);
-            contractedRender.Positions.Should().HaveCount(defaultRender.Positions.Length + 1);
-            (contractedRender.Positions[1] - contractedRender.Positions[0]).Should()
-                .BeLessThan(defaultRender.Positions[1] - defaultRender.Positions[0]);
-            contractedRender.Positions[^1].Should().BeApproximately(defaultRender.Positions[^1], 0.01);
-        }
-
-        [Fact]
         public void TextFrameLayersSurviveDdlAndControlPagePaintOrder()
         {
             var document = new Document();
@@ -1088,6 +1033,97 @@ namespace MigraDoc.Tests
             var restore = rotated.IndexOf("\nQ\n", border, StringComparison.Ordinal);
             restore.Should().BeGreaterThan(border);
             unrotated.Should().NotContain(".8660254 -.5 .5 .8660254");
+        }
+
+        [Fact]
+        public void TextWidthAdjustmentIsScopedToParagraph()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(200);
+            section.PageSetup.LeftMargin = Unit.FromPoint(65);
+            section.PageSetup.RightMargin = Unit.FromPoint(65);
+            var adjusted = section.AddParagraph("Longword marker");
+            var unchanged = section.AddParagraph("Longword marker");
+            var widened = section.AddParagraph("Tiny words");
+            var widenedControl = section.AddParagraph("Tiny words");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.TextWidthAdjustment = (paragraph, word, _) =>
+                ReferenceEquals(paragraph, adjusted) && word == "marker" ? -30 :
+                ReferenceEquals(paragraph, widened) && word == "words" ? 30 : null;
+
+            renderer.RenderDocument();
+
+            var paragraphs = renderer.DocumentRenderer.FormattedDocument!.GetRenderInfos(1)!
+                .OfType<ParagraphRenderInfo>().ToArray();
+            double Height(Paragraph paragraph) => paragraphs.Single(info => ReferenceEquals(info.DocumentObject, paragraph))
+                .LayoutInfo.ContentArea.Height.Point;
+            Height(adjusted).Should().BeLessThan(Height(unchanged));
+            Height(widened).Should().BeGreaterThan(Height(widenedControl));
+        }
+
+        [Fact]
+        public void TextWidthAdjustmentDoesNotChangePaintedAdvances()
+        {
+            string Render(double? adjustment)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var paragraph = document.AddSection().AddParagraph("before after");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (adjustment is not null)
+                    renderer.DocumentRenderer.TextWidthAdjustment = (candidate, word, _) =>
+                        ReferenceEquals(candidate, paragraph) && word == "before" ? adjustment : null;
+                renderer.RenderDocument();
+                return PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            }
+
+            Render(-2).Should().Be(Render(null));
+            Render(double.NaN).Should().Be(Render(null));
+            Render(double.PositiveInfinity).Should().Be(Render(null));
+            Render(-1000).Should().Be(Render(null));
+        }
+
+        [Fact]
+        public void TextWidthAdjustmentForSuperscriptUsesFinalPointWidth()
+        {
+            double Height(double contentWidth, double adjustment)
+            {
+                var document = new Document();
+                document.Styles.Normal.Font.Name = "Arial";
+                var section = document.AddSection();
+                section.PageSetup.PageWidth = Unit.FromPoint(contentWidth + 40);
+                section.PageSetup.LeftMargin = Unit.FromPoint(20);
+                section.PageSetup.RightMargin = Unit.FromPoint(20);
+                var paragraph = section.AddParagraph();
+                paragraph.AddText("before ");
+                paragraph.AddFormattedText("marker").Font.Superscript = true;
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.DocumentRenderer.TextWidthAdjustment = (_, word, _) =>
+                    word == "marker" ? adjustment : null;
+                renderer.RenderDocument();
+                return renderer.DocumentRenderer.FormattedDocument!.GetRenderInfos(1)!
+                    .OfType<ParagraphRenderInfo>().Single().LayoutInfo.ContentArea.Height.Point;
+            }
+
+            double MinimumWidth(double adjustment)
+            {
+                var oneLineHeight = Height(120, adjustment);
+                var lower = 30.0;
+                var upper = 120.0;
+                for (var iteration = 0; iteration < 12; iteration++)
+                {
+                    var middle = (lower + upper) / 2;
+                    if (Height(middle, adjustment) > oneLineHeight + 1)
+                        lower = middle;
+                    else
+                        upper = middle;
+                }
+                return upper;
+            }
+
+            (MinimumWidth(5) - MinimumWidth(0)).Should().BeApproximately(5, 0.1);
         }
 
         public TextTests()
@@ -1608,171 +1644,6 @@ namespace MigraDoc.Tests
             selected.Top.Should().BeGreaterThan(normal.Top + 50);
             selected.Content.Should().Contain("Following");
             normal.Content.Should().Contain("Following");
-        }
-
-        [Fact]
-        public void CenteredTextFrameContentMovesTextWithoutMovingFrame()
-        {
-            (string Content, int Pages) Render(bool centered)
-            {
-                var document = new Document();
-                document.Styles.Normal.Font.Name = "Arial";
-                var frame = document.AddSection().AddTextFrame();
-                frame.Width = Unit.FromPoint(180);
-                frame.Height = Unit.FromPoint(90);
-                frame.AddParagraph("Centered frame text");
-                frame.LineFormat.Visible = true;
-                frame.CenterContentVertically = centered;
-                ((TextFrame)frame.Clone()).CenterContentVertically.Should().Be(centered);
-                var renderer = new PdfDocumentRenderer { Document = document };
-                renderer.RenderDocument();
-                return (PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0),
-                    renderer.PdfDocument.PageCount);
-            }
-
-            var normal = Render(false);
-            var centered = Render(true);
-            centered.Pages.Should().Be(normal.Pages);
-            centered.Content.Should().Contain("(Centered) Tj");
-            var frameRectangles = @"(?m)^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+ re$";
-            Regex.Matches(normal.Content, frameRectangles).Count.Should().BeGreaterThan(0);
-            Regex.Matches(centered.Content, frameRectangles).Cast<Match>().Select(match => match.Value)
-                .Should().Equal(Regex.Matches(normal.Content, frameRectangles).Cast<Match>().Select(match => match.Value));
-            var normalTranslations = Regex.Matches(normal.Content, @"(?m)^1 0 0 1 (?<x>-?[\d.]+) (?<y>-?[\d.]+) cm$");
-            var centeredTranslations = Regex.Matches(centered.Content, @"(?m)^1 0 0 1 (?<x>-?[\d.]+) (?<y>-?[\d.]+) cm$");
-            centeredTranslations.Count.Should().Be(normalTranslations.Count);
-            var normalY = double.Parse(normalTranslations[^1].Groups["y"].Value, CultureInfo.InvariantCulture);
-            var centeredY = double.Parse(centeredTranslations[^1].Groups["y"].Value, CultureInfo.InvariantCulture);
-            centeredY.Should().BeGreaterThan(normalY + 10);
-        }
-
-        [Theory]
-        [InlineData(false, false, true, true)]
-        [InlineData(true, false, true, true)]
-        [InlineData(true, true, true, true)]
-        [InlineData(false, false, false, true)]
-        [InlineData(false, false, true, false)]
-        public void StyledRunsRespectNonbreakingSpace(bool splitPunctuation, bool longUrl,
-            bool nonbreakingSpace, bool hyperlink)
-        {
-            var document = new Document();
-            document.Styles.Normal.Font.Name = "Arial";
-            document.Styles.Normal.Font.Size = 9;
-            var section = document.AddSection();
-            section.PageSetup.PageWidth = Unit.FromPoint(longUrl ? 612 : 160);
-            section.PageSetup.LeftMargin = Unit.FromPoint(longUrl ? 72 : 20);
-            section.PageSetup.RightMargin = Unit.FromPoint(longUrl ? 72 : 20);
-            var paragraph = section.AddParagraph();
-            paragraph.AddText(longUrl
-                ? "Committee on Industry and Technology, 5 December 2022, Catherine Lovrics, "
-                : splitPunctuation ? "Reference text" : "Reference text ");
-            if (longUrl)
-                paragraph.AddFormattedText("Open Parliament").Font.Italic = true;
-            if (splitPunctuation)
-                paragraph.AddFormattedText(", ").Font.Italic = true;
-            paragraph.AddText("online");
-            paragraph.AddFormattedText(nonbreakingSpace ? ":\u00a0" : ": ");
-            var url = longUrl
-                ? "https://openparliament.ca/committees/industry/44-1/49/catherine-lovrics-2/"
-                : "https://a.co";
-            if (hyperlink)
-                paragraph.AddHyperlink(url, HyperlinkType.Url).AddText(url);
-            else
-                paragraph.AddFormattedText(url).Font.Bold = true;
-
-            var renderer = new PdfDocumentRenderer { Document = document };
-            renderer.RenderDocument();
-            var content = string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
-                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
-                .Select(reference => reference.Value)
-                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
-                .Where(stream => stream.Stream != null)
-                .Select(stream => Encoding.GetEncoding(28591).GetString(stream.Stream!.UnfilteredValue)));
-            var online = content.IndexOf("(online) Tj", StringComparison.Ordinal);
-            var link = content.IndexOf("(https://", StringComparison.Ordinal);
-            online.Should().BeGreaterThan(0);
-            link.Should().BeGreaterThan(online);
-            if (longUrl && nonbreakingSpace)
-                Regex.Matches(content[..online], @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
-                    .Count.Should().BeGreaterThan(0);
-            var lineBreaks = Regex.Matches(content[online..link], @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
-                .Cast<Match>().ToArray();
-            if (nonbreakingSpace)
-                lineBreaks.Should().BeEmpty();
-            else
-                lineBreaks.Should().NotBeEmpty();
-        }
-
-        [Fact]
-        public void RepeatedCitationUrlsKeepExpectedLineCount()
-        {
-            var document = new Document();
-            document.Styles.Normal.Font.Name = "Arial";
-            document.Styles.Normal.Font.Size = 8;
-            var section = document.AddSection();
-            section.PageSetup.PageWidth = Unit.FromPoint(612);
-            section.PageSetup.LeftMargin = Unit.FromPoint(72);
-            section.PageSetup.RightMargin = Unit.FromPoint(72);
-            var paragraph = section.AddParagraph();
-            paragraph.AddText("Committee on Industry and Technology, 5 December 2022, Catherine Lovrics, Open Parliament, ");
-            for (var index = 0; index < 3; index++)
-            {
-                paragraph.AddFormattedText("online:\u00a0").Font.Italic = true;
-                paragraph.AddFormattedText("https://openparliament.ca/committees/industry/44-1/");
-                paragraph.AddFormattedText($"{49 + index}/catherine-lovrics-2/");
-                paragraph.AddText("; Committee on Industry and Technology, 15 February 2023, Open Parliament, ");
-            }
-
-            var renderer = new PdfDocumentRenderer { Document = document };
-            renderer.RenderDocument();
-            var content = string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
-                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
-                .Select(reference => reference.Value)
-                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
-                .Where(stream => stream.Stream != null)
-                .Select(stream => Encoding.GetEncoding(28591).GetString(stream.Stream!.UnfilteredValue)));
-            Regex.Matches(content, @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
-                .Count.Should().Be(4);
-        }
-
-        [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void ConsecutiveStyledNonbreakingSpacesKeepTheChainTogether(bool followingTextContainsSpace)
-        {
-            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
-                XGraphicsUnit.Point, XPageDirection.Downwards);
-            var italicFont = new XFont("Arial", 9, XFontStyleEx.Italic);
-            var boldFont = new XFont("Arial", 9, XFontStyleEx.Bold);
-            var regularFont = new XFont("Arial", 9);
-            var chainWidth = measure.MeasureString("online:\u00a0", italicFont).Width +
-                measure.MeasureString("https://a.co\u00a0", boldFont).Width +
-                measure.MeasureString("source", regularFont).Width;
-            var document = new Document();
-            document.Styles.Normal.Font.Name = "Arial";
-            document.Styles.Normal.Font.Size = 9;
-            var section = document.AddSection();
-            section.PageSetup.PageWidth = Unit.FromPoint(chainWidth + 42);
-            section.PageSetup.LeftMargin = Unit.FromPoint(20);
-            section.PageSetup.RightMargin = Unit.FromPoint(20);
-            var paragraph = section.AddParagraph("x ");
-            paragraph.AddFormattedText("online:\u00a0").Font.Italic = true;
-            paragraph.AddFormattedText("https://a.co\u00a0").Font.Bold = true;
-            paragraph.AddText(followingTextContainsSpace ? "source later" : "source");
-
-            var renderer = new PdfDocumentRenderer { Document = document };
-            renderer.RenderDocument();
-            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
-            var prefix = content.IndexOf("(x) Tj", StringComparison.Ordinal);
-            var online = content.IndexOf("(online", StringComparison.Ordinal);
-            var source = content.IndexOf("(source) Tj", StringComparison.Ordinal);
-            prefix.Should().BeGreaterThan(0);
-            online.Should().BeGreaterThan(prefix);
-            source.Should().BeGreaterThan(online);
-            Regex.Matches(content[prefix..online], @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
-                .Count.Should().Be(1);
-            Regex.Matches(content[online..source], @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
-                .Count.Should().Be(0);
         }
 
         [Fact]
@@ -2743,5 +2614,135 @@ namespace MigraDoc.Tests
                 .Select(stream => Encoding.Latin1.GetString(stream.Stream!.UnfilteredValue)));
             content.Should().Contain("W* n");
         }
+
+        [Theory]
+        [InlineData(false, false, true, true)]
+        [InlineData(true, false, true, true)]
+        [InlineData(true, true, true, true)]
+        [InlineData(false, false, false, true)]
+        [InlineData(false, false, true, false)]
+        public void StyledRunsRespectNonbreakingSpace(bool splitPunctuation, bool longUrl,
+            bool nonbreakingSpace, bool hyperlink)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 9;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(longUrl ? 612 : 160);
+            section.PageSetup.LeftMargin = Unit.FromPoint(longUrl ? 72 : 20);
+            section.PageSetup.RightMargin = Unit.FromPoint(longUrl ? 72 : 20);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText(longUrl
+                ? "Committee on Industry and Technology, 5 December 2022, Catherine Lovrics, "
+                : splitPunctuation ? "Reference text" : "Reference text ");
+            if (longUrl)
+                paragraph.AddFormattedText("Open Parliament").Font.Italic = true;
+            if (splitPunctuation)
+                paragraph.AddFormattedText(", ").Font.Italic = true;
+            paragraph.AddText("online");
+            paragraph.AddFormattedText(nonbreakingSpace ? ":\u00a0" : ": ");
+            var url = longUrl
+                ? "https://openparliament.ca/committees/industry/44-1/49/catherine-lovrics-2/"
+                : "https://a.co";
+            if (hyperlink)
+                paragraph.AddHyperlink(url, HyperlinkType.Url).AddText(url);
+            else
+                paragraph.AddFormattedText(url).Font.Bold = true;
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
+                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
+                .Select(reference => reference.Value)
+                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
+                .Where(stream => stream.Stream != null)
+                .Select(stream => Encoding.GetEncoding(28591).GetString(stream.Stream!.UnfilteredValue)));
+            var online = content.IndexOf("(online) Tj", StringComparison.Ordinal);
+            var link = content.IndexOf("(https://", StringComparison.Ordinal);
+            online.Should().BeGreaterThan(0);
+            link.Should().BeGreaterThan(online);
+            if (longUrl && nonbreakingSpace)
+                Regex.Matches(content[..online], @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
+                    .Count.Should().BeGreaterThan(0);
+            var lineBreaks = Regex.Matches(content[online..link], @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
+                .Cast<Match>().ToArray();
+            if (nonbreakingSpace)
+                lineBreaks.Should().BeEmpty();
+            else
+                lineBreaks.Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public void RepeatedCitationUrlsKeepExpectedLineCount()
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 8;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(612);
+            section.PageSetup.LeftMargin = Unit.FromPoint(72);
+            section.PageSetup.RightMargin = Unit.FromPoint(72);
+            var paragraph = section.AddParagraph();
+            paragraph.AddText("Committee on Industry and Technology, 5 December 2022, Catherine Lovrics, Open Parliament, ");
+            for (var index = 0; index < 3; index++)
+            {
+                paragraph.AddFormattedText("online:\u00a0").Font.Italic = true;
+                paragraph.AddFormattedText("https://openparliament.ca/committees/industry/44-1/");
+                paragraph.AddFormattedText($"{49 + index}/catherine-lovrics-2/");
+                paragraph.AddText("; Committee on Industry and Technology, 15 February 2023, Open Parliament, ");
+            }
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = string.Concat(renderer.PdfDocument.Pages[0].Contents.Elements
+                .OfType<PdfSharp.Pdf.Advanced.PdfReference>()
+                .Select(reference => reference.Value)
+                .OfType<PdfSharp.Pdf.Advanced.PdfContent>()
+                .Where(stream => stream.Stream != null)
+                .Select(stream => Encoding.GetEncoding(28591).GetString(stream.Stream!.UnfilteredValue)));
+            Regex.Matches(content, @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
+                .Count.Should().Be(4);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ConsecutiveStyledNonbreakingSpacesKeepTheChainTogether(bool followingTextContainsSpace)
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var italicFont = new XFont("Arial", 9, XFontStyleEx.Italic);
+            var boldFont = new XFont("Arial", 9, XFontStyleEx.Bold);
+            var regularFont = new XFont("Arial", 9);
+            var chainWidth = measure.MeasureString("online:\u00a0", italicFont).Width +
+                measure.MeasureString("https://a.co\u00a0", boldFont).Width +
+                measure.MeasureString("source", regularFont).Width;
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 9;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(chainWidth + 42);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph("x ");
+            paragraph.AddFormattedText("online:\u00a0").Font.Italic = true;
+            paragraph.AddFormattedText("https://a.co\u00a0").Font.Bold = true;
+            paragraph.AddText(followingTextContainsSpace ? "source later" : "source");
+
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
+            var prefix = content.IndexOf("(x) Tj", StringComparison.Ordinal);
+            var online = content.IndexOf("(online", StringComparison.Ordinal);
+            var source = content.IndexOf("(source) Tj", StringComparison.Ordinal);
+            prefix.Should().BeGreaterThan(0);
+            online.Should().BeGreaterThan(prefix);
+            source.Should().BeGreaterThan(online);
+            Regex.Matches(content[prefix..online], @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
+                .Count.Should().Be(1);
+            Regex.Matches(content[online..source], @"-?\d+(?:\.\d+)? -\d+(?:\.\d+)? Td")
+                .Count.Should().Be(0);
+        }
+
     }
 }
