@@ -138,6 +138,13 @@ namespace MigraDoc.Rendering
                 if (LineCount > 0)
                     _lineInfos.RemoveAt(LineCount - 1);
 
+                // Moving a line to satisfy the ending widow constraint may
+                // leave just one line on the first page. In that case restart
+                // the paragraph on the next area so its opening also has at
+                // least two lines.
+                if (_widowControl && _isStarting && LineCount < 2)
+                    _lineInfos.Clear();
+
                 _isEnding = false;
             }
         }
