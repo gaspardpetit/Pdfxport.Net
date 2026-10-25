@@ -66,36 +66,8 @@ namespace MigraDoc.Rendering
         internal XUnitPt GetWidth(BorderType type)
         {
             var width = GetStrokeWidth(type);
-            return GetStyle(type) switch
-            {
-                BorderStyle.Double => width * 3,
-                BorderStyle.Triple => width * 5,
-                BorderStyle.ThinThickSmallGap or BorderStyle.ThickThinSmallGap => width * 1.75,
-                BorderStyle.ThinThickThinSmallGap => width * 2.5,
-                BorderStyle.ThinThickMediumGap or BorderStyle.ThickThinMediumGap => width * 2,
-                BorderStyle.ThinThickThinMediumGap => width * 3,
-                BorderStyle.ThinThickLargeGap or BorderStyle.ThickThinLargeGap => width * 2.125,
-                BorderStyle.ThinThickThinLargeGap => width * 3.5,
-                BorderStyle.DoubleWave => width * 2.5,
-                BorderStyle.Emboss3D or BorderStyle.Engrave3D => width * 1.75,
-                _ => width
-            };
+            return width * BorderStyleDescriptor.For(GetStyle(type), width.Point).BandMultiplier;
         }
-
-        static (double[] Widths, double Gap)? CompoundRails(BorderStyle style) => style switch
-        {
-            BorderStyle.Triple => (new[] { 1.0, 1.0, 1.0 }, 1.0),
-            BorderStyle.ThinThickSmallGap => (new[] { 1.0, 0.375 }, 0.375),
-            BorderStyle.ThickThinSmallGap => (new[] { 0.375, 1.0 }, 0.375),
-            BorderStyle.ThinThickThinSmallGap => (new[] { 0.375, 1.0, 0.375 }, 0.375),
-            BorderStyle.ThinThickMediumGap => (new[] { 1.0, 0.5 }, 0.5),
-            BorderStyle.ThickThinMediumGap => (new[] { 0.5, 1.0 }, 0.5),
-            BorderStyle.ThinThickThinMediumGap => (new[] { 0.5, 1.0, 0.5 }, 0.5),
-            BorderStyle.ThinThickLargeGap => (new[] { 0.75, 0.375 }, 1.0),
-            BorderStyle.ThickThinLargeGap => (new[] { 0.375, 0.75 }, 1.0),
-            BorderStyle.ThinThickThinLargeGap => (new[] { 0.375, 0.75, 0.375 }, 1.0),
-            _ => null
-        };
 
         XUnitPt GetStrokeWidth(BorderType type)
         {
@@ -166,22 +138,8 @@ namespace MigraDoc.Rendering
             var pen = GetPen(type);
             if (pen != null)
             {
-                if (GetStyle(type) is BorderStyle.Wave or BorderStyle.DoubleWave)
-                {
-                    RenderWave(left, top, height, true, GetStyle(type) == BorderStyle.DoubleWave, pen);
+                if (TryRenderPattern(GetStyle(type), left, top, height, true, pen))
                     return;
-                }
-                if (GetStyle(type) == BorderStyle.DashDotStroked)
-                {
-                    RenderHatch(left, top, height, true, pen);
-                    return;
-                }
-                if (GetStyle(type) is BorderStyle.Emboss3D or BorderStyle.Engrave3D)
-                {
-                    RenderThreeDimensional(left, top, height, true,
-                        GetStyle(type) == BorderStyle.Emboss3D, pen);
-                    return;
-                }
                 if (GetStyle(type) == BorderStyle.Double)
                 {
                     var strokeWidth = borderWidth / 3;
@@ -201,12 +159,14 @@ namespace MigraDoc.Rendering
 #endif
                     return;
                 }
-                if (CompoundRails(GetStyle(type)) is { } rails)
+                var descriptor = BorderStyleDescriptor.For(GetStyle(type), pen.Width);
+                if (descriptor.Kind == BorderDrawingKind.Rails && GetStyle(type) != BorderStyle.Double)
                 {
+                    var rails = descriptor.Rails;
                     var position = left;
-                    for (var rail = 0; rail < rails.Widths.Length; rail++)
+                    for (var rail = 0; rail < rails.Count; rail++)
                     {
-                        var railWidth = pen.Width * rails.Widths[rail];
+                        var railWidth = pen.Width * rails.WidthAt(rail);
                         position += XUnitPt.FromPoint(railWidth / 2);
                         var railPen = new XPen(pen.Color, railWidth);
 #if PSGFX
@@ -258,22 +218,8 @@ namespace MigraDoc.Rendering
             var pen = GetPen(type);
             if (pen != null)
             {
-                if (GetStyle(type) is BorderStyle.Wave or BorderStyle.DoubleWave)
-                {
-                    RenderWave(left, top, width, false, GetStyle(type) == BorderStyle.DoubleWave, pen);
+                if (TryRenderPattern(GetStyle(type), left, top, width, false, pen))
                     return;
-                }
-                if (GetStyle(type) == BorderStyle.DashDotStroked)
-                {
-                    RenderHatch(left, top, width, false, pen);
-                    return;
-                }
-                if (GetStyle(type) is BorderStyle.Emboss3D or BorderStyle.Engrave3D)
-                {
-                    RenderThreeDimensional(left, top, width, false,
-                        GetStyle(type) == BorderStyle.Emboss3D, pen);
-                    return;
-                }
                 if (GetStyle(type) == BorderStyle.Double)
                 {
                     var strokeWidth = borderWidth / 3;
@@ -299,12 +245,14 @@ namespace MigraDoc.Rendering
 #endif
                     return;
                 }
-                if (CompoundRails(GetStyle(type)) is { } rails)
+                var descriptor = BorderStyleDescriptor.For(GetStyle(type), pen.Width);
+                if (descriptor.Kind == BorderDrawingKind.Rails && GetStyle(type) != BorderStyle.Double)
                 {
+                    var rails = descriptor.Rails;
                     var position = top;
-                    for (var rail = 0; rail < rails.Widths.Length; rail++)
+                    for (var rail = 0; rail < rails.Count; rail++)
                     {
-                        var railWidth = pen.Width * rails.Widths[rail];
+                        var railWidth = pen.Width * rails.WidthAt(rail);
                         position += XUnitPt.FromPoint(railWidth / 2);
                         var railPen = new XPen(pen.Color, railWidth);
 #if PSGFX
@@ -338,11 +286,33 @@ namespace MigraDoc.Rendering
             }
         }
 
+        bool TryRenderPattern(BorderStyle style, XUnitPt left, XUnitPt top,
+            XUnitPt length, bool vertical, XPen pen)
+        {
+            switch (BorderStyleDescriptor.For(style).Kind)
+            {
+                case BorderDrawingKind.Wave:
+                case BorderDrawingKind.DoubleWave:
+                    RenderWave(left, top, length, vertical, style == BorderStyle.DoubleWave, pen);
+                    return true;
+                case BorderDrawingKind.DiagonalHatch:
+                    RenderHatch(left, top, length, vertical, pen);
+                    return true;
+                case BorderDrawingKind.ThreeDimensional:
+                    RenderThreeDimensional(left, top, length, vertical,
+                        style == BorderStyle.Emboss3D, pen);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         void RenderWave(XUnitPt left, XUnitPt top, XUnitPt length, bool vertical, bool doubleWave, XPen source)
         {
             if (length.Point <= 0 || source.Width <= 0)
                 return;
-            var bandWidth = source.Width * (doubleWave ? 2.5 : 1);
+            var descriptor = BorderStyleDescriptor.For(doubleWave ? BorderStyle.DoubleWave : BorderStyle.Wave);
+            var bandWidth = source.Width * descriptor.BandMultiplier;
             var state = _gfx.Save();
             _gfx.IntersectClip(vertical
                 ? new XRect(left.Point, top.Point, bandWidth, length.Point)
@@ -350,15 +320,17 @@ namespace MigraDoc.Rendering
             var baseWidth = source.Width;
             var railPen = new XPen(source.Color, Math.Max(0.25, baseWidth * 0.18));
             var count = doubleWave ? 2 : 1;
+            var railSpacing = doubleWave ? baseWidth : 0;
+            var amplitude = (bandWidth - railSpacing - railPen.Width) / 2;
+            // Word paints continuous zigzags. Its double-wave repeat is
+            // tighter than the single-wave repeat at the same nominal size.
+            var pitch = Math.Max(1.5, baseWidth * descriptor.PatternPitchMultiplier);
             for (var rail = 0; rail < count; rail++)
             {
-                var cross = doubleWave ? baseWidth * (0.7 + rail * 1.1) : baseWidth * 0.5;
-                var amplitude = baseWidth * 0.28;
-                var pitch = Math.Max(1.5, baseWidth * 1.45);
-                var chevron = pitch * 0.68;
+                var cross = railPen.Width / 2 + amplitude + rail * railSpacing;
                 for (var start = 0.0; start < length.Point; start += pitch)
                 {
-                    var end = Math.Min(length.Point, start + chevron);
+                    var end = Math.Min(length.Point, start + pitch);
                     var midpoint = (start + end) / 2;
                     if (vertical)
                     {
@@ -399,45 +371,51 @@ namespace MigraDoc.Rendering
         {
             if (length.Point <= 0 || source.Width <= 0)
                 return;
+            var descriptor = BorderStyleDescriptor.For(BorderStyle.DashDotStroked);
+            var bandWidth = source.Width * descriptor.BandMultiplier;
             // A diagonal pen extends beyond its endpoints. Keep its ink in the
             // band that table layout reserved, including for very thin edges.
             var state = _gfx.Save();
             _gfx.IntersectClip(vertical
-                ? new XRect(left.Point, top.Point, source.Width, length.Point)
-                : new XRect(left.Point, top.Point, length.Point, source.Width));
-            var tint = XColor.FromArgb((int)Math.Round(source.Color.A * 255),
-                (int)Math.Round(((double)source.Color.R + 255) / 2),
-                (int)Math.Round(((double)source.Color.G + 255) / 2),
-                (int)Math.Round(((double)source.Color.B + 255) / 2));
-            var railPen = new XPen(tint, Math.Max(0.35, source.Width * 0.35));
-            var cross = source.Width;
-            var pitch = Math.Max(0.8, source.Width * 0.8);
-            for (var start = 0.0; start < length.Point; start += pitch)
+                ? new XRect(left.Point, top.Point, bandWidth, length.Point)
+                : new XRect(left.Point, top.Point, length.Point, bandWidth));
+            var railPen = new XPen(source.Color, Math.Max(0.25, source.Width * 0.25));
+            var slot = Math.Max(0.4, source.Width * descriptor.PatternPitchMultiplier / 8);
+            // Word repeats five close diagonal strokes, then one isolated
+            // stroke. The two missing slots create the visible group breaks.
+            for (var group = 0.0; group < length.Point; group += slot * 8)
             {
-                var along = Math.Min(cross * 0.65, length.Point - start);
-                // Omit a negligible final remnant instead of drawing a tiny hatch cap.
-                if (along < 0.02)
-                    break;
-                var across = along / 0.65;
-                if (vertical)
+                for (var offset = 0; offset <= 6; offset++)
                 {
-                    var x = left.Point;
-                    var y = top.Point + start;
+                    if (offset == 5)
+                        continue;
+                    var start = group + offset * slot;
+                    if (start >= length.Point)
+                        break;
+                    var along = Math.Min(bandWidth * 0.65, length.Point - start);
+                    if (along < 0.02)
+                        break;
+                    var across = along / 0.65;
+                    if (vertical)
+                    {
+                        var x = left.Point;
+                        var y = top.Point + start;
 #if PSGFX
-                    _gfx.DrawLine(railPen, new(x, y + along), new(x + across, y));
+                        _gfx.DrawLine(railPen, new(x, y + along), new(x + across, y));
 #else
-                    _gfx.DrawLine(railPen, x, y + along, x + across, y);
+                        _gfx.DrawLine(railPen, x, y + along, x + across, y);
 #endif
-                }
-                else
-                {
-                    var x = left.Point + start;
-                    var y = top.Point;
+                    }
+                    else
+                    {
+                        var x = left.Point + start;
+                        var y = top.Point;
 #if PSGFX
-                    _gfx.DrawLine(railPen, new(x, y + across), new(x + along, y));
+                        _gfx.DrawLine(railPen, new(x, y + across), new(x + along, y));
 #else
-                    _gfx.DrawLine(railPen, x, y + across, x + along, y);
+                        _gfx.DrawLine(railPen, x, y + across, x + along, y);
 #endif
+                    }
                 }
             }
             _gfx.Restore(state);
@@ -456,7 +434,10 @@ namespace MigraDoc.Rendering
             var colors = emboss
                 ? new[] { shade, middle, source.Color }
                 : new[] { source.Color, middle, shade };
-            var widths = new[] { source.Width * .375, source.Width, source.Width * .375 };
+            var profile = BorderStyleDescriptor.For(emboss ? BorderStyle.Emboss3D :
+                BorderStyle.Engrave3D, source.Width).Rails;
+            var widths = new[] { source.Width * profile.First,
+                source.Width * profile.Middle, source.Width * profile.Last };
             var position = vertical ? left : top;
             for (var rail = 0; rail < widths.Length; rail++)
             {

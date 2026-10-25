@@ -17,7 +17,8 @@ namespace MigraDoc.Rendering
         double RightBand,
         double TopBand,
         double BottomBand,
-        double LeftPadding);
+        double LeftPadding,
+        double RowTopNarrowestBand);
 
     /// <summary>
     /// Optional cell paint and content placement in page points.
