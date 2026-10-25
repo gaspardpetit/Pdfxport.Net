@@ -31,11 +31,11 @@ namespace MigraDoc.Rendering
         /// <summary>Optional underline stroke width as a fraction of font size. The default is 1/16.</summary>
         public double? UnderlineStrokeWidthFactor { get; set; }
 
-        /// <summary>Optional underline offset as a fraction of font descent. The default is 0.33.</summary>
-        public double? UnderlineVerticalOffsetFactor { get; set; }
-
-        /// <summary>Optional font-specific underline factors; null uses the renderer-wide factors.</summary>
-        public Func<Font, (double StrokeWidthFactor, double VerticalOffsetFactor)?>? UnderlineGeometry { get; set; }
+        /// <summary>
+        /// Adjusts a justified word's painted width without changing line fitting or pagination.
+        /// Return null to keep its measured width. Non-finite values are ignored.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? JustifiedRenderWordWidthAdjustment { get; set; }
 
         /// <summary>
         /// Returns the permitted line-end overhang in points for a word in a paragraph,
@@ -48,18 +48,6 @@ namespace MigraDoc.Rendering
         /// preserving its full measured width for rendering.
         /// </summary>
         public bool AdditiveTerminalLineEndOverhang { get; set; }
-
-        /// <summary>
-        /// Adjusts a justified word's painted width without changing line fitting or pagination.
-        /// Return null to keep its measured width. Non-finite values are ignored.
-        /// </summary>
-        public Func<Paragraph, string, XFont, double?>? JustifiedRenderWordWidthAdjustment { get; set; }
-
-        /// <summary>
-        /// Adjusts the spacing before a word's final glyph in points during both layout and painting.
-        /// Null or a non-finite value leaves the word unchanged.
-        /// </summary>
-        public Func<Paragraph, string, XFont, double?>? TrailingGlyphKerning { get; set; }
 
         /// <summary>
         /// Adjusts the spacing before a word's final glyph during painting only.
@@ -134,10 +122,34 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? LeadingKerningAfterBlank { get; set; }
 
         /// <summary>
+        /// Adjusts the spacing before a word's final glyph in points during both layout and painting.
+        /// Null or a non-finite value leaves the word unchanged.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? TrailingGlyphKerning { get; set; }
+
+        /// <summary>Optional underline offset as a fraction of font descent. The default is 0.33.</summary>
+        public double? UnderlineVerticalOffsetFactor { get; set; }
+
+        /// <summary>
         /// Selects a paint-only baseline offset in points for a resolved font in an exact-spaced paragraph.
         /// Null or a non-finite value leaves its baseline unchanged.
         /// </summary>
         public Func<Paragraph, XFont, double?>? ExactFontBaselineOffset { get; set; }
+
+        /// <summary>Optional font-specific underline factors; null uses the renderer-wide factors.</summary>
+        public Func<Font, (double StrokeWidthFactor, double VerticalOffsetFactor)?>? UnderlineGeometry { get; set; }
+
+        /// <summary>
+        /// Adjusts a word's measured width in points for paragraph layout. The callback
+        /// runs during formatting only; it does not change painted glyph advances.
+        /// Return null to use the measured width. Non-finite adjustments and resulting
+        /// widths of zero or less are ignored.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? TextWidthAdjustment { get; set; }
+        /// <summary>
+        /// Optional vertical paint offset in points for an inline image; positive values move it down.
+        /// </summary>
+        public Func<Image, double?>? InlineImageVerticalOffset { get; set; }
 
         /// <summary>
         /// Supplies a minimum top-border space, in points, for a table fragment starting at the given row.
@@ -191,24 +203,11 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, double?>? JustifiedSpaceShrinkFactorForParagraph { get; set; }
 
         /// <summary>
-        /// Adjusts a word's measured width in points for paragraph layout. The callback
-        /// runs during formatting only; it does not change painted glyph advances.
-        /// Return null to use the measured width. Non-finite adjustments and resulting
-        /// widths of zero or less are ignored.
-        /// </summary>
-        public Func<Paragraph, string, XFont, double?>? TextWidthAdjustment { get; set; }
-
-        /// <summary>
         /// Marks explicit space characters whose width should be dropped when the
         /// following word would not fit on the current line. Other explicit spaces
         /// retain their normal MigraDoc behavior.
         /// </summary>
         public Func<Paragraph, Character, bool>? CollapsibleSpaceBeforeWrap { get; set; }
-
-        /// <summary>
-        /// Optional vertical paint offset in points for an inline image; positive values move it down.
-        /// </summary>
-        public Func<Image, double?>? InlineImageVerticalOffset { get; set; }
 
         /// <summary>
         /// Prepares this instance for rendering.
