@@ -195,6 +195,28 @@ namespace MigraDoc.Rendering
 
             height -= pageSetup.TopMargin.Point;
             height -= pageSetup.BottomMargin.Point;
+            // A bottom-aligned footer can grow above the nominal bottom margin.
+            // Keep body lines out of the area occupied by its formatted content.
+            var pagePosition = _sectionPages == 1 ? PagePosition.First :
+                _shownPageNumber % 2 == 0 ? PagePosition.Even : PagePosition.Odd;
+            var footerPosition = new HeaderFooterPosition(_sectionNumber, pagePosition);
+            if (_formattedFooters.TryGetValue(footerPosition, out var formattedFooter))
+            {
+                // Only flowing items are moved by footer bottom alignment.
+                // Empty footers and absolute-positioned shapes reserve no body space.
+                var footerInfos = formattedFooter.GetRenderInfos();
+                var flowingInfos = footerInfos
+                    .Where(info => info.LayoutInfo.Floating != Floating.None).ToArray();
+                if (flowingInfos.Length > 0)
+                {
+                    // Match RenderFooter's offset, including absolute items in its total height.
+                    var alignedTop = pageSetup.PageHeight.Point - pageSetup.FooterDistance.Point -
+                        RenderInfo.GetTotalHeight(footerInfos);
+                    var offsetY = footerInfos[0].LayoutInfo.ContentArea.Y.Point - alignedTop;
+                    var footerTop = flowingInfos.Min(info => info.LayoutInfo.ContentArea.Y.Point) - offsetY;
+                    height = Math.Min(height, footerTop - pageSetup.TopMargin.Point);
+                }
+            }
             XUnitPt x;
             XUnitPt y = pageSetup.TopMargin.Point;
             if (pageSetup.MirrorMargins)
