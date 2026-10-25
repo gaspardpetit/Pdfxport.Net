@@ -1,5 +1,6 @@
 using FluentAssertions;
 using MigraDoc.DocumentObjectModel;
+using MigraDoc.DocumentObjectModel.Visitors;
 using MigraDoc.Rendering;
 using PdfSharp.Diagnostics;
 using PdfSharp.Fonts;
@@ -21,6 +22,28 @@ namespace MigraDoc.Tests
         }
 
         public void Dispose() => PdfSharpCore.ResetAll();
+
+        [Fact]
+        public void SpacedCellsRetainTheirOwnFacingBorders()
+        {
+            var table = new Document().AddSection().AddTable();
+            table.AddColumn(Unit.FromPoint(80));
+            table.AddColumn(Unit.FromPoint(80));
+            var row = table.AddRow();
+            row.Cells[0].Borders.Right.Width = Unit.FromPoint(1);
+            row.Cells[1].Borders.Left.Width = Unit.FromPoint(3);
+
+            var mergedCells = new MergedCellList(table);
+            mergedCells.GetEffectiveBordersPdf(row.Cells[0], -1).Right.Width.Point
+                .Should().Be(3);
+
+            table.CellSpacing = Unit.FromPoint(5);
+            mergedCells = new MergedCellList(table);
+            mergedCells.GetEffectiveBordersPdf(row.Cells[0], -1).Right.Width.Point
+                .Should().Be(1);
+            mergedCells.GetEffectiveBordersPdf(row.Cells[1], -1).Left.Width.Point
+                .Should().Be(3);
+        }
 
         [Fact]
         public void TableFragmentExposesRepeatedHeaderBoundariesAndCellContent()
