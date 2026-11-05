@@ -26,7 +26,7 @@ namespace MigraDoc.Rendering
         /// </summary>
         public abstract DocumentObject DocumentObject { get; internal set; }
 
-        internal virtual void RemoveEnding()
+        internal virtual void RemoveEnding(bool allowRestart = true)
         {
             System.Diagnostics.Debug.Assert(false, "Unexpected call of RemoveEnding");
         }
