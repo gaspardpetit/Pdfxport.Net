@@ -28,6 +28,45 @@ namespace MigraDoc.Tests
         public void Dispose() => PdfSharpCore.ResetAll();
 
         [Theory]
+        [InlineData("")]
+        [InlineData("\u200B")]
+        [InlineData("\u200C")]
+        [InlineData("\u200B\u200C")]
+        public void DecimalTabSkipsLeadingBreakMarkers(string markers)
+        {
+            var document = CreateDocument(280);
+            document.Culture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+            var paragraph = document.LastSection.AddParagraph();
+            paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(150), TabAlignment.Decimal);
+            paragraph.AddTab();
+            paragraph.AddText(markers + "12.34");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var integerWidth = measure.MeasureString("12", new XFont("Arial", 12)).Width;
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            stream.Text.MoveAndGetNext(info => info.Text == "12.34", true, out var number).Should().BeTrue();
+            number!.X.Should().BeApproximately(20 + 150 - integerWidth, 0.01);
+            renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .OfType<ParagraphRenderInfo>().Single().LineCount.Should().Be(1);
+        }
+
+        [Fact]
+        public void DecimalTabFollowedOnlyByBreakMarkersDoesNotThrow()
+        {
+            var document = CreateDocument(280);
+            var paragraph = document.LastSection.AddParagraph("Lead");
+            paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(150), TabAlignment.Decimal);
+            paragraph.AddTab();
+            paragraph.AddText("\u200B\u200C");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .OfType<ParagraphRenderInfo>().Single().LineCount.Should().Be(1);
+        }
+
+        [Theory]
         [InlineData(12, 24, 1)]
         [InlineData(24, 12, 2)]
         public void JoinedTerminalContractionUsesFinalFragmentFont(int firstSize, int finalSize, int expectedLines)

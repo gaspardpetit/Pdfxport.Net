@@ -497,6 +497,9 @@ namespace MigraDoc.Rendering
                 // Extra for auto tab after list symbol.
                 if (IsTab(_currentLeaf?.Current ?? NRT.ThrowOnNull<DocumentObject>()))
                     _currentLeaf = _currentLeaf.GetNextLeaf();
+                // Explicit break markers do not determine the decimal alignment position.
+                while (_currentLeaf != null && IsZeroWidthBreak(_currentLeaf.Current))
+                    _currentLeaf = _currentLeaf.GetNextLeaf();
                 if (_currentLeaf == null)
                 {
                     return _currentXPosition + tabStopPosition;
