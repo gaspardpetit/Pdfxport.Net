@@ -43,6 +43,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="MigraDoc.Rendering, PublicKey=$(PDFsharpStronNamePublicKey)" />
+    <InternalsVisibleTo Include="MigraDoc.Rendering-gdi, PublicKey=$(PDFsharpStronNamePublicKey)" />
+    <InternalsVisibleTo Include="MigraDoc.Rendering-wpf, PublicKey=$(PDFsharpStronNamePublicKey)" />
     <InternalsVisibleTo Include="$(AssemblyName).Tests, PublicKey=$(PDFsharpStronNamePublicKey)" />
   </ItemGroup>
 </Project>

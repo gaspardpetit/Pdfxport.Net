@@ -2213,6 +2213,69 @@ namespace MigraDoc.Rendering
                         return FormatResult.NewLine;
                 }
             }
+            if (_phase == Phase.Formatting && _currentLeaf?.Current is Text &&
+                word.Length > 0 && _currentXPosition > StartXPosition + Tolerance)
+            {
+                var previous = _currentLeaf.GetPreviousLeaf();
+                if (previous == null || IsBlank(previous.Current) || IsTab(previous.Current))
+                {
+                    var original = _currentLeaf;
+                    var next = original.GetNextLeaf();
+                    var joinedWidth = width;
+                    var lastText = word;
+                    var joined = false;
+                    double overhangAllowance = 0;
+                    XUnitPt finalBlankWidth = 0;
+                    try
+                    {
+                        while (next?.Current is Text text && text.Content.Length > 0 &&
+                               !IsBlankOrSoftHyphen(text) && !text.Content.Contains(' ') &&
+                               !text.HasExplicitBreakBefore &&
+                               IsJoinedWordCharacter(lastText, true) && IsJoinedWordCharacter(text.Content, false))
+                        {
+                            joined = true;
+                            _currentLeaf = next;
+                            joinedWidth += MeasureString(text.Content);
+                            lastText = text.Content;
+                            next = next.GetNextLeaf();
+                        }
+                        if (joined)
+                            finalBlankWidth = MeasureString(" ");
+                        if (joined && _documentRenderer.LineEndOverhang?.Invoke(
+                                _paragraph, ((Text)_currentLeaf.Current).Content, CurrentFont) is double allowance &&
+                            allowance > 0 && IsFinite(allowance))
+                            overhangAllowance = allowance;
+                    }
+                    finally
+                    {
+                        _currentLeaf = original;
+                    }
+                    if (joined)
+                    {
+                        var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+                        var followingLeaf = next;
+                        while (followingLeaf != null && IsBlank(followingLeaf.Current))
+                            followingLeaf = followingLeaf.GetNextLeaf();
+                        var shrinkFactor = followingLeaf == null
+                            ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
+                            : null;
+                        var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
+                        var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
+                            _paragraph.Format.Alignment == ParagraphAlignment.Justify && blankCount > 0
+                            ? (1 - shrinkFactor.Value) * finalBlankWidth * blankCount : 0;
+                        var fitAllowance = _documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null
+                            ? (double)shrinkAllowance + overhangAllowance
+                            : Math.Max((double)shrinkAllowance, overhangAllowance);
+                        if (joinedWidth <= right - StartXPosition + overhangAllowance &&
+                            _currentXPosition + joinedWidth > right + fitAllowance)
+                        {
+                            if (!TryMoveToSecondary(joinedWidth))
+                                return FormatResult.NewLine;
+                            fittingRect = _currentSecondaryRect!;
+                        }
+                    }
+                }
+            }
             if (_phase == Phase.Formatting && _documentRenderer.LineEndOverhang is { } overhangForNext &&
                 _currentXPosition > StartXPosition + Tolerance &&
                 _currentLeaf?.GetNextLeaf() is { Current: Text { Content: { Length: 1 } nextText } } nextLeaf)
@@ -2270,6 +2333,31 @@ namespace MigraDoc.Rendering
         }
 
         XUnitPt _savedWordWidth = 0;
+
+        static bool IsJoinedWordCharacter(string text, bool atEnd)
+        {
+            var index = atEnd ? text.Length - 1 : 0;
+            if (atEnd && index > 0 && char.IsLowSurrogate(text[index]) && char.IsHighSurrogate(text[index - 1]))
+                index--;
+            var codePoint = char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1])
+                ? char.ConvertToUtf32(text[index], text[index + 1]) : text[index];
+            // CJK ideographs in the BMP and supplementary ideographic planes allow character breaks.
+            if (codePoint is >= 0x2E80 and <= 0x9FFF or >= 0xAC00 and <= 0xD7FF or
+                >= 0xF900 and <= 0xFAFF or >= 0x20000 and <= 0x3FFFF)
+                return false;
+            // Preserve a surrogate pair split across runs; classify complete pairs as code points.
+            if (codePoint is >= 0xD800 and <= 0xDFFF)
+                return true;
+            var category = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(text, index);
+            return category is System.Globalization.UnicodeCategory.UppercaseLetter or
+                System.Globalization.UnicodeCategory.LowercaseLetter or
+                System.Globalization.UnicodeCategory.TitlecaseLetter or
+                System.Globalization.UnicodeCategory.ModifierLetter or
+                System.Globalization.UnicodeCategory.OtherLetter or
+                System.Globalization.UnicodeCategory.DecimalDigitNumber or
+                System.Globalization.UnicodeCategory.NonSpacingMark or
+                System.Globalization.UnicodeCategory.SpacingCombiningMark;
+        }
 
         /// <summary>
         /// When rendering a justified paragraph, only the part after the last tab stop needs remeasuring.
