@@ -1177,16 +1177,11 @@ namespace MigraDoc.Rendering
             if (IsSoleImageInTableCell && contentArea.Height > CurrentFont.GetHeight() &&
                 _paragraph.Format.LineSpacingRule != LineSpacingRule.Exactly)
             {
-                // Preserve image paint position by compensating only the
-                // inherent line space actually removed, respecting a minimum.
+                // Use the stored effective space, which already includes
+                // paragraph spacing and MinimumLineMetricsForFont. A minimum
+                // that prevents the baseline from moving needs no compensation.
                 var originalSpace = contentArea.Height + CurrentFont.GetHeight() - FontHandler.GetAscent(CurrentFont);
-                var imageSpace = contentArea.Height;
-                if (_paragraph.Format.LineSpacingRule == LineSpacingRule.AtLeast)
-                {
-                    originalSpace = Math.Max(originalSpace, _paragraph.Format.LineSpacing.Point);
-                    imageSpace = Math.Max(imageSpace, _paragraph.Format.LineSpacing.Point);
-                }
-                top += originalSpace - imageSpace;
+                top += Math.Max(0, originalSpace - _currentVerticalInfo.InherentLineSpace);
             }
             if (_documentRenderer.InlineImageVerticalOffset?.Invoke(image) is double offset &&
                 !double.IsNaN(offset) && !double.IsInfinity(offset))

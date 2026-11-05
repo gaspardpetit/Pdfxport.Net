@@ -72,8 +72,40 @@ public class ImageOnlyCellHeightTests : IDisposable
             .Should().Equal(Render(false, 10, 48, rule, mixedText: true));
     }
 
+    [Theory]
+    [InlineData(LineSpacingRule.Single, 40, 40)]
+    [InlineData(LineSpacingRule.Single, 49, 49)]
+    [InlineData(LineSpacingRule.Single, 60, 60)]
+    [InlineData(LineSpacingRule.Single, 60, 40)]
+    [InlineData(LineSpacingRule.Single, 40, 60)]
+    [InlineData(LineSpacingRule.AtLeast, 40, 40)]
+    [InlineData(LineSpacingRule.AtLeast, 49, 49)]
+    [InlineData(LineSpacingRule.AtLeast, 60, 60)]
+    public void MinimumFontMetricsPreserveImagePaintPosition(LineSpacingRule rule,
+        double lineHeight, double inherentSpace)
+    {
+        var table = Render(true, 10, 48, rule, 49, minimumMetrics: (lineHeight, inherentSpace));
+        var body = Render(false, 10, 48, rule, 49, minimumMetrics: (lineHeight, inherentSpace));
+        table[0].Should().BeApproximately(body[0], 0.001);
+        var expectedPitch = Math.Max(rule == LineSpacingRule.AtLeast ? 49 : 48, lineHeight);
+        (table[0] - table[1]).Should().BeApproximately(expectedPitch, 0.001);
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 60)]
+    [InlineData(60, double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity, 60)]
+    [InlineData(0, 60)]
+    [InlineData(60, -1)]
+    public void InvalidMinimumFontMetricsPreserveDefaultPaint(double lineHeight, double inherentSpace)
+    {
+        Render(true, 10, 48, LineSpacingRule.Single, minimumMetrics: (lineHeight, inherentSpace))
+            .Should().Equal(Render(true, 10, 48, LineSpacingRule.Single));
+    }
+
     static double[] Render(bool inTable, double fontSize, double imageHeight, LineSpacingRule rule,
-        double spacing = 80, bool mixedText = false)
+        double spacing = 80, bool mixedText = false,
+        (double LineHeight, double InherentLineSpace)? minimumMetrics = null)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -98,6 +130,8 @@ public class ImageOnlyCellHeightTests : IDisposable
                 paragraph.AddText(" text");
         }
         var renderer = new PdfDocumentRenderer { Document = document };
+        if (minimumMetrics is not null)
+            renderer.DocumentRenderer.MinimumLineMetricsForFont = (_, _) => minimumMetrics;
         renderer.RenderDocument();
         renderer.PageCount.Should().Be(1);
         var content = PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0);
