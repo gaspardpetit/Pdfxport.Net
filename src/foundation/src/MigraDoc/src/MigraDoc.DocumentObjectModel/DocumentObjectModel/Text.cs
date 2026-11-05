@@ -38,6 +38,9 @@ namespace MigraDoc.DocumentObjectModel
         public new Text Clone() 
             => (Text)DeepCopy();
 
+        // PDF flattening provenance; copied with the text and never serialized.
+        internal bool HasExplicitBreakBefore { get; set; }
+
         /// <summary>
         /// Gets or sets the text content.
         /// </summary>

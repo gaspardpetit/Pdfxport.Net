@@ -28,6 +28,87 @@ namespace MigraDoc.Tests
         public void Dispose() => PdfSharpCore.ResetAll();
 
         [Theory]
+        [InlineData("")]
+        [InlineData("\u200B")]
+        [InlineData("\u200C")]
+        public void TrailingBreakDoesNotBypassBottomBorderFit(string marker)
+        {
+            var document = CreateDocument(280);
+            var section = document.LastSection;
+            section.PageSetup.PageHeight = Unit.FromPoint(120);
+            section.PageSetup.TopMargin = Unit.FromPoint(20);
+            section.PageSetup.BottomMargin = Unit.FromPoint(20);
+            section.AddParagraph("Before").Format.SpaceAfter = Unit.FromPoint(45);
+            var paragraph = section.AddParagraph("Bordered" + marker);
+            paragraph.Format.Borders.Bottom.Width = Unit.FromPoint(10);
+            paragraph.Format.Borders.DistanceFromBottom = Unit.FromPoint(5);
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            renderer.PageCount.Should().Be(2);
+            renderer.DocumentRenderer.GetRenderInfoFromPage(2)!
+                .Should().Contain(info => ReferenceEquals(info.DocumentObject, paragraph));
+        }
+
+        [Theory]
+        [InlineData(0x4E00, false)]
+        [InlineData(0x20000, false)]
+        [InlineData(0x30000, false)]
+        [InlineData(0x10400, true)]
+        public void UnicodeWordBoundariesUseCompleteCodePoints(int codePoint, bool joined)
+        {
+            var firstText = char.ConvertFromUtf32(codePoint);
+            var lastText = char.ConvertFromUtf32(codePoint + 1);
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            var leadWidth = measure.MeasureString("Lead ", font).Width;
+            var firstWidth = measure.MeasureString(firstText, font).Width;
+            var lastWidth = measure.MeasureString(lastText, font).Width;
+            firstWidth.Should().BeGreaterThan(0);
+            lastWidth.Should().BeGreaterThan(0);
+            var document = CreateDocument(leadWidth + firstWidth + lastWidth / 2);
+            var paragraph = document.LastSection.AddParagraph("Lead ");
+            paragraph.AddFormattedText(firstText).Color = Colors.Blue;
+            paragraph.AddFormattedText(lastText).Color = Colors.Red;
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            stream.Text.MoveAndGetNext(info => info.Text == "Lead", true, out var lead).Should().BeTrue();
+            // Arial's missing-glyph fallback still has a measurable advance; test positions rather than glyph encoding.
+            stream.Text.MoveAndGetNext(_ => true, true, out var first).Should().BeTrue();
+            stream.Text.MoveAndGetNext(_ => true, true, out var last).Should().BeTrue();
+            if (joined)
+            {
+                first!.Y.Should().BeLessThan(lead!.Y);
+                last!.Y.Should().BeApproximately(first.Y, 0.01);
+            }
+            else
+            {
+                first!.Y.Should().BeApproximately(lead!.Y, 0.01);
+                last!.Y.Should().BeLessThan(first.Y);
+            }
+        }
+
+        [Theory]
+        [InlineData("\u200B")]
+        [InlineData("\u200C")]
+        public void BoundaryMetadataSurvivesFormattingCloneAndRepeatedPreparation(string marker)
+        {
+            var document = CreateDocument(65);
+            var paragraph = document.LastSection.AddParagraph("Lead Alpha");
+            paragraph.AddFormattedText(marker).Size = 72;
+            paragraph.AddFormattedText("bet").Color = Colors.Red;
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.PrepareDocument();
+            renderer.DocumentRenderer.PrepareDocument();
+            var clonedDocument = CreateDocument(65);
+            clonedDocument.LastSection.Add(paragraph.Clone());
+            var cloneRenderer = new PdfDocumentRenderer { Document = clonedDocument };
+            cloneRenderer.RenderDocument();
+            AssertPositions(cloneRenderer, true, false);
+        }
+
+        [Theory]
         [InlineData("\u200B")]
         [InlineData("\u200C")]
         public void MarkersAreExcludedFromOutlineAndVisibleFontCallbacks(string marker)

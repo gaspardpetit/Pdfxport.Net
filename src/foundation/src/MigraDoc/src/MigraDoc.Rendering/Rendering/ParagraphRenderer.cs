@@ -1,4 +1,4 @@
-// MigraDoc - Creating Documents on the Fly
+﻿// MigraDoc - Creating Documents on the Fly
 // See the LICENSE file in the solution root for more information.
 
 using System.Text;
@@ -218,11 +218,6 @@ namespace MigraDoc.Rendering
             while (iter != null)
             {
                 var current = iter.Current;
-                if (IsZeroWidthBreak(current))
-                {
-                    iter = iter.GetNextLeaf();
-                    continue;
-                }
                 if (!ignoreBlank && (IsBlank(current) || IsTab(current) || IsLineBreak(current)))
                 {
                     title += " ";
@@ -341,24 +336,6 @@ namespace MigraDoc.Rendering
             if (docObj is Text { Content: " " })
                 return true;
             return false;
-        }
-
-        static bool IsZeroWidthBreak(DocumentObject docObj) =>
-            docObj is Text { Content: "\u200B" or "\u200C" };
-
-        static ParagraphIterator? SkipZeroWidthBreaksBackward(ParagraphIterator? leaf)
-        {
-            while (leaf != null && IsZeroWidthBreak(leaf.Current))
-                leaf = leaf.GetPreviousLeaf();
-            return leaf;
-        }
-
-        // Break markers remain word boundaries, but do not make a preceding word nonterminal.
-        static ParagraphIterator? SkipBlanksAndZeroWidthBreaks(ParagraphIterator? leaf)
-        {
-            while (leaf != null && (IsBlank(leaf.Current) || IsZeroWidthBreak(leaf.Current)))
-                leaf = leaf.GetNextLeaf();
-            return leaf;
         }
 
         // TODO_OLD Make combined predicates for better performance (e.g. IsTabOrLineBreak).
@@ -508,9 +485,6 @@ namespace MigraDoc.Rendering
             {
                 // Extra for auto tab after list symbol.
                 if (IsTab(_currentLeaf?.Current ?? NRT.ThrowOnNull<DocumentObject>()))
-                    _currentLeaf = _currentLeaf.GetNextLeaf();
-                // Explicit break markers do not determine the decimal alignment position.
-                while (_currentLeaf != null && IsZeroWidthBreak(_currentLeaf.Current))
                     _currentLeaf = _currentLeaf.GetNextLeaf();
                 if (_currentLeaf == null)
                 {
@@ -843,7 +817,7 @@ namespace MigraDoc.Rendering
                     for (var leaf = lineInfo.StartIter; leaf != null; leaf = leaf.GetNextLeaf())
                     {
                         _currentLeaf = leaf;
-                        if (leaf.Current is Text text && !IsBlank(text) && !IsZeroWidthBreak(text))
+                        if (leaf.Current is Text text && !IsBlank(text))
                             fonts.Add(CurrentFont);
                         if (leaf.Current == lineInfo.EndIter?.Current)
                             break;
@@ -864,7 +838,7 @@ namespace MigraDoc.Rendering
                     for (var leaf = lineInfo.StartIter; leaf != null; leaf = leaf.GetNextLeaf())
                     {
                         _currentLeaf = leaf;
-                        if (leaf.Current is Text text && !IsBlank(text) && !IsZeroWidthBreak(text))
+                        if (leaf.Current is Text text && !IsBlank(text))
                             fonts.Add(CurrentFont);
                         if (leaf.Current == lineInfo.EndIter?.Current)
                             break;
@@ -893,7 +867,7 @@ namespace MigraDoc.Rendering
                     if (transitions is { Count: > 0 } && widthSegment < transitions.Count &&
                         transitions[widthSegment].StartIter?.Current == leaf.Current)
                         widthSegment++;
-                    if (leaf.Current is Text text && !IsBlank(text) && !IsZeroWidthBreak(text) &&
+                    if (leaf.Current is Text text && !IsBlank(text) &&
                         renderWidthAdjustment(_paragraph, text.Content, CurrentFont) is double adjustment &&
                         IsFinite(adjustment))
                     {
@@ -1028,7 +1002,7 @@ namespace MigraDoc.Rendering
                     _documentRenderer.HangingNonterminalLineSpaceLimit is { } nonterminalLimit)
                 {
                     var endLeaf = _endLeaf;
-                    while (endLeaf != null && (IsBlank(endLeaf.Current) || IsZeroWidthBreak(endLeaf.Current)))
+                    while (endLeaf?.Current is Text blank && IsBlank(blank))
                         endLeaf = endLeaf.GetPreviousLeaf();
                     if (endLeaf?.Current is Text { Content: { Length: > 0 } nonterminalText })
                     {
@@ -1056,11 +1030,11 @@ namespace MigraDoc.Rendering
                 if (_phase == Phase.Rendering && _isLastLine && _renderInfo.FormatInfo.IsEnding &&
                     _paragraph.Format.Alignment == ParagraphAlignment.Left &&
                     _lastTabPassed && _currentLineBlankCount > 0 &&
-                    SkipZeroWidthBreaksBackward(_endLeaf)?.Current is Text { Content: { Length: > 0 } endText } &&
+                    _endLeaf?.Current is Text { Content: { Length: > 0 } endText } &&
                     _documentRenderer.HangingTerminalLineSpaceThreshold is { } hangingThreshold)
                 {
                     var savedLeaf = _currentLeaf;
-                    _currentLeaf = SkipZeroWidthBreaksBackward(_endLeaf);
+                    _currentLeaf = _endLeaf;
                     var font = CurrentFont;
                     var threshold = hangingThreshold(_paragraph, endText, font);
                     var nearEdgeThreshold = _documentRenderer.HangingTerminalLineNearEdgeThreshold?.Invoke(
@@ -1430,8 +1404,7 @@ namespace MigraDoc.Rendering
                 return true;
 
             var nextIter = _currentLeaf.GetNextLeaf();
-            while (nextIter != null && (IsBlank(nextIter.Current) || IsZeroWidthBreak(nextIter.Current) ||
-                                       nextIter.Current is BookmarkField))
+            while (nextIter != null && (IsBlank(nextIter.Current) || nextIter.Current is BookmarkField))
             {
                 nextIter = nextIter.GetNextLeaf();
             }
@@ -1444,7 +1417,7 @@ namespace MigraDoc.Rendering
             var prevIter = _currentLeaf.GetPreviousLeaf();
             // Can be null if currentLeaf is the first leaf.
             var obj = prevIter?.Current;
-            while (obj is BookmarkField || obj != null && IsZeroWidthBreak(obj))
+            while (obj is BookmarkField)
             {
                 prevIter = prevIter?.GetPreviousLeaf();
                 obj = prevIter?.Current;
@@ -1482,8 +1455,6 @@ namespace MigraDoc.Rendering
 
         void RenderText(Text text)
         {
-            if (IsZeroWidthBreak(text))
-                return;
             RenderWord(text.Content);
         }
 
@@ -1982,9 +1953,6 @@ namespace MigraDoc.Rendering
         /// <param name="docObj"></param>
         FormatResult FormatElement(DocumentObject docObj)
         {
-            // Markers carry a break opportunity, but no font metrics or page-fit requirement.
-            if (IsZeroWidthBreak(docObj))
-                return FormatResult.Ignore;
             // Check for available space in the area must be made for each element and explicitly for the last paragraph’s element, because in formatting phase,
             // BottomBorderOffset contains the actual last line’s bottom border offset value only for the last paragraph’s object.
             var newVertInfo = CalcVerticalInfo(CurrentFont);
@@ -2091,7 +2059,7 @@ namespace MigraDoc.Rendering
         static bool IsPlainText(DocumentObject docObj)
         {
             if (docObj is Text)
-                return !IsSoftHyphen(docObj) && !IsBlank(docObj) && !IsZeroWidthBreak(docObj);
+                return !IsSoftHyphen(docObj) && !IsBlank(docObj);
 
             return false;
         }
@@ -2254,7 +2222,7 @@ namespace MigraDoc.Rendering
                     var original = _currentLeaf;
                     var next = original.GetNextLeaf();
                     var joinedWidth = width;
-                    var last = word[^1];
+                    var lastText = word;
                     var joined = false;
                     double overhangAllowance = 0;
                     XUnitPt finalBlankWidth = 0;
@@ -2262,12 +2230,13 @@ namespace MigraDoc.Rendering
                     {
                         while (next?.Current is Text text && text.Content.Length > 0 &&
                                !IsBlankOrSoftHyphen(text) && !text.Content.Contains(' ') &&
-                               IsJoinedWordCharacter(last) && IsJoinedWordCharacter(text.Content[0]))
+                               !text.HasExplicitBreakBefore &&
+                               IsJoinedWordCharacter(lastText, true) && IsJoinedWordCharacter(text.Content, false))
                         {
                             joined = true;
                             _currentLeaf = next;
                             joinedWidth += MeasureString(text.Content);
-                            last = text.Content[^1];
+                            lastText = text.Content;
                             next = next.GetNextLeaf();
                         }
                         if (joined)
@@ -2284,7 +2253,9 @@ namespace MigraDoc.Rendering
                     if (joined)
                     {
                         var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
-                        var followingLeaf = SkipBlanksAndZeroWidthBreaks(next);
+                        var followingLeaf = next;
+                        while (followingLeaf != null && IsBlank(followingLeaf.Current))
+                            followingLeaf = followingLeaf.GetNextLeaf();
                         var shrinkFactor = followingLeaf == null
                             ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
                             : null;
@@ -2333,7 +2304,9 @@ namespace MigraDoc.Rendering
                 _currentXPosition > StartXPosition + Tolerance)
             {
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
-                var followingLeaf = SkipBlanksAndZeroWidthBreaks(_currentLeaf?.GetNextLeaf());
+                var followingLeaf = _currentLeaf?.GetNextLeaf();
+                while (followingLeaf != null && IsBlank(followingLeaf.Current))
+                    followingLeaf = followingLeaf.GetNextLeaf();
                 if (_documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null &&
                     _currentXPosition + width > right &&
                     overhang(_paragraph, word, CurrentFont) is double additiveAllowance &&
@@ -2361,17 +2334,29 @@ namespace MigraDoc.Rendering
 
         XUnitPt _savedWordWidth = 0;
 
-        static bool IsJoinedWordCharacter(char character)
+        static bool IsJoinedWordCharacter(string text, bool atEnd)
         {
-            // East Asian text permits breaks at character boundaries, including
-            // boundaries introduced by font fallback runs.
-            if (character is >= '\u2E80' and <= '\u9FFF' or
-                >= '\uAC00' and <= '\uD7FF' or >= '\uF900' and <= '\uFAFF')
+            var index = atEnd ? text.Length - 1 : 0;
+            if (atEnd && index > 0 && char.IsLowSurrogate(text[index]) && char.IsHighSurrogate(text[index - 1]))
+                index--;
+            var codePoint = char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1])
+                ? char.ConvertToUtf32(text[index], text[index + 1]) : text[index];
+            // CJK ideographs in the BMP and supplementary ideographic planes allow character breaks.
+            if (codePoint is >= 0x2E80 and <= 0x9FFF or >= 0xAC00 and <= 0xD7FF or
+                >= 0xF900 and <= 0xFAFF or >= 0x20000 and <= 0x3FFFF)
                 return false;
-            return char.IsLetterOrDigit(character) || char.IsSurrogate(character) ||
-                char.GetUnicodeCategory(character) is
-                    System.Globalization.UnicodeCategory.NonSpacingMark or
-                    System.Globalization.UnicodeCategory.SpacingCombiningMark;
+            // Preserve a surrogate pair split across runs; classify complete pairs as code points.
+            if (codePoint is >= 0xD800 and <= 0xDFFF)
+                return true;
+            var category = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(text, index);
+            return category is System.Globalization.UnicodeCategory.UppercaseLetter or
+                System.Globalization.UnicodeCategory.LowercaseLetter or
+                System.Globalization.UnicodeCategory.TitlecaseLetter or
+                System.Globalization.UnicodeCategory.ModifierLetter or
+                System.Globalization.UnicodeCategory.OtherLetter or
+                System.Globalization.UnicodeCategory.DecimalDigitNumber or
+                System.Globalization.UnicodeCategory.NonSpacingMark or
+                System.Globalization.UnicodeCategory.SpacingCombiningMark;
         }
 
         /// <summary>
@@ -2389,7 +2374,9 @@ namespace MigraDoc.Rendering
             var overrun = _currentXPosition + width - right;
             var shrinkFactor = _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
             var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
-            var nextLeaf = SkipBlanksAndZeroWidthBreaks(_currentLeaf?.GetNextLeaf());
+            var nextLeaf = _currentLeaf?.GetNextLeaf();
+            while (nextLeaf != null && IsBlank(nextLeaf.Current))
+                nextLeaf = nextLeaf.GetNextLeaf();
             var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
                 _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
                 blankCount > 0 && nextLeaf == null
@@ -2715,7 +2702,7 @@ namespace MigraDoc.Rendering
         bool IsTransparentOptionalSpaceLeaf(DocumentObject element) =>
             element is BookmarkField or Text { Content.Length: 0 } or
                 ParagraphElements { Count: 0 } ||
-            IsSoftHyphen(element) || IsZeroWidthBreak(element) ||
+            IsSoftHyphen(element) ||
             element is InfoField info && GetDocumentInfo(info.Name).Length == 0;
 
         bool SelectedSpaceStartedWrappedLine()
@@ -2954,8 +2941,6 @@ namespace MigraDoc.Rendering
         /// <param name="fittingRect">The available space for the text on the area.</param>
         FormatResult FormatText(Text text, Rectangle fittingRect)
         {
-            if (IsZeroWidthBreak(text))
-                return FormatResult.Continue;
             return FormatWord(text.Content, fittingRect);
         }
 
@@ -3106,7 +3091,7 @@ namespace MigraDoc.Rendering
                     for (var leaf = _startLeaf; leaf != null; leaf = leaf.GetNextLeaf())
                     {
                         _currentLeaf = leaf;
-                        if (leaf.Current is Text text && !IsBlank(text) && !IsZeroWidthBreak(text))
+                        if (leaf.Current is Text text && !IsBlank(text))
                             fonts.Add(CurrentFont);
                     }
                 }
@@ -3254,17 +3239,7 @@ namespace MigraDoc.Rendering
 
         VerticalLineInfo CalcCurrentVerticalInfo()
         {
-            var savedLeaf = _currentLeaf;
-            try
-            {
-                while (_currentLeaf != null && IsZeroWidthBreak(_currentLeaf.Current))
-                    _currentLeaf = _currentLeaf.GetNextLeaf();
-                return CalcVerticalInfo(CurrentFont);
-            }
-            finally
-            {
-                _currentLeaf = savedLeaf;
-            }
+            return CalcVerticalInfo(CurrentFont);
         }
 
         Rectangle? GetFittingRectForLine(XUnitPt y, VerticalLineInfo line, XUnitPt bottomBorder = default)

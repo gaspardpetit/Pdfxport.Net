@@ -16,6 +16,51 @@ namespace MigraDoc.DocumentObjectModel.Visitors
         public PdfFlattenVisitor()
         { }
 
+        /// <summary>Flattens the document and records explicit word-break boundaries.</summary>
+        public override void Visit(DocumentObject documentObject)
+        {
+            base.Visit(documentObject);
+            new WordBreakBoundaryVisitor().Visit(documentObject);
+        }
+
+        sealed class WordBreakBoundaryVisitor : DocumentObjectVisitor
+        {
+            public override void Visit(DocumentObject documentObject)
+            {
+                if (documentObject is IVisitable visitable)
+                    visitable.AcceptVisitor(this, true);
+            }
+
+            internal override void VisitParagraph(Paragraph paragraph)
+            {
+                var pendingBreak = false;
+                RemoveMarkers(paragraph.Elements, ref pendingBreak);
+            }
+
+            static void RemoveMarkers(ParagraphElements elements, ref bool pendingBreak)
+            {
+                for (var index = 0; index < elements.Count; index++)
+                {
+                    var element = elements[index];
+                    if (element is Text { Content: "\u200B" or "\u200C" })
+                    {
+                        pendingBreak = true;
+                        elements.RemoveObjectAt(index--);
+                    }
+                    else if (element is FormattedText formatted)
+                        RemoveMarkers(formatted.Elements, ref pendingBreak);
+                    else if (element is Hyperlink hyperlink)
+                        RemoveMarkers(hyperlink.Elements, ref pendingBreak);
+                    else
+                    {
+                        if (element is Text text)
+                            text.HasExplicitBreakBefore |= pendingBreak;
+                        pendingBreak = false;
+                    }
+                }
+            }
+        }
+
         internal override void VisitDocumentElements(DocumentElements elements)
         {
 #if true
@@ -93,6 +138,13 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             {
                 Text? text = elements[idx + insertedObjects] as Text;
                 string content = text?.Content ?? "";
+                var breakBefore = text?.HasExplicitBreakBefore == true;
+                Text NewText(string value)
+                {
+                    var result = new Text(value) { HasExplicitBreakBefore = breakBefore };
+                    breakBefore = false;
+                    return result;
+                }
                 currentString.Clear();
                 for (var chIdx = 0; chIdx < content.Length; chIdx++)
                 {
@@ -106,11 +158,11 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                         case '\t':
                             if (currentString.Length > 0)
                             {
-                                elements.InsertObject(idx + insertedObjects, new Text(currentString.ToString()));
+                                elements.InsertObject(idx + insertedObjects, NewText(currentString.ToString()));
                                 ++insertedObjects;
                                 currentString.Clear();
                             }
-                            elements.InsertObject(idx + insertedObjects, new Text(" "));
+                            elements.InsertObject(idx + insertedObjects, NewText(" "));
                             ++insertedObjects;
                             break;
 
@@ -141,7 +193,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                             // Only start new Text if minus is not a sign, because numbers like "-5.5" have to be stored in one Text for correct DecimalTab alignment.
                             if (!isSign)
                             {
-                                elements.InsertObject(idx + insertedObjects, new Text(currentString.ToString()));
+                                elements.InsertObject(idx + insertedObjects, NewText(currentString.ToString()));
                                 ++insertedObjects;
                                 currentString.Clear();
                             }
@@ -152,23 +204,23 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                         case '\u200C': // zero width non-joiner.
                             if (currentString.Length > 0)
                             {
-                                elements.InsertObject(idx + insertedObjects, new Text(currentString.ToString()));
+                                elements.InsertObject(idx + insertedObjects, NewText(currentString.ToString()));
                                 ++insertedObjects;
                                 currentString.Clear();
                             }
                             // Keep the explicit break distinct from a formatting boundary.
-                            elements.InsertObject(idx + insertedObjects, new Text(ch.ToString()));
+                            elements.InsertObject(idx + insertedObjects, NewText(ch.ToString()));
                             ++insertedObjects;
                             break;
 
                         case '\u00AD': // soft hyphen.
                             if (currentString.Length > 0)
                             {
-                                elements.InsertObject(idx + insertedObjects, new Text(currentString.ToString()));
+                                elements.InsertObject(idx + insertedObjects, NewText(currentString.ToString()));
                                 ++insertedObjects;
                                 currentString.Clear();
                             }
-                            elements.InsertObject(idx + insertedObjects, new Text("\u00AD"));
+                            elements.InsertObject(idx + insertedObjects, NewText("\u00AD"));
                             ++insertedObjects;
                             //currentString = "";
                             break;
@@ -180,7 +232,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                 }
                 if (currentString.Length > 0)
                 {
-                    elements.InsertObject(idx + insertedObjects, new Text(currentString.ToString()));
+                    elements.InsertObject(idx + insertedObjects, NewText(currentString.ToString()));
                     ++insertedObjects;
                 }
                 elements.RemoveObjectAt(idx + insertedObjects);
