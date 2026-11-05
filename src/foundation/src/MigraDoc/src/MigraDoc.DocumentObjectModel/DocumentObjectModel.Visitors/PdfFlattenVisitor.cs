@@ -156,6 +156,9 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                                 ++insertedObjects;
                                 currentString.Clear();
                             }
+                            // Keep the explicit break distinct from a formatting boundary.
+                            elements.InsertObject(idx + insertedObjects, new Text(ch.ToString()));
+                            ++insertedObjects;
                             break;
 
                         case '\u00AD': // soft hyphen.

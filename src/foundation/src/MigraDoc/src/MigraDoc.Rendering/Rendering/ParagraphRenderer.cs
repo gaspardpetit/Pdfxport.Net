@@ -1455,6 +1455,8 @@ namespace MigraDoc.Rendering
 
         void RenderText(Text text)
         {
+            if (text.Content is "\u200B" or "\u200C")
+                return;
             RenderWord(text.Content);
         }
 
@@ -2224,6 +2226,7 @@ namespace MigraDoc.Rendering
                     var joinedWidth = width;
                     var last = word[^1];
                     var joined = false;
+                    double overhangAllowance = 0;
                     try
                     {
                         while (next?.Current is Text text && text.Content.Length > 0 &&
@@ -2236,6 +2239,10 @@ namespace MigraDoc.Rendering
                             last = text.Content[^1];
                             next = next.GetNextLeaf();
                         }
+                        if (joined && _documentRenderer.LineEndOverhang?.Invoke(
+                                _paragraph, ((Text)_currentLeaf.Current).Content, CurrentFont) is double allowance &&
+                            allowance > 0 && IsFinite(allowance))
+                            overhangAllowance = allowance;
                     }
                     finally
                     {
@@ -2254,9 +2261,16 @@ namespace MigraDoc.Rendering
                         var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
                             _paragraph.Format.Alignment == ParagraphAlignment.Justify && blankCount > 0
                             ? (1 - shrinkFactor.Value) * MeasureString(" ") * blankCount : 0;
-                        if (joinedWidth <= right - StartXPosition &&
-                            _currentXPosition + joinedWidth > right + shrinkAllowance)
-                            return FormatResult.NewLine;
+                        var fitAllowance = _documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null
+                            ? (double)shrinkAllowance + overhangAllowance
+                            : Math.Max((double)shrinkAllowance, overhangAllowance);
+                        if (joinedWidth <= right - StartXPosition + overhangAllowance &&
+                            _currentXPosition + joinedWidth > right + fitAllowance)
+                        {
+                            if (!TryMoveToSecondary(joinedWidth))
+                                return FormatResult.NewLine;
+                            fittingRect = _currentSecondaryRect!;
+                        }
                     }
                 }
             }
@@ -2913,6 +2927,8 @@ namespace MigraDoc.Rendering
         /// <param name="fittingRect">The available space for the text on the area.</param>
         FormatResult FormatText(Text text, Rectangle fittingRect)
         {
+            if (text.Content is "\u200B" or "\u200C")
+                return FormatResult.Continue;
             return FormatWord(text.Content, fittingRect);
         }
 
