@@ -30,6 +30,10 @@ namespace MigraDoc.Rendering
     {
         static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
+        bool IsSoleImageInTableCell =>
+            DocumentRelations.HasParentOfType(_paragraph, typeof(MigraDoc.DocumentObjectModel.Tables.Cell)) &&
+            _paragraph.Elements.Count == 1 && _paragraph.Elements[0] is Image;
+
         /// <summary>
         /// Process phases of the renderer.
         /// </summary>
@@ -1170,6 +1174,15 @@ namespace MigraDoc.Rendering
             XUnitPt top = CurrentBaselinePosition;
             var contentArea = renderInfo?.LayoutInfo.ContentArea ?? NRT.ThrowOnNull<Area>();
             top -= contentArea.Height;
+            if (IsSoleImageInTableCell && contentArea.Height > CurrentFont.GetHeight() &&
+                _paragraph.Format.LineSpacingRule != LineSpacingRule.Exactly)
+            {
+                // Use the stored effective space, which already includes
+                // paragraph spacing and MinimumLineMetricsForFont. A minimum
+                // that prevents the baseline from moving needs no compensation.
+                var originalSpace = contentArea.Height + CurrentFont.GetHeight() - FontHandler.GetAscent(CurrentFont);
+                top += Math.Max(0, originalSpace - _currentVerticalInfo.InherentLineSpace);
+            }
             if (_documentRenderer.InlineImageVerticalOffset?.Invoke(image) is double offset &&
                 !double.IsNaN(offset) && !double.IsInfinity(offset))
                 top += offset;
@@ -3276,7 +3289,9 @@ namespace MigraDoc.Rendering
             }
             var imageRenderInfo = CurrentImageRenderInfo;
             if (imageRenderInfo != null)
-                singleLineSpace = singleLineSpace - FontHandler.GetAscent(font) + imageRenderInfo.LayoutInfo.ContentArea.Height;
+                singleLineSpace = IsSoleImageInTableCell && imageRenderInfo.LayoutInfo.ContentArea.Height > singleLineSpace
+                    ? imageRenderInfo.LayoutInfo.ContentArea.Height
+                    : singleLineSpace - FontHandler.GetAscent(font) + imageRenderInfo.LayoutInfo.ContentArea.Height;
 
             XUnitPt inherentLineSpace, lineHeight;
             if (lineSpacingRule == LineSpacingRule.Exactly)
