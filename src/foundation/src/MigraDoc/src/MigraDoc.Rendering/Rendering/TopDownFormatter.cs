@@ -107,7 +107,12 @@ namespace MigraDoc.Rendering
                 }
                 renderer.Format(area, prevFormatInfo);
                 _areaProvider.PositionHorizontally(renderer.RenderInfo.LayoutInfo);
-                bool pagebreakBefore = _areaProvider.IsAreaBreakBefore(renderer.RenderInfo.LayoutInfo) && !isFirstOnPage;
+                // Page- and margin-positioned shapes do not establish body flow.
+                // Ignore PageBreakBefore on the first flowing element after them,
+                // while preserving explicit page breaks.
+                bool pagebreakBefore = _areaProvider.IsAreaBreakBefore(renderer.RenderInfo.LayoutInfo) && !isFirstOnPage &&
+                    (docObj is PageBreak || renderInfos.Any(info =>
+                        info.LayoutInfo.VerticalReference == VerticalReference.PreviousElement));
                 pagebreakBefore = pagebreakBefore || !isFirstOnPage && IsForcedAreaBreak(idx, renderer, area);
 
                 if (!pagebreakBefore && renderer.RenderInfo.FormatInfo.IsEnding)
