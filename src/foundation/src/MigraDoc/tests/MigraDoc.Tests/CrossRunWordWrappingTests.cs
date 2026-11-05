@@ -28,6 +28,93 @@ namespace MigraDoc.Tests
         public void Dispose() => PdfSharpCore.ResetAll();
 
         [Theory]
+        [InlineData("\u200B")]
+        [InlineData("\u200C")]
+        public void MarkersAreExcludedFromOutlineAndVisibleFontCallbacks(string marker)
+        {
+            var document = CreateDocument(280);
+            var paragraph = document.LastSection.AddParagraph("Lead");
+            paragraph.Format.OutlineLevel = OutlineLevel.Level1;
+            paragraph.AddFormattedText(marker).Size = 72;
+            paragraph.AddText(" text");
+            paragraph.AddText(marker);
+            var renderer = new PdfDocumentRenderer { Document = document };
+            var called = false;
+            renderer.DocumentRenderer.ParagraphPaintBaselineOffset = (_, fonts) =>
+            {
+                called = true;
+                fonts.Should().OnlyContain(font => font.Size == 12);
+                return null;
+            };
+            renderer.DocumentRenderer.HangingTerminalLineSpaceThreshold = (_, word, _) =>
+            {
+                word.Should().Be("text");
+                return null;
+            };
+            renderer.RenderDocument();
+            called.Should().BeTrue();
+            renderer.PdfDocument.Outlines[0].Title.Should().Be("Lead text");
+        }
+
+        [Theory]
+        [InlineData("\u200B", 0)]
+        [InlineData("\u200C", 0)]
+        [InlineData("\u200B", 1)]
+        [InlineData("\u200C", 1)]
+        [InlineData("\u200B", 2)]
+        [InlineData("\u200C", 2)]
+        public void MarkerFontDoesNotAffectLineMetrics(string marker, int position)
+        {
+            var document = CreateDocument(280);
+            var paragraph = document.LastSection.AddParagraph();
+            if (position == 0)
+                paragraph.AddFormattedText(marker).Size = 72;
+            paragraph.AddText("Lead");
+            if (position == 1)
+                paragraph.AddFormattedText(marker).Size = 72;
+            paragraph.AddText(" text");
+            if (position == 2)
+                paragraph.AddFormattedText(marker).Size = 72;
+            var control = document.LastSection.AddParagraph("Lead text");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            var paragraphs = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .OfType<ParagraphRenderInfo>().ToArray();
+            paragraphs.Single(info => ReferenceEquals(info.DocumentObject, paragraph)).LayoutInfo.ContentArea.Height.Point
+                .Should().BeApproximately(paragraphs.Single(info => ReferenceEquals(info.DocumentObject, control))
+                    .LayoutInfo.ContentArea.Height.Point, 0.01);
+        }
+
+        [Theory]
+        [InlineData("\u200B")]
+        [InlineData("\u200C")]
+        public void OptionalSpaceLooksPastBreakMarker(string marker)
+        {
+            (double X, double Y) Render(bool extraSpace)
+            {
+                using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                    XGraphicsUnit.Point, XPageDirection.Downwards);
+                var font = new XFont("Arial", 12);
+                var document = CreateDocument(measure.MeasureString("LeadDelta", font).Width +
+                    measure.MeasureString(" ", font).Width / 2);
+                var paragraph = document.LastSection.AddParagraph("Lead");
+                var extra = extraSpace ? paragraph.AddSpace(1) : null;
+                paragraph.AddText(marker + "Delta");
+                var renderer = new PdfDocumentRenderer { Document = document };
+                if (extra != null)
+                    renderer.DocumentRenderer.CollapsibleSpaceBeforeWrap = (_, space) => ReferenceEquals(space, extra);
+                renderer.RenderDocument();
+                var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+                stream.Text.MoveAndGetNext(info => info.Text == "Delta", true, out var word).Should().BeTrue();
+                return (word!.X, word.Y);
+            }
+            var control = Render(false);
+            var actual = Render(true);
+            actual.X.Should().BeApproximately(control.X, 0.01);
+            actual.Y.Should().BeApproximately(control.Y, 0.01);
+        }
+
+        [Theory]
         [InlineData("")]
         [InlineData("\u200B")]
         [InlineData("\u200C")]
