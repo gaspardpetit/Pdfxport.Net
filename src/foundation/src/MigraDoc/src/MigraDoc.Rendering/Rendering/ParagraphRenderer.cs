@@ -2213,6 +2213,53 @@ namespace MigraDoc.Rendering
                         return FormatResult.NewLine;
                 }
             }
+            if (_phase == Phase.Formatting && _currentLeaf?.Current is Text &&
+                word.Length > 0 && _currentXPosition > StartXPosition + Tolerance)
+            {
+                var previous = _currentLeaf.GetPreviousLeaf();
+                if (previous == null || IsBlank(previous.Current) || IsTab(previous.Current))
+                {
+                    var original = _currentLeaf;
+                    var next = original.GetNextLeaf();
+                    var joinedWidth = width;
+                    var last = word[^1];
+                    var joined = false;
+                    try
+                    {
+                        while (next?.Current is Text text && text.Content.Length > 0 &&
+                               !IsBlankOrSoftHyphen(text) && !text.Content.Contains(' ') &&
+                               IsJoinedWordCharacter(last) && IsJoinedWordCharacter(text.Content[0]))
+                        {
+                            joined = true;
+                            _currentLeaf = next;
+                            joinedWidth += MeasureString(text.Content);
+                            last = text.Content[^1];
+                            next = next.GetNextLeaf();
+                        }
+                    }
+                    finally
+                    {
+                        _currentLeaf = original;
+                    }
+                    if (joined)
+                    {
+                        var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
+                        var followingLeaf = next;
+                        while (followingLeaf != null && IsBlank(followingLeaf.Current))
+                            followingLeaf = followingLeaf.GetNextLeaf();
+                        var shrinkFactor = followingLeaf == null
+                            ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
+                            : null;
+                        var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
+                        var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
+                            _paragraph.Format.Alignment == ParagraphAlignment.Justify && blankCount > 0
+                            ? (1 - shrinkFactor.Value) * MeasureString(" ") * blankCount : 0;
+                        if (joinedWidth <= right - StartXPosition &&
+                            _currentXPosition + joinedWidth > right + shrinkAllowance)
+                            return FormatResult.NewLine;
+                    }
+                }
+            }
             if (_phase == Phase.Formatting && _documentRenderer.LineEndOverhang is { } overhangForNext &&
                 _currentXPosition > StartXPosition + Tolerance &&
                 _currentLeaf?.GetNextLeaf() is { Current: Text { Content: { Length: 1 } nextText } } nextLeaf)
@@ -2270,6 +2317,19 @@ namespace MigraDoc.Rendering
         }
 
         XUnitPt _savedWordWidth = 0;
+
+        static bool IsJoinedWordCharacter(char character)
+        {
+            // East Asian text permits breaks at character boundaries, including
+            // boundaries introduced by font fallback runs.
+            if (character is >= '\u2E80' and <= '\u9FFF' or
+                >= '\uAC00' and <= '\uD7FF' or >= '\uF900' and <= '\uFAFF')
+                return false;
+            return char.IsLetterOrDigit(character) || char.IsSurrogate(character) ||
+                char.GetUnicodeCategory(character) is
+                    System.Globalization.UnicodeCategory.NonSpacingMark or
+                    System.Globalization.UnicodeCategory.SpacingCombiningMark;
+        }
 
         /// <summary>
         /// When rendering a justified paragraph, only the part after the last tab stop needs remeasuring.
