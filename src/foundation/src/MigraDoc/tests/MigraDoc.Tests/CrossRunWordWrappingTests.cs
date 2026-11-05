@@ -28,6 +28,67 @@ namespace MigraDoc.Tests
         public void Dispose() => PdfSharpCore.ResetAll();
 
         [Theory]
+        [InlineData(12, 24, 1)]
+        [InlineData(24, 12, 2)]
+        public void JoinedTerminalContractionUsesFinalFragmentFont(int firstSize, int finalSize, int expectedLines)
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var firstFont = new XFont("Arial", firstSize);
+            var finalFont = new XFont("Arial", finalSize);
+            var firstAllowance = 0.5 * measure.MeasureString(" ", firstFont).Width;
+            var finalAllowance = 0.5 * measure.MeasureString(" ", finalFont).Width;
+            var bodyWidth = measure.MeasureString("Lead ", new XFont("Arial", 12)).Width +
+                measure.MeasureString("Alpha", firstFont).Width + measure.MeasureString("bet", finalFont).Width -
+                (firstAllowance + finalAllowance) / 2;
+            var document = CreateDocument(bodyWidth);
+            var paragraph = document.LastSection.AddParagraph("Lead ");
+            paragraph.Format.Alignment = ParagraphAlignment.Justify;
+            paragraph.AddFormattedText("Alpha").Size = firstSize;
+            paragraph.AddFormattedText("bet").Size = finalSize;
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = _ => 0.5;
+            renderer.RenderDocument();
+            renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .OfType<ParagraphRenderInfo>().Single().LineCount.Should().Be(expectedLines);
+        }
+
+        [Theory]
+        [InlineData(false, "\u200B", 1)]
+        [InlineData(true, "\u200B", 1)]
+        [InlineData(false, "\u200C", 1)]
+        [InlineData(true, "\u200C", 1)]
+        [InlineData(false, " \u200B ", 1)]
+        [InlineData(true, " \u200B ", 1)]
+        [InlineData(false, " \u200C ", 1)]
+        [InlineData(true, " \u200C ", 1)]
+        [InlineData(false, "\u200B tail", 2)]
+        [InlineData(true, "\u200B tail", 2)]
+        [InlineData(false, "\u200C tail", 2)]
+        [InlineData(true, "\u200C tail", 2)]
+        public void BreakMarkersPreserveTerminalContractionPolicy(bool joined, string suffix, int expectedLines)
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var document = CreateDocument(measure.MeasureString("Lead Alphabet", new XFont("Arial", 12)).Width - 1);
+            var paragraph = document.LastSection.AddParagraph("Lead ");
+            paragraph.Format.Alignment = ParagraphAlignment.Justify;
+            if (joined)
+            {
+                paragraph.AddFormattedText("Alpha").Color = Colors.Blue;
+                paragraph.AddFormattedText("bet").Color = Colors.Red;
+            }
+            else
+                paragraph.AddText("Alphabet");
+            paragraph.AddText(suffix);
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = _ => 0.1;
+            renderer.RenderDocument();
+            renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+                .OfType<ParagraphRenderInfo>().Single().LineCount.Should().Be(expectedLines);
+        }
+
+        [Theory]
         [InlineData("\u200B")]
         [InlineData("\u200C")]
         public void ExplicitZeroWidthBreakIsPreserved(string separator)
@@ -40,11 +101,13 @@ namespace MigraDoc.Tests
         }
 
         [Theory]
-        [InlineData(false, false)]
-        [InlineData(true, false)]
-        [InlineData(false, true)]
-        [InlineData(true, true)]
-        public void JoinedWordHonorsFinalFragmentOverhang(bool additive, bool contraction)
+        [InlineData(false, false, "")]
+        [InlineData(true, false, "")]
+        [InlineData(false, true, "")]
+        [InlineData(true, true, "")]
+        [InlineData(true, true, " \u200B ")]
+        [InlineData(true, true, " \u200C ")]
+        public void JoinedWordHonorsFinalFragmentOverhang(bool additive, bool contraction, string suffix)
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
                 XGraphicsUnit.Point, XPageDirection.Downwards);
@@ -56,6 +119,7 @@ namespace MigraDoc.Tests
                 paragraph.Format.Alignment = ParagraphAlignment.Justify;
             paragraph.AddFormattedText("Alpha").Color = Colors.Blue;
             paragraph.AddFormattedText("bet.").Color = Colors.Red;
+            paragraph.AddText(suffix);
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.DocumentRenderer.LineEndOverhang = (_, word, _) => word == "bet." ? (contraction ? 3 : 2) : null;
             renderer.DocumentRenderer.AdditiveTerminalLineEndOverhang = additive;

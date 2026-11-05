@@ -338,6 +338,17 @@ namespace MigraDoc.Rendering
             return false;
         }
 
+        static bool IsZeroWidthBreak(DocumentObject docObj) =>
+            docObj is Text { Content: "\u200B" or "\u200C" };
+
+        // Break markers remain word boundaries, but do not make a preceding word nonterminal.
+        static ParagraphIterator? SkipBlanksAndZeroWidthBreaks(ParagraphIterator? leaf)
+        {
+            while (leaf != null && (IsBlank(leaf.Current) || IsZeroWidthBreak(leaf.Current)))
+                leaf = leaf.GetNextLeaf();
+            return leaf;
+        }
+
         // TODO_OLD Make combined predicates for better performance (e.g. IsTabOrLineBreak).
         static bool IsTab(DocumentObject docObj)
         {
@@ -1404,7 +1415,8 @@ namespace MigraDoc.Rendering
                 return true;
 
             var nextIter = _currentLeaf.GetNextLeaf();
-            while (nextIter != null && (IsBlank(nextIter.Current) || nextIter.Current is BookmarkField))
+            while (nextIter != null && (IsBlank(nextIter.Current) || IsZeroWidthBreak(nextIter.Current) ||
+                                       nextIter.Current is BookmarkField))
             {
                 nextIter = nextIter.GetNextLeaf();
             }
@@ -1417,7 +1429,7 @@ namespace MigraDoc.Rendering
             var prevIter = _currentLeaf.GetPreviousLeaf();
             // Can be null if currentLeaf is the first leaf.
             var obj = prevIter?.Current;
-            while (obj is BookmarkField)
+            while (obj is BookmarkField || obj != null && IsZeroWidthBreak(obj))
             {
                 prevIter = prevIter?.GetPreviousLeaf();
                 obj = prevIter?.Current;
@@ -1455,7 +1467,7 @@ namespace MigraDoc.Rendering
 
         void RenderText(Text text)
         {
-            if (text.Content is "\u200B" or "\u200C")
+            if (IsZeroWidthBreak(text))
                 return;
             RenderWord(text.Content);
         }
@@ -2227,6 +2239,7 @@ namespace MigraDoc.Rendering
                     var last = word[^1];
                     var joined = false;
                     double overhangAllowance = 0;
+                    XUnitPt finalBlankWidth = 0;
                     try
                     {
                         while (next?.Current is Text text && text.Content.Length > 0 &&
@@ -2239,6 +2252,8 @@ namespace MigraDoc.Rendering
                             last = text.Content[^1];
                             next = next.GetNextLeaf();
                         }
+                        if (joined)
+                            finalBlankWidth = MeasureString(" ");
                         if (joined && _documentRenderer.LineEndOverhang?.Invoke(
                                 _paragraph, ((Text)_currentLeaf.Current).Content, CurrentFont) is double allowance &&
                             allowance > 0 && IsFinite(allowance))
@@ -2251,16 +2266,14 @@ namespace MigraDoc.Rendering
                     if (joined)
                     {
                         var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
-                        var followingLeaf = next;
-                        while (followingLeaf != null && IsBlank(followingLeaf.Current))
-                            followingLeaf = followingLeaf.GetNextLeaf();
+                        var followingLeaf = SkipBlanksAndZeroWidthBreaks(next);
                         var shrinkFactor = followingLeaf == null
                             ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
                             : null;
                         var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
                         var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
                             _paragraph.Format.Alignment == ParagraphAlignment.Justify && blankCount > 0
-                            ? (1 - shrinkFactor.Value) * MeasureString(" ") * blankCount : 0;
+                            ? (1 - shrinkFactor.Value) * finalBlankWidth * blankCount : 0;
                         var fitAllowance = _documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null
                             ? (double)shrinkAllowance + overhangAllowance
                             : Math.Max((double)shrinkAllowance, overhangAllowance);
@@ -2302,9 +2315,7 @@ namespace MigraDoc.Rendering
                 _currentXPosition > StartXPosition + Tolerance)
             {
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
-                var followingLeaf = _currentLeaf?.GetNextLeaf();
-                while (followingLeaf != null && IsBlank(followingLeaf.Current))
-                    followingLeaf = followingLeaf.GetNextLeaf();
+                var followingLeaf = SkipBlanksAndZeroWidthBreaks(_currentLeaf?.GetNextLeaf());
                 if (_documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null &&
                     _currentXPosition + width > right &&
                     overhang(_paragraph, word, CurrentFont) is double additiveAllowance &&
@@ -2360,9 +2371,7 @@ namespace MigraDoc.Rendering
             var overrun = _currentXPosition + width - right;
             var shrinkFactor = _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
             var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
-            var nextLeaf = _currentLeaf?.GetNextLeaf();
-            while (nextLeaf != null && IsBlank(nextLeaf.Current))
-                nextLeaf = nextLeaf.GetNextLeaf();
+            var nextLeaf = SkipBlanksAndZeroWidthBreaks(_currentLeaf?.GetNextLeaf());
             var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
                 _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
                 blankCount > 0 && nextLeaf == null
@@ -2927,7 +2936,7 @@ namespace MigraDoc.Rendering
         /// <param name="fittingRect">The available space for the text on the area.</param>
         FormatResult FormatText(Text text, Rectangle fittingRect)
         {
-            if (text.Content is "\u200B" or "\u200C")
+            if (IsZeroWidthBreak(text))
                 return FormatResult.Continue;
             return FormatWord(text.Content, fittingRect);
         }
