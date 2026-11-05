@@ -119,7 +119,13 @@ namespace MigraDoc.Rendering
                 {
                     if (PreviousRendererNeedsRemoveEnding(prevRenderInfo, renderer.RenderInfo, area))
                     {
-                        prevRenderInfo!.RemoveEnding();  // PreviousRendererNeedsRemoveEnding returns true.
+                        // Restarting an opening fragment is useful only if the
+                        // complete paragraph fits in this continuation area.
+                        // Otherwise keep a line on the preceding page so that
+                        // impossible widow constraints cannot cause a loop.
+                        var combinedHeight = prevRenderInfo!.LayoutInfo.ContentArea.Height +
+                            renderer.RenderInfo.LayoutInfo.ContentArea.Height;
+                        prevRenderInfo.RemoveEnding(combinedHeight <= area.Height + Renderer.Tolerance);
                         renderer = Renderer.Create(gfx, _documentRenderer, docObj, _areaProvider.AreaFieldInfos);
                         renderer!.MaxElementHeight = maxHeight;
                         renderer.Format(area, prevRenderInfo.FormatInfo);

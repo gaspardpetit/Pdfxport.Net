@@ -38,12 +38,19 @@ namespace MigraDoc.Rendering
         }
         Paragraph _paragraph = null!;
 
-        internal override void RemoveEnding()
+        internal override void RemoveEnding(bool allowRestart = true)
         {
             ParagraphFormatInfo pfInfo = (ParagraphFormatInfo)FormatInfo;
-            pfInfo.RemoveEnding();
+            pfInfo.RemoveEnding(allowRestart);
             Area contentArea = LayoutInfo.ContentArea;
-            contentArea.Height -= LayoutInfo.TrailingHeight;
+            if (pfInfo.IsEmpty)
+            {
+                contentArea.Height = 0;
+                LayoutInfo.StartingHeight = 0;
+                LayoutInfo.TrailingHeight = 0;
+            }
+            else
+                contentArea.Height -= LayoutInfo.TrailingHeight;
         }
     }
 }

@@ -105,6 +105,11 @@ namespace MigraDoc.Rendering
         /// </summary>
         internal override void Render()
         {
+            // Widow correction can clear an opening fragment after its render
+            // info has already been stored on the preceding page.
+            if (_renderInfo.FormatInfo.IsEmpty)
+                return;
+
             InitRendering();
             if ((int)_paragraph.Format.OutlineLevel >= 1 && _gfx.PdfPage != null) // Don’t call GetOutlineTitle() in vain
                 DocumentRenderer.AddOutline((int)_paragraph.Format.OutlineLevel, GetOutlineTitle(), _gfx.PdfPage, GetDestinationPosition());
