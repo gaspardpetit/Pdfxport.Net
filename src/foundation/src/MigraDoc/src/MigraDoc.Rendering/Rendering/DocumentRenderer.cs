@@ -127,6 +127,14 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Func<Paragraph, string, XFont, double?>? TrailingGlyphKerning { get; set; }
 
+        /// <summary>
+        /// Uses the font's OpenType underline thickness and position when no
+        /// UnderlineGeometry callback result is supplied. Defaults to false.
+        /// Font metrics take precedence over the global stroke-width and offset factors.
+        /// Missing or nonpositive thickness retains the existing geometry settings.
+        /// </summary>
+        public bool UseFontUnderlineMetrics { get; set; }
+
         /// <summary>Optional underline offset as a fraction of font descent. The default is 0.33.</summary>
         public double? UnderlineVerticalOffsetFactor { get; set; }
 

@@ -3483,11 +3483,23 @@ namespace MigraDoc.Rendering
         {
             var font = CurrentDomFont;
             var geometry = _documentRenderer.UnderlineGeometry?.Invoke(font);
+            double? offsetPoints = null;
+            if (geometry == null && _documentRenderer.UseFontUnderlineMetrics)
+            {
+                var metrics = CurrentFont.Metrics;
+                if (metrics.UnitsPerEm > 0 && metrics.UnderlineThickness > 0)
+                {
+                    geometry = ((double)metrics.UnderlineThickness / metrics.UnitsPerEm, 0);
+                    offsetPoints = font.Size.Point *
+                        (-metrics.UnderlinePosition + metrics.UnderlineThickness / 2.0) /
+                        metrics.UnitsPerEm;
+                }
+            }
             var pen = GetUnderlinePen(isWord, font, geometry?.StrokeWidthFactor);
             var offsetFactor = geometry?.VerticalOffsetFactor ??
                 _documentRenderer.UnderlineVerticalOffsetFactor ?? 0.33;
 
-            bool penChanged = UnderlinePenChanged(pen, offsetFactor);
+            bool penChanged = UnderlinePenChanged(pen, offsetFactor, offsetPoints);
             if (penChanged)
             {
                 if (_currentUnderlinePen != null)
@@ -3497,6 +3509,7 @@ namespace MigraDoc.Rendering
                 {
                     StartUnderline(_currentXPosition);
                     _currentUnderlineOffsetFactor = offsetFactor;
+                    _currentUnderlineOffsetPoints = offsetPoints;
                 }
 
                 _currentUnderlinePen = pen;
@@ -3520,7 +3533,8 @@ namespace MigraDoc.Rendering
         void EndUnderline(XPen pen, XUnitPt xPosition)
         {
             XUnitPt yPosition = CurrentBaselinePosition;
-            yPosition += _currentUnderlineOffsetFactor * _currentVerticalInfo.Descent;
+            yPosition += _currentUnderlineOffsetPoints ??
+                _currentUnderlineOffsetFactor * _currentVerticalInfo.Descent.Point;
 #if PSGFX
             _gfx.DrawLine(pen, new(_underlineStartPos, yPosition), new(xPosition, yPosition));
 #else
@@ -3532,7 +3546,9 @@ namespace MigraDoc.Rendering
         XUnitPt _underlineStartPos;
         double _currentUnderlineOffsetFactor;
 
-        bool UnderlinePenChanged(XPen? pen, double offsetFactor)
+        double? _currentUnderlineOffsetPoints;
+
+        bool UnderlinePenChanged(XPen? pen, double offsetFactor, double? offsetPoints)
         {
             if (pen == null && _currentUnderlinePen == null)
                 return false;
@@ -3553,7 +3569,7 @@ namespace MigraDoc.Rendering
             if (pen is null)
                 NRT.ThrowOnNull();
 
-            if (offsetFactor != _currentUnderlineOffsetFactor)
+            if (offsetFactor != _currentUnderlineOffsetFactor || offsetPoints != _currentUnderlineOffsetPoints)
                 return true;
 
             // ReSharper disable once CompareOfFloatsByEqualityOperator
