@@ -84,7 +84,7 @@ namespace MigraDoc.DocumentObjectModel
                 Underline = font.Underline;
 
             if (!font.Values.UnderlineColor.IsValueNullOrEmpty() &&
-                (refFont == null || font.UnderlineColor.Argb != refFont.UnderlineColor.Argb))
+                (refFont == null || !font.UnderlineColor.Equals(refFont.UnderlineColor)))
                 UnderlineColor = font.UnderlineColor;
 
             if (!Values.Color.IsValueNullOrEmpty() && (refFont == null || font.Color.Argb != refFont.Color.Argb))
@@ -384,7 +384,7 @@ namespace MigraDoc.DocumentObjectModel
                     serializer.WriteSimpleAttribute("Underline", Underline);
 
                 if (!Values.UnderlineColor.IsValueNullOrEmpty() &&
-                    (font == null || UnderlineColor.Argb != font.UnderlineColor.Argb))
+                    (font == null || !UnderlineColor.Equals(font.UnderlineColor)))
                     serializer.WriteSimpleAttribute("UnderlineColor", UnderlineColor);
 
                 if (Values.Superscript is not null && (font == null || Superscript != font.Superscript || font.Values.Superscript is null))

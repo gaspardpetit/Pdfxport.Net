@@ -10,6 +10,35 @@ namespace MigraDoc.DocumentObjectModel.Tests;
 
 public class UnderlineColorTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DerivedStylePreservesDistinctCmykInkSeparationsThroughDdl(bool rgbOverride)
+    {
+        var baseColor = new Color(100.0, 100.0, 100.0, 0.0);
+        var overrideColor = rgbOverride ? Colors.Black : new Color(0.0, 0.0, 0.0, 100.0);
+        baseColor.Argb.Should().Be(overrideColor.Argb);
+        baseColor.Should().NotBe(overrideColor);
+        var document = new Document();
+        document.Styles.AddStyle("BaseUnderline", StyleNames.Normal).Font.UnderlineColor = baseColor;
+        document.Styles.AddStyle("DerivedUnderline", "BaseUnderline").Font.UnderlineColor = overrideColor;
+        var restored = DdlReader.DocumentFromString(DdlWriter.WriteToString(document))!;
+        restored.Styles["DerivedUnderline"]!.Font.Values.UnderlineColor.Should().Be(overrideColor);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReferenceAwareApplyFontPreservesDistinctCmykInkSeparations(bool rgbOverride)
+    {
+        var reference = new Font { UnderlineColor = new Color(100.0, 100.0, 100.0, 0.0) };
+        var source = new Font { UnderlineColor = rgbOverride ? Colors.Black : new Color(0.0, 0.0, 0.0, 100.0) };
+        source.UnderlineColor.Argb.Should().Be(reference.UnderlineColor.Argb);
+        var target = reference.Clone();
+        target.ApplyFont(source, reference);
+        target.UnderlineColor.Should().Be(source.UnderlineColor);
+    }
+
     [Fact]
     public void EmptyAndCloneValuesRetainIndependentColor()
     {
