@@ -539,6 +539,21 @@ namespace PdfSharp.Drawing
         public bool IsSymbolFont => OpenTypeDescriptor.IsSymbolFont;
 
         /// <summary>
+        /// Gets the sum of the OpenType OS/2 Windows ascent and descent, scaled to this font's size in points.
+        /// This font cell extent is independent of the typographic line spacing returned by GetHeight().
+        /// </summary>
+        public double WindowsCellHeight =>
+            (OpenTypeDescriptor.FontFace.os2.usWinAscent +
+             OpenTypeDescriptor.FontFace.os2.usWinDescent) * _emSize / UnitsPerEm;
+
+        /// <summary>
+        /// Gets the OpenType OS/2 Windows descent, scaled to this font's size in points.
+        /// The descent is a positive distance below the baseline.
+        /// </summary>
+        public double WindowsCellDescent =>
+            OpenTypeDescriptor.FontFace.os2.usWinDescent * _emSize / UnitsPerEm;
+
+        /// <summary>
         /// Gets the PDF options of the font.
         /// </summary>
         public XPdfFontOptions PdfOptions => _pdfOptions ??= new();

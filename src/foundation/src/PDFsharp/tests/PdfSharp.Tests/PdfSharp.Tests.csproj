@@ -60,6 +60,7 @@
 
   <ItemGroup>
     <None Update="Fonts\Fixtures\BlankGlyphFont.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fonts\Fixtures\WindowsCellMetricsFont.ttf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
