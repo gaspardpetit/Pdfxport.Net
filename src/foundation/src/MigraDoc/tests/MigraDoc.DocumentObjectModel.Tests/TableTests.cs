@@ -32,6 +32,27 @@ namespace MigraDoc.DocumentObjectModel.Tests
         }
 
         [Fact]
+        public void SpanningCellKeepsItsOwnOuterRightBorder()
+        {
+            var document = new Document();
+            var table = document.AddSection().AddTable();
+            table.AddColumn("72pt");
+            table.AddColumn("72pt");
+            table.AddColumn("72pt");
+            var row = table.AddRow();
+            var spanning = row.Cells[1];
+            spanning.MergeRight = 1;
+            spanning.Borders.Right.Style = BorderStyle.Single;
+            spanning.Borders.Right.Width = Unit.FromPoint(2.25);
+
+            var effective = new Visitors.MergedCellList(table)
+                .GetEffectiveBordersPdf(spanning, -1);
+
+            effective.Right.Style.Should().Be(BorderStyle.Single);
+            effective.Right.Width.Point.Should().BeApproximately(2.25, .001);
+        }
+
+        [Fact]
         public void Create_Hello_World_TableTests()
         {
             // Create a MigraDoc document.

@@ -188,8 +188,8 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                 var rightBorderCell = cell.Table[cellRowIndex, cellColIndex + cellMergeRight];
                 if (rightBorderCell.Values.Borders != null && rightBorderCell.Values.Borders.Values.Right != null)
                     borders.Right = rightBorderCell.Values.Borders.Values.Right.Clone();
-                else
-                    borders.Values.Right = null;
+                // With no explicit terminal border, retain the merged cell's
+                // own right border rather than discarding it.
             }
 
             int cellMergeDown;
