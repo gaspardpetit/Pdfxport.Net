@@ -23,23 +23,26 @@ namespace MigraDoc.Rendering
         /// </summary>
         internal static XFont FontToXFont(Font font)
         {
+            var name = font.Name;
+            var size = font.Size.Point;
+            var style = GetXStyle(font);
             var entry = _lastEntry;
             if (entry != null &&
                 entry.FontRef.TryGetTarget(out var lastFont) && font == lastFont &&
+                entry.Name == name && entry.Size == size && entry.Style == style &&
                 entry.XFontRef.TryGetTarget(out var lastXFont))
                 return lastXFont;
 
-            XFontStyleEx style = GetXStyle(font);
 #if DEBUG_
             if (StringComparer.OrdinalIgnoreCase.Compare(font.Name, "Segoe UI Semilight") == 0
                 && (style & XFontStyleEx.BoldItalic) == XFontStyleEx.Italic)
                 _ = typeof(int);
 #endif
-            var xFont = new XFont(font.Name, font.Size.Point, style);
+            var xFont = new XFont(name, size, style);
 #if DEBUG_
             CreateFontCounter++;
 #endif
-            _lastEntry = new FontCacheEntry(font, xFont);
+            _lastEntry = new FontCacheEntry(font, xFont, name, size, style);
 #if FORCE_MEMORYLEAK
             _lastFont2 = font;
 #endif
@@ -48,14 +51,21 @@ namespace MigraDoc.Rendering
 
         sealed class FontCacheEntry
         {
-            internal FontCacheEntry(Font font, XFont xFont)
+            internal FontCacheEntry(Font font, XFont xFont, string name, double size, XFontStyleEx style)
             {
                 FontRef = new WeakReference<Font>(font);
                 XFontRef = new WeakReference<XFont>(xFont);
+                Name = name;
+                Size = size;
+                Style = style;
             }
 
             internal readonly WeakReference<Font> FontRef;
             internal readonly WeakReference<XFont> XFontRef;
+            // Preserve requested settings: the resolved XFont may have a different family name.
+            internal readonly string Name;
+            internal readonly double Size;
+            internal readonly XFontStyleEx Style;
         }
 
         static volatile FontCacheEntry? _lastEntry;
