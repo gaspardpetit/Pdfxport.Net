@@ -104,6 +104,7 @@ namespace MigraDoc.RtfRendering
             _enumTranslationTable.Add(Underline.Dotted, "d");
             _enumTranslationTable.Add(Underline.None, "none");
             _enumTranslationTable.Add(Underline.Single, "");
+            _enumTranslationTable.Add(Underline.Double, "db");
             _enumTranslationTable.Add(Underline.Words, "w");
 
             //BorderStyle
