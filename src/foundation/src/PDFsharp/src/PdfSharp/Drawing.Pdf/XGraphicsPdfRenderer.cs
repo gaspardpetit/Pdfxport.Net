@@ -1,4 +1,4 @@
-﻿// PDFsharp - A .NET library for processing PDF
+// PDFsharp - A .NET library for processing PDF
 // See the LICENSE file in the solution root for more information.
 
 #define ITALIC_SIMULATION
@@ -473,6 +473,14 @@ namespace PdfSharp.Drawing.Pdf
         // ----- DrawString ---------------------------------------------------------------------------
 
         public void DrawString(string s, XFont font, XBrush brush, XRect rect, XStringFormat format)
+            => DrawStringCore(s, font, brush, rect, format, null);
+
+        public void DrawStringWithGlyphAdvances(string s, XFont font, XBrush brush,
+            XRect rect, XStringFormat format, IReadOnlyList<double> advances)
+            => DrawStringCore(s, font, brush, rect, format, advances);
+
+        void DrawStringCore(string s, XFont font, XBrush brush, XRect rect,
+            XStringFormat format, IReadOnlyList<double>? advances)
         {
             // #PDF-UA
             if (Owner.UAManager != null)
@@ -542,6 +550,48 @@ namespace PdfSharp.Drawing.Pdf
                 }
             }
 
+            string? positionedText = null;
+            double positionedWidth = 0;
+            if (advances is not null)
+            {
+                if (codePointsWithGlyphIndices.Length != codePoints.Length ||
+                    codePoints.Length != advances.Count + 1)
+                    throw new NotSupportedException("Positioned drawing requires one glyph per original Unicode scalar after text events.");
+                if (font.PdfOptions.ColoredGlyphs != PdfFontColoredGlyphs.None &&
+                    otDescriptor.GlyphColorRecordsFromGlyphIndices(codePointsWithGlyphIndices).Any(record => record is not null))
+                    throw new NotSupportedException("Positioned drawing of color glyphs is not supported.");
+                // A glyph-index replacement cannot be represented by WinAnsi character codes.
+                if (isAnsi && (!AnsiEncoding.IsAnsi(codePoints) || codePointsWithGlyphIndices.Where((pair, index) =>
+                    pair.CodePoint != codePoints[index] ||
+                    pair.GlyphIndex != otDescriptor.BmpCodepointToGlyphIndex((char)codePoints[index])).Any()))
+                {
+                    isAnsi = false;
+                    fontType = FontType.Type0Unicode;
+                }
+                var positioned = new StringBuilder("[");
+                for (int index = 0; index < codePoints.Length; index++)
+                {
+                    var glyph = codePointsWithGlyphIndices[index].GlyphIndex;
+                    positioned.Append(isAnsi
+                        ? PdfEncoders.ToStringLiteral([(byte)AnsiEncoding.UnicodeToAnsi((char)codePoints[index])], false, null)
+                        : PdfEncoders.ToHexStringLiteral([(byte)(glyph >> 8), (byte)glyph], true, false, null));
+                    var natural = otDescriptor.GlyphIndexToEmWidth(glyph, font.Size);
+                    if (index < advances.Count)
+                    {
+                        var adjustment = (natural - advances[index]) / font.Size * 1000;
+                        if (double.IsNaN(adjustment) || double.IsInfinity(adjustment))
+                            throw new ArgumentOutOfRangeException(nameof(advances), "The normalized advance must be finite.");
+                        positioned.Append(' ').Append(adjustment.ToString("0.####", CultureInfo.InvariantCulture)).Append(' ');
+                        positionedWidth += advances[index];
+                    }
+                    else
+                        positionedWidth += natural;
+                }
+                if (double.IsNaN(positionedWidth) || double.IsInfinity(positionedWidth))
+                    throw new ArgumentOutOfRangeException(nameof(advances), "The total run width must be finite.");
+                positionedText = positioned.Append(']').ToString();
+            }
+
             //Realize(font, brush, boldSimulation ? 2 : 0);
             //Realize(glyphTypeface, font.Size, brush, boldSimulation ? 2 : 0, font.FontTypeFromUnicodeFlag);
             Realize(glyphTypeface, font.Size, brush, boldSimulation ? 2 : 0, fontType);
@@ -550,7 +600,7 @@ namespace PdfSharp.Drawing.Pdf
             realizedFont.AddChars(codePointsWithGlyphIndices);
 
             //double width = _gfx.MeasureString(s, font).Width;
-            double width = FontHelper.MeasureString(codePointsWithGlyphIndices, font).Width;
+            double width = advances is null ? FontHelper.MeasureString(codePointsWithGlyphIndices, font).Width : positionedWidth;
             //Debug.Assert(widthOld == width2);
 
             switch (format.Alignment)
@@ -644,7 +694,9 @@ namespace PdfSharp.Drawing.Pdf
                     }
                     text = PdfEncoders.ToHexStringLiteral(bytes, true, false, null);
                 }
-                RenderText(text, font, brush, x, y, width);
+                if (positionedText is not null)
+                    text = positionedText;
+                RenderText(text, font, brush, x, y, width, advances is not null);
                 return;
             }
 
@@ -657,7 +709,6 @@ namespace PdfSharp.Drawing.Pdf
                 // There is no glyph index with a glyph color record.
                 goto DefaultCase;
             }
-
             // Case: At least one glyph is colorized, e.g. an emoji in an emoji font.
 
             // We split the text based on whether special color-handling is required for a glyph.
@@ -751,7 +802,8 @@ namespace PdfSharp.Drawing.Pdf
             }
         }
 
-        void RenderText(string text, XFont font, XBrush brush, double x, double y, double width)
+        void RenderText(string text, XFont font, XBrush brush, double x, double y,
+            double width, bool positioned = false)
         {
             double lineSpace = font.GetHeight();
             double cyAscent = lineSpace * font.CellAscent / font.CellSpace;
@@ -784,25 +836,26 @@ namespace PdfSharp.Drawing.Pdf
                 {   // Case: Simulate Italic and simulation is already on.
 
                     // Build format string only once.
-                    s_format1 ??= "{0:" + formatTj + "} {1:" + formatTj + "} Td\n{2} Tj\n";
+                    s_format1 ??= "{0:" + formatTj + "} {1:" + formatTj + "} Td\n{2} {3}\n";
 
                     AdjustTdOffset(ref pos, verticalOffset, true);
                     // earlier:
                     //AppendFormatArgs("{0:" + format2 + "} {1:" + format2 + "} Td\n{2} Tj\n", pos.X, pos.Y, text);
-                    AppendFormatArgs(s_format1, pos.X, pos.Y, text);
+                    AppendFormatArgs(s_format1, pos.X, pos.Y, text, positioned ? "TJ" : "Tj");
                 }
                 else
                 {   // Case: Simulate Italic and turn simulation on.
 
                     s_format2 ??= "{0:" + formatTj + "} {1:" + formatTj + "} {2:" + formatTj + "} {3:" + formatTj + "} {4:"
-                                  + formatTj + "} {5:" + formatTj + "} Tm\n{6} Tj\n";
+                                  + formatTj + "} {5:" + formatTj + "} Tm\n{6} {7}\n";
 
                     // Italic simulation is done by skewing characters 20° to the right.
                     var m = new XMatrix(1, 0, Const.ItalicSkewAngleSinus, 1, pos.X, pos.Y);
                     // earlier:
                     //AppendFormatArgs("{0:" + format2 + "} {1:" + format2 + "} {2:" + format2 + "} {3:" + format2 + "} {4:" + format2 + "} {5:" + format2 + "} Tm\n{6} Tj\n",
                     //    m.M11, m.M12, m.M21, m.M22, m.OffsetX, m.OffsetY, text);
-                    AppendFormatArgs(s_format2, m.M11, m.M12, m.M21, m.M22, m.OffsetX, m.OffsetY, text);
+                    AppendFormatArgs(s_format2, m.M11, m.M12, m.M21, m.M22, m.OffsetX, m.OffsetY,
+                        text, positioned ? "TJ" : "Tj");
                     _gfxState.ItalicSimulationOn = true;
                     AdjustTdOffset(ref pos, verticalOffset, false);
                 }
@@ -814,13 +867,14 @@ namespace PdfSharp.Drawing.Pdf
 
                     // Same as format2, but keep code clear.
                     s_format3 ??= "{0:" + formatTj + "} {1:" + formatTj + "} {2:" + formatTj + "} {3:" + formatTj + "} {4:"
-                                  + formatTj + "} {5:" + formatTj + "} Tm\n{6} Tj\n";
+                                  + formatTj + "} {5:" + formatTj + "} Tm\n{6} {7}\n";
 
                     var m = new XMatrix(1, 0, 0, 1, pos.X, pos.Y);
                     // earlier:
                     //AppendFormatArgs("{0:" + format2 + "} {1:" + format2 + "} {2:" + format2 + "} {3:" + format2 + "} {4:" + format2 + "} {5:" + format2 + "} Tm\n{6} Tj\n",
                     //    m.M11, m.M12, m.M21, m.M22, m.OffsetX, m.OffsetY, text);
-                    AppendFormatArgs(s_format3, m.M11, m.M12, m.M21, m.M22, m.OffsetX, m.OffsetY, text);
+                    AppendFormatArgs(s_format3, m.M11, m.M12, m.M21, m.M22, m.OffsetX, m.OffsetY,
+                        text, positioned ? "TJ" : "Tj");
                     _gfxState.ItalicSimulationOn = false;
                     AdjustTdOffset(ref pos, verticalOffset, false);
                 }
@@ -828,17 +882,18 @@ namespace PdfSharp.Drawing.Pdf
                 {   // Case: Do not simulate Italic and simulation is already off.
 
                     // Same as format1, but keep code clear.
-                    s_format4 ??= "{0:" + formatTj + "} {1:" + formatTj + "} Td\n{2} Tj\n";
+                    s_format4 ??= "{0:" + formatTj + "} {1:" + formatTj + "} Td\n{2} {3}\n";
 
                     AdjustTdOffset(ref pos, verticalOffset, false);
                     // earlier:
                     //AppendFormatArgs("{0:" + format2 + "} {1:" + format2 + "} Td {2} Tj\n", pos.X, pos.Y, text);
-                    AppendFormatArgs(s_format4, pos.X, pos.Y, text);
+                    AppendFormatArgs(s_format4, pos.X, pos.Y, text, positioned ? "TJ" : "Tj");
                 }
             }
 #else
             AdjustTextMatrix(ref pos);
-            AppendFormat2("{0:" + format2 + "} {1:" + format2 + "} Td {2} Tj\n", pos.X, pos.Y, text);
+            AppendFormatArgs("{0:" + format2 + "} {1:" + format2 + "} Td {2} {3}\n",
+                pos.X, pos.Y, text, positioned ? "TJ" : "Tj");
 #endif
             if (underline)
             {

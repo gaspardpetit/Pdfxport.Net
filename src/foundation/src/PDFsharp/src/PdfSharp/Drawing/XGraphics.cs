@@ -3489,6 +3489,49 @@ namespace PdfSharp.Drawing
         }
 
         /// <summary>
+        /// Draws PDF text at a baseline origin using explicit distances between successive glyph origins.
+        /// Advances are in drawing units, before the graphics transform, and may be zero or negative.
+        /// Supply one fewer advance than Unicode scalar values; the final glyph retains its natural width.
+        /// Requires a PDF renderer and one glyph per scalar after text events. Color glyph layers are unsupported.
+        /// This method does not perform shaping or line fitting. Ordinary DrawString is unaffected.
+        /// </summary>
+        public void DrawStringWithGlyphAdvances(string text, XFont font,
+            XBrush brush, double x, double y, IReadOnlyList<double> advances)
+        {
+            if (text is null) throw new ArgumentNullException(nameof(text));
+            if (font is null) throw new ArgumentNullException(nameof(font));
+            if (brush is null) throw new ArgumentNullException(nameof(brush));
+            if (advances is null) throw new ArgumentNullException(nameof(advances));
+            int scalarCount = 0;
+            for (int index = 0; index < text.Length; index++, scalarCount++)
+            {
+                if (char.IsHighSurrogate(text[index]))
+                {
+                    if (++index >= text.Length || !char.IsLowSurrogate(text[index]))
+                        throw new ArgumentException("Text must contain valid UTF-16.", nameof(text));
+                }
+                else if (char.IsLowSurrogate(text[index]))
+                    throw new ArgumentException("Text must contain valid UTF-16.", nameof(text));
+            }
+            if (advances.Count != Math.Max(0, scalarCount - 1))
+                throw new ArgumentException("Expected one advance between each pair of Unicode scalars.", nameof(advances));
+            var copy = new double[advances.Count];
+            for (int index = 0; index < copy.Length; index++)
+            {
+                var advance = advances[index];
+                if (double.IsNaN(advance) || double.IsInfinity(advance))
+                    throw new ArgumentOutOfRangeException(nameof(advances), "Advances must be finite.");
+                copy[index] = advance;
+            }
+            if (text.Length == 0)
+                return;
+            if (_renderer is null)
+                throw new InvalidOperationException("Positioned glyph drawing requires a PDF renderer.");
+            _renderer.DrawStringWithGlyphAdvances(text, font, brush,
+                new XRect(x, y, 0, 0), XStringFormats.Default, copy);
+        }
+
+        /// <summary>
         /// Draws the specified text string.
         /// </summary>
         public void DrawString(string s, XFont font, XBrush brush, double x, double y)

@@ -101,6 +101,10 @@ namespace PdfSharp.Drawing
         /// </summary>
         void DrawString(string s, XFont font, XBrush brush, XRect layoutRectangle, XStringFormat format);
 
+        /// <summary>Draws a PDF text run with explicit origin-to-origin advances.</summary>
+        void DrawStringWithGlyphAdvances(string s, XFont font, XBrush brush,
+            XRect layoutRectangle, XStringFormat format, IReadOnlyList<double> advances);
+
         /// <summary>
         /// Draws a series of glyphs identified by the specified text and font.
         /// </summary>
