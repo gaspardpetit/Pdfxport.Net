@@ -3499,7 +3499,7 @@ namespace MigraDoc.Rendering
             var offsetFactor = geometry?.VerticalOffsetFactor ??
                 _documentRenderer.UnderlineVerticalOffsetFactor ?? 0.33;
 
-            bool penChanged = UnderlinePenChanged(pen, offsetFactor, offsetPoints, font.Underline == Underline.Double);
+            bool penChanged = UnderlinePenChanged(pen, offsetFactor, offsetPoints, font.Underline == Underline.Double, font.Underline == Underline.Wavy);
             if (penChanged)
             {
                 if (_currentUnderlinePen != null)
@@ -3511,6 +3511,7 @@ namespace MigraDoc.Rendering
                     _currentUnderlineOffsetFactor = offsetFactor;
                     _currentUnderlineOffsetPoints = offsetPoints;
                     _currentUnderlineIsDouble = font.Underline == Underline.Double;
+                    _currentUnderlineIsWavy = font.Underline == Underline.Wavy;
                 }
 
                 _currentUnderlinePen = pen;
@@ -3539,6 +3540,11 @@ namespace MigraDoc.Rendering
             XUnitPt yPosition = CurrentBaselinePosition;
             yPosition += _currentUnderlineOffsetPoints ??
                 _currentUnderlineOffsetFactor * _currentVerticalInfo.Descent.Point;
+            if (_currentUnderlineIsWavy)
+            {
+                DrawWaveUnderline(pen, xPosition, yPosition);
+                return;
+            }
 #if PSGFX
             _gfx.DrawLine(pen, new(_underlineStartPos, yPosition), new(xPosition, yPosition));
 #else
@@ -3556,15 +3562,57 @@ namespace MigraDoc.Rendering
             }
         }
 
+        void DrawWaveUnderline(XPen pen, XUnitPt endPosition, XUnitPt center)
+        {
+            var start = _underlineStartPos.Point;
+            var end = endPosition.Point;
+            if (end <= start)
+                return;
+
+            // A zero-width PDF pen is a hairline; keep its wave finite and visible.
+            var scale = Math.Max(0.1, pen.Width);
+            var halfPeriod = 3 * scale;
+            var amplitude = scale;
+            var path = new XGraphicsPath();
+            var x = start;
+            var y = center.Point;
+            var targetY = center.Point - amplitude;
+            var first = true;
+            while (x < end)
+            {
+                var segment = Math.Min(first ? halfPeriod / 2 : halfPeriod, end - x);
+                var next = x + segment;
+                // Keep all control points inside the run, including a partial final wave.
+                path.AddBezier(x, y, x + segment / 2, y,
+                    x + segment / 2, targetY, next, targetY);
+                x = next;
+                y = targetY;
+                targetY = center.Point + (targetY < center.Point ? amplitude : -amplitude);
+                first = false;
+            }
+            var state = _gfx.Save();
+            try
+            {
+                _gfx.IntersectClip(new XRect(start, center.Point - 2 * scale,
+                    end - start, 4 * scale));
+                _gfx.DrawPath(pen, path);
+            }
+            finally
+            {
+                _gfx.Restore(state);
+            }
+        }
+
         XPen? _currentUnderlinePen;
         XUnitPt _underlineStartPos;
         double _currentUnderlineOffsetFactor;
 
         double? _currentUnderlineOffsetPoints;
         bool _currentUnderlineIsDouble;
+        bool _currentUnderlineIsWavy;
         bool _currentUnderlineIsThick;
 
-        bool UnderlinePenChanged(XPen? pen, double offsetFactor, double? offsetPoints, bool isDouble)
+        bool UnderlinePenChanged(XPen? pen, double offsetFactor, double? offsetPoints, bool isDouble, bool isWavy)
         {
             if (pen == null && _currentUnderlinePen == null)
                 return false;
@@ -3586,7 +3634,7 @@ namespace MigraDoc.Rendering
                 NRT.ThrowOnNull();
 
             if (offsetFactor != _currentUnderlineOffsetFactor || offsetPoints != _currentUnderlineOffsetPoints ||
-                isDouble != _currentUnderlineIsDouble)
+                isDouble != _currentUnderlineIsDouble || isWavy != _currentUnderlineIsWavy)
                 return true;
 
             // ReSharper disable once CompareOfFloatsByEqualityOperator
