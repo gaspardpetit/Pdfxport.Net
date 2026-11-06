@@ -26,11 +26,16 @@ public class PositionedGlyphTests : IDisposable
     public void Dispose() => PdfSharpCore.ResetAll();
 
     [Theory]
-    [InlineData(PdfFontEncoding.WinAnsi, 12, "en-US")]
-    [InlineData(PdfFontEncoding.Unicode, 12, "en-US")]
-    [InlineData(PdfFontEncoding.WinAnsi, 24, "fr-FR")]
-    [InlineData(PdfFontEncoding.Unicode, 24, "fr-FR")]
-    public void SavedPdfReconstructsRequestedOriginsAndDecorationWidth(PdfFontEncoding encoding, double size, string culture)
+    [InlineData(PdfFontEncoding.WinAnsi, 12, "en-US", false)]
+    [InlineData(PdfFontEncoding.WinAnsi, 12, "en-US", true)]
+    [InlineData(PdfFontEncoding.Unicode, 12, "en-US", false)]
+    [InlineData(PdfFontEncoding.Unicode, 12, "en-US", true)]
+    [InlineData(PdfFontEncoding.WinAnsi, 24, "fr-FR", false)]
+    [InlineData(PdfFontEncoding.WinAnsi, 24, "fr-FR", true)]
+    [InlineData(PdfFontEncoding.WinAnsi, 12.325, "en-US", true)]
+    [InlineData(PdfFontEncoding.Unicode, 24, "fr-FR", false)]
+    [InlineData(PdfFontEncoding.Unicode, 24, "fr-FR", true)]
+    public void SavedPdfReconstructsRequestedOriginsAndDecorationWidth(PdfFontEncoding encoding, double size, string culture, bool simulateBold)
     {
         var originalCulture = CultureInfo.CurrentCulture;
         try
@@ -38,10 +43,14 @@ public class PositionedGlyphTests : IDisposable
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
             using var document = new PdfDocument();
             var page = document.AddPage();
-            var font = new XFont("Arial", size, XFontStyleEx.Underline, new XPdfFontOptions(encoding));
+            var font = new XFont("Arial", size, XFontStyleEx.Underline, new XPdfFontOptions(encoding),
+                simulateBold ? XStyleSimulations.BoldSimulation : XStyleSimulations.None);
             var advances = new[] { 3.25, 0.0, -2.0 };
             using (var graphics = XGraphics.FromPdfPage(page))
+            {
                 graphics.DrawStringWithGlyphAdvances("Wi €", font, XBrushes.Black, 72, 100, advances);
+                graphics.DrawString("Regular", new XFont("Arial", size, XFontStyleEx.Regular, new XPdfFontOptions(encoding)), XBrushes.Black, 72, 120);
+            }
             using var stream = new MemoryStream();
             document.Save(stream, false);
             stream.Position = 0;
@@ -51,6 +60,15 @@ public class PositionedGlyphTests : IDisposable
             array.Should().HaveCount(7);
             var fonts = restored.Pages[0].Elements.GetDictionary("/Resources")!.Elements.GetDictionary("/Font")!;
             var pdfFont = fonts.Elements.GetDictionary(fonts.Elements.Keys.Single())!;
+            var characterSpacing = operators.FirstOrDefault(op => op.OpCode.Name == "Tc") is { } spacing
+                ? Number(spacing.Operands[0]) : 0;
+            if (simulateBold)
+            {
+                characterSpacing.Should().BeGreaterThan(0);
+                Number(operators.Last(op => op.OpCode.Name == "Tc").Operands[0]).Should().Be(0);
+                Number(operators.First(op => op.OpCode.Name == "Tr").Operands[0]).Should().Be(2);
+                Number(operators.Last(op => op.OpCode.Name == "Tr").Operands[0]).Should().Be(0);
+            }
             var codes = new[] { 87, 105, 32, 128 };
             var text = "Wi €";
             var widths = new double[4];
@@ -61,11 +79,11 @@ public class PositionedGlyphTests : IDisposable
                 if (index < 3)
                 {
                     var adjustment = Number(array[index * 2 + 1]);
-                    (widths[index] - adjustment * size / 1000).Should().BeApproximately(advances[index], 0.00001);
+                    (widths[index] + characterSpacing - adjustment * size / 1000).Should().BeApproximately(advances[index], 0.00001);
                 }
             }
             var underline = operators.Single(op => op.OpCode.Name == "re");
-            Number(underline.Operands[2]).Should().BeApproximately(advances.Sum() + widths[3], 0.001);
+            Number(underline.Operands[2]).Should().BeApproximately(advances.Sum() + widths[3] + characterSpacing, 0.001);
         }
         finally { CultureInfo.CurrentCulture = originalCulture; }
     }

@@ -568,6 +568,11 @@ namespace PdfSharp.Drawing.Pdf
                     isAnsi = false;
                     fontType = FontType.Type0Unicode;
                 }
+                // Match the serialized Tc from RealizeFont, including its decimal precision.
+                // PDF applies character spacing after every glyph, even inside a TJ array.
+                var characterSpacing = boldSimulation
+                    ? double.Parse((font.Size * Const.BoldEmphasis).ToString(DefaultNumberFormat3, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture)
+                    : 0;
                 var positioned = new StringBuilder("[");
                 for (int index = 0; index < codePoints.Length; index++)
                 {
@@ -575,7 +580,7 @@ namespace PdfSharp.Drawing.Pdf
                     positioned.Append(isAnsi
                         ? PdfEncoders.ToStringLiteral([(byte)AnsiEncoding.UnicodeToAnsi((char)codePoints[index])], false, null)
                         : PdfEncoders.ToHexStringLiteral([(byte)(glyph >> 8), (byte)glyph], true, false, null));
-                    var natural = otDescriptor.GlyphIndexToEmWidth(glyph, font.Size);
+                    var natural = otDescriptor.GlyphIndexToEmWidth(glyph, font.Size) + characterSpacing;
                     if (index < advances.Count)
                     {
                         var adjustment = (natural - advances[index]) / font.Size * 1000;
