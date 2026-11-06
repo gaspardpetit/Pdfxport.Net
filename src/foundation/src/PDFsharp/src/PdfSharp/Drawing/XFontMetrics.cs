@@ -51,7 +51,8 @@ namespace PdfSharp.Drawing
         public int Descent { get; }
 
         /// <summary>
-        /// Gets the average width.
+        /// Gets the average character width reported by the font in font design units.
+        /// This metadata is not a substitute for measuring text.
         /// </summary>
         public int AverageWidth { get; }
 
