@@ -3499,7 +3499,7 @@ namespace MigraDoc.Rendering
             var offsetFactor = geometry?.VerticalOffsetFactor ??
                 _documentRenderer.UnderlineVerticalOffsetFactor ?? 0.33;
 
-            bool penChanged = UnderlinePenChanged(pen, offsetFactor, offsetPoints);
+            bool penChanged = UnderlinePenChanged(pen, offsetFactor, offsetPoints, font.Underline == Underline.Double);
             if (penChanged)
             {
                 if (_currentUnderlinePen != null)
@@ -3510,6 +3510,7 @@ namespace MigraDoc.Rendering
                     StartUnderline(_currentXPosition);
                     _currentUnderlineOffsetFactor = offsetFactor;
                     _currentUnderlineOffsetPoints = offsetPoints;
+                    _currentUnderlineIsDouble = font.Underline == Underline.Double;
                 }
 
                 _currentUnderlinePen = pen;
@@ -3540,6 +3541,16 @@ namespace MigraDoc.Rendering
 #else
             _gfx.DrawLine(pen, _underlineStartPos, yPosition, xPosition, yPosition);
 #endif
+            if (_currentUnderlineIsDouble)
+            {
+                // Leave one stroke width of clear space between the two strokes.
+                yPosition += 2 * pen.Width;
+#if PSGFX
+                _gfx.DrawLine(pen, new(_underlineStartPos, yPosition), new(xPosition, yPosition));
+#else
+                _gfx.DrawLine(pen, _underlineStartPos, yPosition, xPosition, yPosition);
+#endif
+            }
         }
 
         XPen? _currentUnderlinePen;
@@ -3547,8 +3558,9 @@ namespace MigraDoc.Rendering
         double _currentUnderlineOffsetFactor;
 
         double? _currentUnderlineOffsetPoints;
+        bool _currentUnderlineIsDouble;
 
-        bool UnderlinePenChanged(XPen? pen, double offsetFactor, double? offsetPoints)
+        bool UnderlinePenChanged(XPen? pen, double offsetFactor, double? offsetPoints, bool isDouble)
         {
             if (pen == null && _currentUnderlinePen == null)
                 return false;
@@ -3569,7 +3581,8 @@ namespace MigraDoc.Rendering
             if (pen is null)
                 NRT.ThrowOnNull();
 
-            if (offsetFactor != _currentUnderlineOffsetFactor || offsetPoints != _currentUnderlineOffsetPoints)
+            if (offsetFactor != _currentUnderlineOffsetFactor || offsetPoints != _currentUnderlineOffsetPoints ||
+                isDouble != _currentUnderlineIsDouble)
                 return true;
 
             // ReSharper disable once CompareOfFloatsByEqualityOperator
