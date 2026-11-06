@@ -539,6 +539,14 @@ namespace PdfSharp.Drawing
         public bool IsSymbolFont => OpenTypeDescriptor.IsSymbolFont;
 
         /// <summary>
+        /// Gets whether the font declares a Japanese, Chinese, or Korean code page
+        /// in its OpenType OS/2 code-page range flags (bits 17 through 21).
+        /// This reports font metadata and does not verify glyph coverage for any character.
+        /// </summary>
+        public bool HasEastAsianCodePage =>
+            (OpenTypeDescriptor.FontFace.os2.ulCodePageRange1 & 0x003E0000u) != 0;
+
+        /// <summary>
         /// Gets the sum of the OpenType OS/2 Windows ascent and descent, scaled to this font's size in points.
         /// This font cell extent is independent of the typographic line spacing returned by GetHeight().
         /// </summary>
