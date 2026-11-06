@@ -23,6 +23,7 @@ namespace PdfSharp
         public const string SignificantDecimalPlaces2 = "0.##;-0.##;0";
         public const string SignificantDecimalPlaces3 = "0.###;-0.###;0";
         public const string SignificantDecimalPlaces4 = "0.####;-0.####;0";
+        public const string SignificantDecimalPlaces5 = "0.#####;-0.#####;0";
         public const string SignificantDecimalPlaces7 = "0.#######;-0.#######;0";
         public const string SignificantDecimalPlaces10 = "0.##########;-0.##########;0"; // Used by DebuggerDisplay only.
         public const string SignificantDecimalPlaces1Plus9 = "0.0#########;-0.0#########;0.0"; // Used by CReal only.
@@ -43,6 +44,7 @@ namespace PdfSharp
         public const string SignificantDecimalPlaces2 = ".##;-.##;0";
         public const string SignificantDecimalPlaces3 = ".###;-.###;0";
         public const string SignificantDecimalPlaces4 = ".####;-.####;0";
+        public const string SignificantDecimalPlaces5 = ".#####;-.#####;0";
         public const string SignificantDecimalPlaces7 = ".#######;-.#######;0";
         public const string SignificantDecimalPlaces10 = ".##########;-.##########;0"; // Used by DebuggerDisplay only.
         public const string SignificantDecimalPlaces1Plus9 = ".0#########;-.0#########;0.0"; // Used by CReal only.

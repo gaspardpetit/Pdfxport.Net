@@ -557,7 +557,8 @@ namespace PdfSharp.Pdf.Internal
         }
 
         /// <summary>
-        /// Converts an XColor into a string with up to 3 decimal digits and a decimal point.
+        /// Converts an XColor into PDF color components. RGB uses three
+        /// significant digits; CMYK uses up to three decimal places.
         /// </summary>
         public static string ToString(XColor color, PdfColorMode colorMode)
         {
@@ -571,11 +572,10 @@ namespace PdfSharp.Pdf.Internal
             {
                 case PdfColorMode.Rgb:
                     {
-                        s_formatRGB ??= "{0:" + format + "} {1:" + format + "} {2:" + format + "}";
-                        // earlier:
-                        // return String.Format(CultureInfo.InvariantCulture, "{0:" + format + "} {1:" + format + "} {2:" + format + "}",
-                        //    color.R / 255.0, color.G / 255.0, color.B / 255.0);
-                        return String.Format(CultureInfo.InvariantCulture, s_formatRGB, color.R / 255.0, color.G / 255.0, color.B / 255.0);
+                        // Use three significant digits for normalized 8-bit RGB.
+                        // A fixed three decimal places loses a digit for dark
+                        // channels (e.g. 19/255 -> 0.075 instead of 0.0745).
+                        return String.Join(" ", RgbComponent(color.R), RgbComponent(color.G), RgbComponent(color.B));
                     }
 
                 case PdfColorMode.Cmyk:
@@ -595,7 +595,20 @@ namespace PdfSharp.Pdf.Internal
             }
         }
         // ReSharper disable InconsistentNaming
-        static string? s_formatRGB;
+        static string RgbComponent(byte component)
+        {
+            if (component == 0)
+                return "0";
+            if (component == 255)
+                return "1";
+
+            // 1-2 / 255 have three significant digits at five decimal
+            // places; 3-25 / 255 need four; the rest need three.
+            string format = component <= 2 ? Config.SignificantDecimalPlaces5 :
+                            component <= 25 ? Config.SignificantDecimalPlaces4 :
+                            Config.SignificantDecimalPlaces3;
+            return (component / 255.0).ToString(format, CultureInfo.InvariantCulture);
+        }
         static string? s_formatCMYK;
         // ReSharper restore InconsistentNaming
 
