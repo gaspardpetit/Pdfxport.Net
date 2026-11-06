@@ -44,12 +44,16 @@ namespace MigraDoc.DocumentObjectModel
         DotDotDash,
 
         /// <summary>
+        /// An underline with twice the ordinary stroke width.
+        /// </summary>
+        Thick = 7,
+
+        /// <summary>
         /// Two parallel underline strokes.
         /// </summary>
         Double = 8,
 
         /* --- unsupported ---
-          Thick           = 6,
           Wavy            = 11,
           WavyHeavy       = 27,
           DottedHeavy     = 20,

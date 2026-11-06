@@ -3620,6 +3620,8 @@ namespace MigraDoc.Rendering
             var underlineColor = font.UnderlineColor.IsEmpty ? font.Color : font.UnderlineColor;
             var underlineWidth = font.Size.Point * (strokeWidthFactor ??
                 _documentRenderer.UnderlineStrokeWidthFactor ?? 1.0 / 16);
+            if (underlineType == Underline.Thick)
+                underlineWidth *= 2;
 #if noCMYK
             XPen pen = new XPen(XColor.FromArgb(underlineColor.Argb), underlineWidth);
 #else
