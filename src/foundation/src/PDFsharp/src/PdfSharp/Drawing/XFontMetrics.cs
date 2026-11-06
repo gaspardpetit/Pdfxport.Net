@@ -10,7 +10,8 @@ namespace PdfSharp.Drawing
     {
         internal XFontMetrics(string name, int unitsPerEm, int ascent, int descent, int leading, int lineSpacing,
             int capHeight, int xHeight, int stemV, int stemH, int averageWidth, int maxWidth,
-            int underlinePosition, int underlineThickness, int strikethroughPosition, int strikethroughThickness)
+            int underlinePosition, int underlineThickness, int strikethroughPosition, int strikethroughThickness,
+            int superscriptYSize, int subscriptYSize, int subscriptYOffset)
         {
             Name = name;
             UnitsPerEm = unitsPerEm;
@@ -28,6 +29,9 @@ namespace PdfSharp.Drawing
             UnderlineThickness = underlineThickness;
             StrikethroughPosition = strikethroughPosition;
             StrikethroughThickness = strikethroughThickness;
+            SuperscriptYSize = superscriptYSize;
+            SubscriptYSize = subscriptYSize;
+            SubscriptYOffset = subscriptYOffset;
         }
 
         /// <summary>
@@ -49,6 +53,27 @@ namespace PdfSharp.Drawing
         /// Gets the descent value.
         /// </summary>
         public int Descent { get; }
+
+        /// <summary>
+        /// Gets the font's recommended superscript vertical size in font design units.
+        /// Divide by UnitsPerEm to obtain a size ratio; this is not a glyph's ink height.
+        /// The value is reported as stored in the OpenType OS/2 table, including zero.
+        /// </summary>
+        public int SuperscriptYSize { get; }
+
+        /// <summary>
+        /// Gets the font's recommended subscript vertical size in font design units.
+        /// Divide by UnitsPerEm to obtain a size ratio; this is not a glyph's ink height.
+        /// The value is reported as stored in the OpenType OS/2 table, including zero.
+        /// </summary>
+        public int SubscriptYSize { get; }
+
+        /// <summary>
+        /// Gets the font's recommended subscript baseline offset in font design units.
+        /// Positive values specify an offset below the baseline.
+        /// The value is reported as stored in the OpenType OS/2 table, including zero.
+        /// </summary>
+        public int SubscriptYOffset { get; }
 
         /// <summary>
         /// Gets the average character width reported by the font in font design units.

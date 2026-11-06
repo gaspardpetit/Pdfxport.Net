@@ -447,7 +447,10 @@ namespace PdfSharp.Drawing
                 OpenTypeDescriptor.LineSpacing, OpenTypeDescriptor.CapHeight, OpenTypeDescriptor.XHeight,
                 OpenTypeDescriptor.StemV, 0, OpenTypeDescriptor.FontFace.os2.xAvgCharWidth, 0,
                 OpenTypeDescriptor.UnderlinePosition, OpenTypeDescriptor.UnderlineThickness,
-                OpenTypeDescriptor.StrikeoutPosition, OpenTypeDescriptor.StrikeoutSize);
+                OpenTypeDescriptor.StrikeoutPosition, OpenTypeDescriptor.StrikeoutSize,
+                OpenTypeDescriptor.FontFace.os2.ySuperscriptYSize,
+                OpenTypeDescriptor.FontFace.os2.ySubscriptYSize,
+                OpenTypeDescriptor.FontFace.os2.ySubscriptYOffset);
 
             XFontMetrics fm = Metrics;
 
