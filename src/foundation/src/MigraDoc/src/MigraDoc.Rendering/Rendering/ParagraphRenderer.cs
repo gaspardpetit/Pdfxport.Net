@@ -3515,6 +3515,9 @@ namespace MigraDoc.Rendering
 
                 _currentUnderlinePen = pen;
             }
+            // A style can change without changing the realized pen width (for example,
+            // thick 12pt followed by single 24pt). Remember every leaf's style.
+            _currentUnderlineIsThick = font.Underline == Underline.Thick;
             if (_currentLeaf is null || _endLeaf is null)
                 NRT.ThrowOnNull();
             if (_currentLeaf.Current == _endLeaf.Current)
@@ -3559,6 +3562,7 @@ namespace MigraDoc.Rendering
 
         double? _currentUnderlineOffsetPoints;
         bool _currentUnderlineIsDouble;
+        bool _currentUnderlineIsThick;
 
         bool UnderlinePenChanged(XPen? pen, double offsetFactor, double? offsetPoints, bool isDouble)
         {
@@ -3620,6 +3624,8 @@ namespace MigraDoc.Rendering
             var underlineColor = font.UnderlineColor.IsEmpty ? font.Color : font.UnderlineColor;
             var underlineWidth = font.Size.Point * (strokeWidthFactor ??
                 _documentRenderer.UnderlineStrokeWidthFactor ?? 1.0 / 16);
+            if (underlineType == Underline.Thick)
+                underlineWidth *= 2;
 #if noCMYK
             XPen pen = new XPen(XColor.FromArgb(underlineColor.Argb), underlineWidth);
 #else
@@ -3633,6 +3639,7 @@ namespace MigraDoc.Rendering
 #endif
             if (!isWord && underlineType == Underline.Single && strokeWidthFactor == null &&
                 _documentRenderer.UnderlineStrokeWidthFactor == null && _currentUnderlinePen != null &&
+                !_currentUnderlineIsThick &&
                 pen.Color == _currentUnderlinePen.Color)
                 pen.Width = _currentUnderlinePen.Width;
             pen.DashStyle = font.Underline switch
