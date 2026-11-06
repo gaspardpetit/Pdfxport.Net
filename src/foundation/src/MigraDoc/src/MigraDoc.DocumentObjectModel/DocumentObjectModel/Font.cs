@@ -75,9 +75,9 @@ namespace MigraDoc.DocumentObjectModel
             if (font.Values.Italic is not null && (refFont == null || font.Italic != refFont.Italic))
                 Italic = font.Italic;
 
-            if (Values.Subscript is not null && (refFont == null || font.Subscript != refFont.Subscript))
+            if (font.Values.Subscript is not null && (refFont == null || font.Subscript != refFont.Subscript))
                 Subscript = font.Subscript;
-            else if (Values.Superscript is not null && (refFont == null || font.Superscript != refFont.Superscript))
+            if (font.Values.Superscript is not null && (refFont == null || font.Superscript != refFont.Superscript))
                 Superscript = font.Superscript;
 
             if (Values.Underline is not null && (refFont == null || font.Underline != refFont.Underline))
@@ -108,7 +108,7 @@ namespace MigraDoc.DocumentObjectModel
 
             if (font.Values.Subscript is not null)
                 Subscript = font.Subscript;
-            else if (font.Values.Superscript is not null)
+            if (font.Values.Superscript is not null)
                 Superscript = font.Superscript;
 
             if (font.Values.Underline is not null)
@@ -176,6 +176,7 @@ namespace MigraDoc.DocumentObjectModel
 
         /// <summary>
         /// Gets or sets the superscript property.
+        /// Enabling superscript explicitly disables subscript; disabling it leaves subscript unchanged.
         /// </summary>
         public bool Superscript
         {
@@ -183,12 +184,14 @@ namespace MigraDoc.DocumentObjectModel
             set
             {
                 Values.Superscript = value;
-                Values.Subscript = null;
+                if (value)
+                    Values.Subscript = false;
             }
         }
 
         /// <summary>
         /// Gets or sets the subscript property.
+        /// Enabling subscript explicitly disables superscript; disabling it leaves superscript unchanged.
         /// </summary>
         public bool Subscript
         {
@@ -196,7 +199,8 @@ namespace MigraDoc.DocumentObjectModel
             set
             {
                 Values.Subscript = value;
-                Values.Superscript = null;
+                if (value)
+                    Values.Superscript = false;
             }
         }
 
