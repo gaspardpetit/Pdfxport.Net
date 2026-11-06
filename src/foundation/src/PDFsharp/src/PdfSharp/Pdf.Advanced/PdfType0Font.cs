@@ -169,15 +169,12 @@ namespace PdfSharp.Pdf.Advanced
             {
                 ushort[] glyphIndices = CMapInfo.GetGlyphIndices();
                 int count = glyphIndices.Length;
-                int[] glyphWidths = new int[count];
-
-                for (int idx = 0; idx < count; idx++)
-                    glyphWidths[idx] = descriptor.GlyphIndexToPdfWidth(glyphIndices[idx]);
-
                 //TODO_OLD: optimize order of indices
 
                 for (int idx = 0; idx < count; idx++)
-                    w.AppendFormat("{0}[{1}]", glyphIndices[idx], glyphWidths[idx]);
+                    w.Append(glyphIndices[idx]).Append('[')
+                        .Append(descriptor.GlyphIndexToEmWidth(glyphIndices[idx], 1000)
+                            .ToString("0.####", CultureInfo.InvariantCulture)).Append(']');
                 w.Append("]");
                 _descendantFont.Elements.SetValue(PdfCIDFont.Keys.W, new PdfLiteral(w.ToString()));
             }

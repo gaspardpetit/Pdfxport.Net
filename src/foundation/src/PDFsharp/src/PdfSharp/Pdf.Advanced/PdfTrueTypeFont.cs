@@ -152,8 +152,17 @@ namespace PdfSharp.Pdf.Advanced
             width.Comment = Invariant($"Width array[{FirstChar}..{LastChar}] of {typeof(PdfTrueTypeFont)} object {ObjectID}");
 #endif
             //width.Elements.Clear();
+            var descriptor = FontDescriptor.Descriptor;
+            var codes = new byte[256];
+            for (int idx = 0; idx < codes.Length; idx++)
+                codes[idx] = (byte)idx;
+            var characters = AnsiEncoding.Encoder.GetChars(codes);
             for (int idx = 32; idx < 256; idx++)
-                width.Elements.Add(new PdfInteger(FontDescriptor.Descriptor.Widths[idx]));
+            {
+                var character = descriptor.IsSymbolFont ? descriptor.RemapSymbolChar((char)idx) : characters[idx];
+                var glyph = descriptor.BmpCodepointToGlyphIndex(character);
+                width.Elements.Add(new PdfReal(descriptor.GlyphIndexToEmWidth(glyph, 1000)));
+            }
         }
 
         /// <summary>
