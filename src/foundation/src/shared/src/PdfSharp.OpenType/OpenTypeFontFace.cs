@@ -48,13 +48,15 @@ namespace PdfSharp.Internal.OpenType
 
         public static OpenTypeFontFace GetOrCreateFrom(OpenTypeFontSource otFontSource)
         {
-            Debug.Assert(otFontSource.OTFontFace == null);
+            if (otFontSource.OTFontFace is { } existingFace)
+                return existingFace;
 
             var openTypeFontFaceCache = OtGlobals.Global.OTFonts.OpenTypeFontFaceCache;
             if (openTypeFontFaceCache.TryGetFontFace(otFontSource.ChecksumKey, out var otFontFace))
             {
-                // We should not come here if the font source is in the cache but has no font face.
-                Debug.Assert(otFontSource.OTFontFace != null, "Ooops, something went wrong.");
+                // Distinct font source instances can contain identical bytes. Associate
+                // the second source with the already parsed face as well.
+                otFontSource.OTFontFace = otFontFace;
                 return otFontFace;
             }
 
