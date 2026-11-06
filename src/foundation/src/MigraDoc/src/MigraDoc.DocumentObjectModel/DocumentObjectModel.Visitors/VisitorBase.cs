@@ -141,6 +141,8 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             font.Values.Size ??= refFont.Values.Size;
             if (font.Values.Color.IsValueNullOrEmpty())
                 font.Values.Color = refFont.Values.Color;
+            if (font.Values.UnderlineColor.IsValueNullOrEmpty())
+                font.Values.UnderlineColor = refFont.Values.UnderlineColor;
             if (font.Values.Underline is null)
                 font.Values.Underline = refFont.Values.Underline;
 

@@ -83,6 +83,10 @@ namespace MigraDoc.DocumentObjectModel
             if (Values.Underline is not null && (refFont == null || font.Underline != refFont.Underline))
                 Underline = font.Underline;
 
+            if (!font.Values.UnderlineColor.IsValueNullOrEmpty() &&
+                (refFont == null || !font.UnderlineColor.Equals(refFont.UnderlineColor)))
+                UnderlineColor = font.UnderlineColor;
+
             if (!Values.Color.IsValueNullOrEmpty() && (refFont == null || font.Color.Argb != refFont.Color.Argb))
                 Color = font.Color;
         }
@@ -113,6 +117,9 @@ namespace MigraDoc.DocumentObjectModel
 
             if (font.Values.Underline is not null)
                 Underline = font.Underline;
+
+            if (!font.Values.UnderlineColor.IsValueNullOrEmpty())
+                UnderlineColor = font.UnderlineColor;
 
             if (!font.Values.Color.IsValueNullOrEmpty())
                 Color = font.Color;
@@ -163,6 +170,16 @@ namespace MigraDoc.DocumentObjectModel
         {
             get => Values.Underline ?? Underline.None;
             set => Values.Underline = value;
+        }
+
+        /// <summary>
+        /// Gets or sets the underline color. An empty value inherits the underline color;
+        /// if none is inherited, the underline uses the text color.
+        /// </summary>
+        public Color UnderlineColor
+        {
+            get => Values.UnderlineColor ?? Color.Empty;
+            set => Values.UnderlineColor = value;
         }
 
         /// <summary>
@@ -244,6 +261,8 @@ namespace MigraDoc.DocumentObjectModel
                 fp |= FontProperties.Italic;
             if (Values.Underline is not null)
                 fp |= FontProperties.Underline;
+            if (!Values.UnderlineColor.IsValueNullOrEmpty())
+                fp |= FontProperties.UnderlineColor;
             if (!Values.Color.IsValueNullOrEmpty())
                 fp |= FontProperties.Color;
             if (Values.Superscript is not null)
@@ -324,6 +343,9 @@ namespace MigraDoc.DocumentObjectModel
                 if (Values.Underline is not null)
                     serializer.WriteSimpleAttribute("Underline", Underline);
 
+                if (!Values.UnderlineColor.IsValueNullOrEmpty())
+                    serializer.WriteSimpleAttribute("UnderlineColor", UnderlineColor);
+
                 if (Values.Superscript is not null)
                     serializer.WriteSimpleAttribute("Superscript", Superscript);
 
@@ -360,6 +382,10 @@ namespace MigraDoc.DocumentObjectModel
 
                 if (Values.Underline is not null && (font == null || Underline != font.Underline || font.Values.Underline is null))
                     serializer.WriteSimpleAttribute("Underline", Underline);
+
+                if (!Values.UnderlineColor.IsValueNullOrEmpty() &&
+                    (font == null || !UnderlineColor.Equals(font.UnderlineColor)))
+                    serializer.WriteSimpleAttribute("UnderlineColor", UnderlineColor);
 
                 if (Values.Superscript is not null && (font == null || Superscript != font.Superscript || font.Values.Superscript is null))
                     serializer.WriteSimpleAttribute("Superscript", Superscript);
@@ -422,6 +448,14 @@ namespace MigraDoc.DocumentObjectModel
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public Underline? Underline { get; set; }
+
+            /// <summary>Explicit underline color, independent of text color.</summary>
+            public Color? UnderlineColor
+            {
+                get => _underlineColor;
+                set => _underlineColor = DocumentObjectModel.Color.MakeNullIfEmpty(value);
+            }
+            Color? _underlineColor;
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.

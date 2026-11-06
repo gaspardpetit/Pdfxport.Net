@@ -38,6 +38,7 @@ namespace MigraDoc.RtfRendering
             Translate("Underline", "ul");
             TranslateBool("Italic", "i", "i0", false);
             Translate("Color", "cf");
+            Translate("UnderlineColor", "ulc");
 
             var objectSub = _font.Values.Subscript;
             if (objectSub != null && (bool)objectSub)

@@ -3588,17 +3588,18 @@ namespace MigraDoc.Rendering
             if (underlineType == Underline.Words && !isWord)
                 return null;
 
+            var underlineColor = font.UnderlineColor.IsEmpty ? font.Color : font.UnderlineColor;
             var underlineWidth = font.Size.Point * (strokeWidthFactor ??
                 _documentRenderer.UnderlineStrokeWidthFactor ?? 1.0 / 16);
 #if noCMYK
-            XPen pen = new XPen(XColor.FromArgb(font.Color.Argb), underlineWidth);
+            XPen pen = new XPen(XColor.FromArgb(underlineColor.Argb), underlineWidth);
 #else
             Debug.Assert(_paragraph.Document != null, "_paragraph.Document != null");
 #if PSGFX
-            var xxx = ColorHelper.ToXColor(font.Color, _paragraph.Document.UseCmykColor);
+            var xxx = ColorHelper.ToXColor(underlineColor, _paragraph.Document.UseCmykColor);
             var pen = new XPen(new XSolidBrush(xxx), (float_)underlineWidth);
 #else
-            var pen = new XPen(ColorHelper.ToXColor(font.Color, _paragraph.Document.UseCmykColor), underlineWidth);
+            var pen = new XPen(ColorHelper.ToXColor(underlineColor, _paragraph.Document.UseCmykColor), underlineWidth);
 #endif
 #endif
             if (!isWord && underlineType == Underline.Single && strokeWidthFactor == null &&
