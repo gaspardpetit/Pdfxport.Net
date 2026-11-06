@@ -64,6 +64,61 @@ public class ThickUnderlineTests : IDisposable
         Operators(renderer).Count(op => op.OpCode.Name == "m").Should().Be(count);
     }
 
+    [Theory]
+    [InlineData("blank")]
+    [InlineData("space")]
+    [InlineData("tab")]
+    public void SingleUnderlinedWhitespaceDoesNotInheritThickStroke(string whitespace)
+    {
+        var document = CreateDocument();
+        var paragraph = document.AddSection().AddParagraph();
+        paragraph.AddFormattedText("Thick").Font.Underline = Underline.Thick;
+        var single = paragraph.AddFormattedText();
+        single.Font.Underline = Underline.Single;
+        if (whitespace == "tab")
+            single.AddTab();
+        else if (whitespace == "space")
+            single.AddSpace(1);
+        else
+            single.AddText(" ");
+        single.AddText("After");
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.RenderDocument();
+        var operators = Operators(renderer);
+        var starts = operators.Where(op => op.OpCode.Name == "m").ToArray();
+        starts.Should().HaveCount(2);
+        using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200), XGraphicsUnit.Point, XPageDirection.Downwards);
+        var expectedBoundary = N(starts[0].Operands[0]) + measure.MeasureString("Thick", new XFont("Arial", 12)).Width;
+        N(starts[1].Operands[0]).Should().BeApproximately(expectedBoundary, 0.002);
+        operators.Where(op => op.OpCode.Name == "w").Select(op => N(op.Operands[0]))
+            .Should().Equal(1.5, 0.75);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SingleUnderlineWhitespaceStillInheritsPreviousSingleFontWidth(bool equalWidthThickPrefix)
+    {
+        var document = CreateDocument();
+        var paragraph = document.AddSection().AddParagraph();
+        if (equalWidthThickPrefix)
+            paragraph.AddFormattedText("Thick").Font.Underline = Underline.Thick;
+        var large = paragraph.AddFormattedText("Large");
+        large.Font.Size = 24;
+        large.Font.Underline = Underline.Single;
+        var space = paragraph.AddFormattedText();
+        space.Font.Underline = Underline.Single;
+        space.AddSpace(1);
+        var after = paragraph.AddFormattedText("After");
+        after.Font.Underline = Underline.None;
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.RenderDocument();
+        var operators = Operators(renderer);
+        operators.Count(op => op.OpCode.Name == "m").Should().Be(1);
+        operators.Where(op => op.OpCode.Name == "w").Select(op => N(op.Operands[0]))
+            .Should().Equal(1.5);
+    }
+
     [Fact]
     public void AdjacentSingleAndThickRunsHaveDifferentStrokeWidths()
     {
