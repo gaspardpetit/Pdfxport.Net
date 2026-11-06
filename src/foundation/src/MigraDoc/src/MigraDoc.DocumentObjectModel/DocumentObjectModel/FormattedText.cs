@@ -459,6 +459,15 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Gets or sets the underline color. Empty inherits the color or uses the text color.
+        /// </summary>
+        public Color UnderlineColor
+        {
+            get => Font.UnderlineColor;
+            set => Font.UnderlineColor = value;
+        }
+
+        /// <summary>
         /// Gets or sets the color property.
         /// </summary>
         public Color Color
@@ -631,6 +640,16 @@ namespace MigraDoc.DocumentObjectModel
             {
                 get => Font?.Underline;
                 set => Owner.Font.Values.Underline = value;
+            }
+
+            /// <summary>
+            /// Gets or sets the internal nullable implementation value of the enclosing document object property.
+            /// See enclosing document object class for documentation of this property.
+            /// </summary>
+            public Color? UnderlineColor
+            {
+                get => Font?.UnderlineColor;
+                set => Owner.Font.Values.UnderlineColor = DocumentObjectModel.Color.MakeNullIfEmpty(value);
             }
 
             /// <summary>
