@@ -141,7 +141,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                 var breakBefore = text?.HasExplicitBreakBefore == true;
                 Text NewText(string value)
                 {
-                    var result = new Text(value) { HasExplicitBreakBefore = breakBefore };
+                    var result = new Text(value) { HasExplicitBreakBefore = breakBefore, Tag = text?.Tag };
                     breakBefore = false;
                     return result;
                 }
