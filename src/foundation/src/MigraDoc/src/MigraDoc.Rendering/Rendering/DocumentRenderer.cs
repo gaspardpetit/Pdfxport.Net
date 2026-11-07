@@ -308,67 +308,85 @@ namespace MigraDoc.Rendering
             if (_formattedDocument?.IsEmptyPage(page) ?? NRT.ThrowOnNull<bool>("FormattedDocument is null because document was not prepared yet"))
                 return;
 
-            var fieldInfos = _formattedDocument.GetFieldInfos(page);
-
-            fieldInfos.Date = PrintDate ?? DateTimeOffset.Now;
-
-            if ((options & PageRenderOptions.RenderHeader) == PageRenderOptions.RenderHeader)
-                RenderHeader(gfx, page);
-            if ((options & PageRenderOptions.RenderFooter) == PageRenderOptions.RenderFooter)
-                RenderFooter(gfx, page);
-
-            if ((options & PageRenderOptions.RenderContent) == PageRenderOptions.RenderContent)
+            var previousPage = CurrentRenderPage;
+            CurrentRenderPage = page;
+            try
             {
-                if (PaintBehindContent is { } paintBehindContent)
+                var fieldInfos = _formattedDocument.GetFieldInfos(page);
+
+                fieldInfos.Date = PrintDate ?? DateTimeOffset.Now;
+
+                if ((options & PageRenderOptions.RenderHeader) == PageRenderOptions.RenderHeader)
+                    RenderHeader(gfx, page);
+                if ((options & PageRenderOptions.RenderFooter) == PageRenderOptions.RenderFooter)
+                    RenderFooter(gfx, page);
+
+                if ((options & PageRenderOptions.RenderContent) == PageRenderOptions.RenderContent)
                 {
-                    var state = gfx.Save();
-                    try
+                    if (PaintBehindContent is { } paintBehindContent)
                     {
-                        paintBehindContent(gfx, page);
-                    }
-                    finally
-                    {
-                        gfx.Restore(state);
-                    }
-                }
-                var renderInfos = _formattedDocument.GetRenderInfos(page);
-                if (renderInfos != null)
-                {
-                    int count = renderInfos.Length;
-                    if (renderInfos.Any(info => info.DocumentObject is TextFrame frame &&
-                            frame.Values.Layer is not null) || TextFrameBehindContent is not null)
-                    {
-                        var layers = new TextFrameLayer[count];
-                        for (int idx = 0; idx < count; idx++)
+                        var state = gfx.Save();
+                        try
                         {
-                            if (renderInfos[idx].DocumentObject is TextFrame frame)
-                                layers[idx] = frame.Values.Layer ??
-                                    (TextFrameBehindContent?.Invoke(frame) == true
-                                        ? TextFrameLayer.BehindContent
-                                        : TextFrameLayer.Normal);
+                            paintBehindContent(gfx, page);
                         }
-                        for (int idx = 0; idx < count; idx++)
-                            if (layers[idx] == TextFrameLayer.BehindContent)
-                                Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
-                        for (int idx = 0; idx < count; idx++)
-                            if (layers[idx] == TextFrameLayer.Normal)
-                                Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
-                        for (int idx = 0; idx < count; idx++)
-                            if (layers[idx] == TextFrameLayer.AboveContent)
-                                Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
-                    }
-                    else
-                    {
-                        for (int idx = 0; idx < count; idx++)
+                        finally
                         {
-                            var renderInfo = renderInfos[idx];
-                            var renderer = Renderer.Create(gfx, this, renderInfo, fieldInfos);
-                            renderer.Render();
+                            gfx.Restore(state);
+                        }
+                    }
+                    var renderInfos = _formattedDocument.GetRenderInfos(page);
+                    if (renderInfos != null)
+                    {
+                        int count = renderInfos.Length;
+                        if (renderInfos.Any(info => info.DocumentObject is TextFrame frame &&
+                                frame.Values.Layer is not null) || TextFrameBehindContent is not null)
+                        {
+                            var layers = new TextFrameLayer[count];
+                            for (int idx = 0; idx < count; idx++)
+                            {
+                                if (renderInfos[idx].DocumentObject is TextFrame frame)
+                                    layers[idx] = frame.Values.Layer ??
+                                        (TextFrameBehindContent?.Invoke(frame) == true
+                                            ? TextFrameLayer.BehindContent
+                                            : TextFrameLayer.Normal);
+                            }
+                            for (int idx = 0; idx < count; idx++)
+                                if (layers[idx] == TextFrameLayer.BehindContent)
+                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                            for (int idx = 0; idx < count; idx++)
+                                if (layers[idx] == TextFrameLayer.Normal)
+                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                            for (int idx = 0; idx < count; idx++)
+                                if (layers[idx] == TextFrameLayer.AboveContent)
+                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                        }
+                        else
+                        {
+                            for (int idx = 0; idx < count; idx++)
+                            {
+                                var renderInfo = renderInfos[idx];
+                                var renderer = Renderer.Create(gfx, this, renderInfo, fieldInfos);
+                                renderer.Render();
+                            }
                         }
                     }
                 }
             }
+            finally
+            {
+                CurrentRenderPage = previousPage;
+            }
         }
+
+        /// <summary>
+        /// Gets the one-based physical page currently being painted by RenderPage,
+        /// or zero outside page rendering. Displayed page-number restarts do not
+        /// affect this value. Nested calls restore the enclosing page, including
+        /// when rendering throws. Automatically inserted blank pages do not establish
+        /// a rendering context. Object rendering alone does not change this value.
+        /// </summary>
+        public int CurrentRenderPage { get; private set; }
 
         /// <summary>
         /// Gets the document objects that get rendered on the specified page.
