@@ -28,6 +28,17 @@ namespace MigraDoc.Rendering
     /// <param name="document">The MigraDoc document to render.</param>
     public class DocumentRenderer(Document document)
     {
+        /// <summary>
+        /// Reserves additional body space in points above the usable page bottom,
+        /// after footer clearance. The callback receives the one-based physical page
+        /// number, regardless of displayed page numbering. Null or zero reserves nothing.
+        /// Results must be finite, nonnegative, and leave positive body height.
+        /// The callback can be evaluated repeatedly while formatting and must return
+        /// a stable value for each page during a preparation pass. Prepare again after
+        /// changing reservations. Footer placement is unchanged.
+        /// </summary>
+        public Func<int, double>? BodyBottomReservation { get; set; }
+
         /// <summary>Optional underline stroke width as a fraction of font size. The default is 1/16.</summary>
         public double? UnderlineStrokeWidthFactor { get; set; }
 
@@ -504,6 +515,26 @@ namespace MigraDoc.Rendering
             outline.Left = position.X;
             outline.Top = position.Y;
             return outline;
+        }
+
+        /// <summary>
+        /// Measures speculative content without advancing the document's list sequence.
+        /// </summary>
+        internal void PreserveListNumbering(Action format)
+        {
+            var previousListInfo = _previousListInfo;
+            var previousListNumbers = new Dictionary<ListType, int>(_previousListNumbers);
+            try
+            {
+                format();
+            }
+            finally
+            {
+                _previousListInfo = previousListInfo;
+                _previousListNumbers.Clear();
+                foreach (var entry in previousListNumbers)
+                    _previousListNumbers.Add(entry.Key, entry.Value);
+            }
         }
 
         internal int NextListNumber(ListInfo listInfo)

@@ -183,8 +183,26 @@ namespace MigraDoc.Rendering
             }
         }
 
+        // Header/footer shapes use page margins, independently of body exclusions.
+        internal void FormatHeaderFooter(int page, Action format)
+        {
+            var previousPage = _headerFooterPage;
+            _headerFooterPage = page;
+            try
+            {
+                format();
+            }
+            finally
+            {
+                _headerFooterPage = previousPage;
+            }
+        }
+
+        int? _headerFooterPage;
+
         Rectangle CalcContentRect(int page)
         {
+            page = _headerFooterPage ?? page;
             var pageSetup = _currentSection.PageSetup;
             XUnitPt width = pageSetup.PageWidth.Point;
 
@@ -195,27 +213,60 @@ namespace MigraDoc.Rendering
 
             height -= pageSetup.TopMargin.Point;
             height -= pageSetup.BottomMargin.Point;
-            // A bottom-aligned footer can grow above the nominal bottom margin.
-            // Keep body lines out of the area occupied by its formatted content.
-            var pagePosition = _sectionPages == 1 ? PagePosition.First :
-                _shownPageNumber % 2 == 0 ? PagePosition.Even : PagePosition.Odd;
-            var footerPosition = new HeaderFooterPosition(_sectionNumber, pagePosition);
-            if (_formattedFooters.TryGetValue(footerPosition, out var formattedFooter))
+            if (_headerFooterPage == null)
             {
-                // Only flowing items are moved by footer bottom alignment.
-                // Empty footers and absolute-positioned shapes reserve no body space.
-                var footerInfos = formattedFooter.GetRenderInfos();
-                var flowingInfos = footerInfos
-                    .Where(info => info.LayoutInfo.Floating != Floating.None).ToArray();
-                if (flowingInfos.Length > 0)
+                // A bottom-aligned footer can grow above the nominal bottom margin.
+                // Keep body lines out of the area occupied by its formatted content.
+                var pageOffset = page - _currentPage;
+                var shownPageNumber = _shownPageNumber + pageOffset;
+                var pagePosition = _sectionPages + pageOffset == 1 ? PagePosition.First :
+                    shownPageNumber % 2 == 0 ? PagePosition.Even : PagePosition.Odd;
+                var footerPosition = new HeaderFooterPosition(_sectionNumber, pagePosition);
+                _formattedFooters.TryGetValue(footerPosition, out var formattedFooter);
+                if (pageOffset != 0)
                 {
-                    // Match RenderFooter's offset, including absolute items in its total height.
-                    var alignedTop = pageSetup.PageHeight.Point - pageSetup.FooterDistance.Point -
-                        RenderInfo.GetTotalHeight(footerInfos);
-                    var offsetY = footerInfos[0].LayoutInfo.ContentArea.Y.Point - alignedTop;
-                    var footerTop = flowingInfos.Min(info => info.LayoutInfo.ContentArea.Y.Point) - offsetY;
-                    height = Math.Min(height, footerTop - pageSetup.TopMargin.Point);
+                    // Lookahead may reach a footer variant that has not been formatted yet.
+                    // Use target-page fields without caching speculative layout or changing current state.
+                    var footer = ChooseHeaderFooter(_currentSection.Values.Footers, pagePosition, shownPageNumber);
+                    formattedFooter = null;
+                    if (footer != null)
+                    {
+                        var fields = new FieldInfos(new Dictionary<string, FieldInfos.BookmarkInfo>(_bookmarks))
+                        {
+                            PhysicalPageNr = page,
+                            DisplayPageNr = shownPageNumber,
+                            Section = _sectionNumber
+                        };
+                        formattedFooter = new FormattedHeaderFooter(footer, _documentRenderer, fields)
+                        {
+                            ContentRect = GetFooterArea(_currentSection, page)
+                        };
+                        _documentRenderer.PreserveListNumbering(() => formattedFooter.Format(_gfx));
+                    }
                 }
+                if (formattedFooter != null)
+                {
+                    // Only flowing items are moved by footer bottom alignment.
+                    // Empty footers and absolute-positioned shapes reserve no body space.
+                    var footerInfos = formattedFooter.GetRenderInfos();
+                    var flowingInfos = footerInfos
+                        .Where(info => info.LayoutInfo.Floating != Floating.None).ToArray();
+                    if (flowingInfos.Length > 0)
+                    {
+                        // Match RenderFooter's offset, including absolute items in its total height.
+                        var alignedTop = pageSetup.PageHeight.Point - pageSetup.FooterDistance.Point -
+                            RenderInfo.GetTotalHeight(footerInfos);
+                        var offsetY = footerInfos[0].LayoutInfo.ContentArea.Y.Point - alignedTop;
+                        var footerTop = flowingInfos.Min(info => info.LayoutInfo.ContentArea.Y.Point) - offsetY;
+                        height = Math.Min(height, footerTop - pageSetup.TopMargin.Point);
+                    }
+                }
+                var reservation = _documentRenderer.BodyBottomReservation?.Invoke(page) ?? 0;
+                if (double.IsNaN(reservation) || double.IsInfinity(reservation) || reservation < 0 ||
+                    (reservation > 0 && reservation >= height.Point))
+                    throw new ArgumentOutOfRangeException(nameof(DocumentRenderer.BodyBottomReservation),
+                        reservation, "A reservation must be finite, nonnegative, and leave positive body height.");
+                height -= reservation;
             }
             XUnitPt x;
             XUnitPt y = pageSetup.TopMargin.Point;
@@ -352,7 +403,7 @@ namespace MigraDoc.Rendering
             return new Rectangle(xPos, yPos, width, height);
         }
 
-        HeaderFooter? ChooseHeaderFooter(HeadersFooters? hfs, PagePosition pagePos)
+        HeaderFooter? ChooseHeaderFooter(HeadersFooters? hfs, PagePosition pagePos, int? shownPageNumber = null)
         {
             if (hfs == null)
                 return null;
@@ -364,7 +415,7 @@ namespace MigraDoc.Rendering
                 if (pageSetup.DifferentFirstPageHeaderFooter)
                     return hfs.Values.FirstPage;
             }
-            if (pagePos == PagePosition.Even || _shownPageNumber/*_currentPage*/ % 2 == 0)
+            if (pagePos == PagePosition.Even || (shownPageNumber ?? _shownPageNumber) % 2 == 0)
             {
                 if (pageSetup.OddAndEvenPagesHeaderFooter)
                     return hfs.Values.EvenPage;
@@ -469,8 +520,8 @@ namespace MigraDoc.Rendering
 
             align = align switch
             {
-                ElementAlignment.Inside => _currentPage % 2 == 0 ? ElementAlignment.Far : ElementAlignment.Near,
-                ElementAlignment.Outside => _currentPage % 2 == 0 ? ElementAlignment.Near : ElementAlignment.Far,
+                ElementAlignment.Inside => (_headerFooterPage ?? _currentPage) % 2 == 0 ? ElementAlignment.Far : ElementAlignment.Near,
+                ElementAlignment.Outside => (_headerFooterPage ?? _currentPage) % 2 == 0 ? ElementAlignment.Near : ElementAlignment.Far,
                 _ => align
             };
             return align;
