@@ -380,11 +380,12 @@ namespace MigraDoc.Rendering
         }
 
         /// <summary>
-        /// Gets the one-based physical page currently being painted by RenderPage,
+        /// Gets the one-based physical page currently being painted by RenderPage
+        /// or RenderPreparedObject,
         /// or zero outside page rendering. Displayed page-number restarts do not
         /// affect this value. Nested calls restore the enclosing page, including
         /// when rendering throws. Automatically inserted blank pages do not establish
-        /// a rendering context. Object rendering alone does not change this value.
+        /// a rendering context. RenderObject does not change this value.
         /// </summary>
         public int CurrentRenderPage { get; private set; }
 
@@ -497,6 +498,56 @@ namespace MigraDoc.Rendering
 
             renderer = Renderer.Create(graphics, this, renderer.RenderInfo, fieldInfos);
             renderer.Render();
+        }
+
+        /// <summary>
+        /// Paints a top-level body, header, or footer fragment from the current prepared
+        /// layout without reformatting it. The fragment must belong to the specified
+        /// one-based physical page of this renderer's current preparation.
+        /// </summary>
+        /// <param name="graphics">The graphics object to paint on.</param>
+        /// <param name="renderInfo">A fragment returned by this renderer's page/header/footer render-info accessors.</param>
+        /// <param name="page">The physical page supplying field context.</param>
+        /// <param name="verticalOffset">A finite offset in points, positive downward, applied to the entire fragment.</param>
+        /// <remarks>
+        /// Coordinates are the stored layout coordinates, before footer bottom alignment.
+        /// Graphics state and CurrentRenderPage are restored even when painting throws.
+        /// </remarks>
+        public void RenderPreparedObject(XGraphics graphics, RenderInfo renderInfo, int page,
+            XUnitPt verticalOffset)
+        {
+            if (graphics == null)
+                throw new ArgumentNullException(nameof(graphics));
+            if (renderInfo == null)
+                throw new ArgumentNullException(nameof(renderInfo));
+            if (double.IsNaN(verticalOffset.Point) || double.IsInfinity(verticalOffset.Point))
+                throw new ArgumentOutOfRangeException(nameof(verticalOffset));
+            var formattedDocument = _formattedDocument ??
+                throw new InvalidOperationException("Prepare the document before painting a prepared object.");
+            if (page < 1 || page > formattedDocument.PageCount)
+                throw new ArgumentOutOfRangeException(nameof(page));
+            if (formattedDocument.IsEmptyPage(page))
+                throw new ArgumentException("An automatically inserted blank page has no prepared objects.", nameof(page));
+            if (!(GetRenderInfoFromPage(page)?.Contains(renderInfo) ?? false) &&
+                !GetHeaderRenderInfos(page).Contains(renderInfo) && !GetFooterRenderInfos(page).Contains(renderInfo))
+                throw new ArgumentException("The fragment does not belong to this renderer's prepared page.", nameof(renderInfo));
+
+            var fields = formattedDocument.GetFieldInfos(page).CreateSnapshot();
+            fields.Date = PrintDate ?? DateTimeOffset.Now;
+            var state = graphics.Save();
+            var previousPage = CurrentRenderPage;
+            CurrentRenderPage = page;
+            try
+            {
+                if (verticalOffset != 0)
+                    graphics.TranslateTransform(0, verticalOffset.Point);
+                Renderer.Create(graphics, this, renderInfo, fields).Render();
+            }
+            finally
+            {
+                CurrentRenderPage = previousPage;
+                graphics.Restore(state);
+            }
         }
 
         /// <summary>
