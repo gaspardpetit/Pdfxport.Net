@@ -458,9 +458,18 @@ namespace MigraDoc.Rendering
         /// <param name="yPosition">The top position of the rendered object.</param>
         /// <param name="width">The width.</param>
         /// <param name="documentObject">The document object to render. Can be paragraph, table, or shape.</param>
-        /// <remarks>This function is still in an experimental state.</remarks>
+        /// <remarks>
+        /// During RenderPage or RenderPreparedObject, uses the active physical page's
+        /// isolated field context. Outside painting, renders without page context as before.
+        /// Use the explicit-page overload to select another page. This function is still experimental.
+        /// </remarks>
         public void RenderObject(XGraphics graphics, XUnitPt xPosition, XUnitPt yPosition, XUnitPt width, DocumentObject documentObject)
-            => RenderObjectCore(graphics, xPosition, yPosition, width, documentObject, null);
+        {
+            if (CurrentRenderPage > 0)
+                RenderObject(graphics, xPosition, yPosition, width, documentObject, CurrentRenderPage);
+            else
+                RenderObjectCore(graphics, xPosition, yPosition, width, documentObject, null);
+        }
 
         /// <summary>
         /// Renders an object using the field context of a prepared physical page.
