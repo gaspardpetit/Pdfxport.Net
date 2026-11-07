@@ -23,7 +23,8 @@ namespace MigraDoc.Rendering
             _gfx = gfx;
             _isFirstArea = true;
             _formatter = new TopDownFormatter(this, _documentRenderer, _headerFooter.Elements);
-            _formatter.FormatOnAreas(gfx, false);
+            _documentRenderer.FormattedDocument.FormatHeaderFooter(_fieldInfos.PhysicalPageNr,
+                () => _formatter.FormatOnAreas(gfx, false));
             _contentHeight = RenderInfo.GetTotalHeight(GetRenderInfos());
         }
 

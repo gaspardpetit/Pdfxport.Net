@@ -4,6 +4,7 @@
 using FluentAssertions;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.Rendering;
+using MigraDoc.DocumentObjectModel.Shapes;
 using PdfSharp.Diagnostics;
 using PdfSharp.Fonts;
 using PdfSharp.Quality;
@@ -160,6 +161,12 @@ public class BodyBottomReservationTests : IDisposable
             footer.Format.ListInfo.ListType = listType;
             footer.Format.ListInfo.ContinuePreviousList = continueFooterList;
         }
+        var probeFrame = section.Footers.Primary.AddTextFrame();
+        probeFrame.RelativeVertical = RelativeVertical.Margin;
+        probeFrame.Top = ShapePosition.Bottom;
+        probeFrame.Height = Unit.FromPoint(10);
+        probeFrame.Width = Unit.FromPoint(100);
+        probeFrame.AddParagraph("ProbeOnlyFrame");
         var paragraph = section.AddParagraph();
         paragraph.Format.WidowControl = true;
         for (var index = 0; index < 7; index++)
@@ -182,6 +189,38 @@ public class BodyBottomReservationTests : IDisposable
         var expected = listType == ListType.NumberList1 ? "1." : listType == ListType.NumberList2 ? "a." : "i.";
         texts.Should().Contain(expected);
         texts.Should().NotContain(text => text.StartsWith("ProbeOnly", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void MarginAlignedHeaderFooterFramesIgnoreBodyReservation(bool header, bool centered)
+    {
+        (double Y, int BodyCount) Render(double reservation)
+        {
+            var document = CreateDocument(14);
+            var section = document.LastSection;
+            var frames = header ? section.Headers.Primary : section.Footers.Primary;
+            var frame = frames.AddTextFrame();
+            frame.RelativeVertical = RelativeVertical.Margin;
+            frame.Top = centered ? ShapePosition.Center : ShapePosition.Bottom;
+            frame.Height = Unit.FromPoint(10);
+            frame.Width = Unit.FromPoint(100);
+            frame.AddParagraph("FixedFrame");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.BodyBottomReservation = _ => reservation;
+            renderer.RenderDocument();
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            stream.Text.MoveAndGetNext(info => info.Text == "FixedFrame", true, out var text).Should().BeTrue();
+            return (text!.Y, BodyTexts(renderer, 1).Length);
+        }
+        var baseline = Render(0);
+        var reserved = Render(20);
+        reserved.Y.Should().Be(baseline.Y);
+        baseline.BodyCount.Should().Be(12);
+        reserved.BodyCount.Should().Be(10);
     }
 
     static string[] BodyTexts(PdfDocumentRenderer renderer, int page)
