@@ -429,7 +429,7 @@ namespace MigraDoc.Rendering
                 throw new ArgumentOutOfRangeException(nameof(page));
             if (formattedDocument.IsEmptyPage(page))
                 throw new ArgumentException("An automatically inserted blank page has no field context.", nameof(page));
-            var fieldInfos = formattedDocument.GetFieldInfos(page);
+            var fieldInfos = formattedDocument.GetFieldInfos(page).CreateSnapshot();
             fieldInfos.Date = PrintDate ?? DateTimeOffset.Now;
             RenderObjectCore(graphics, xPosition, yPosition, width, documentObject, fieldInfos);
         }

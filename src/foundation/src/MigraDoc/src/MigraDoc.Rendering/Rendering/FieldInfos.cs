@@ -13,6 +13,20 @@ namespace MigraDoc.Rendering
             _bookmarks = bookmarks;
         }
 
+        /// <summary>
+        /// Copies page fields and bookmark locations for independent object formatting.
+        /// </summary>
+        internal FieldInfos CreateSnapshot()
+            => new(new Dictionary<string, BookmarkInfo>(_bookmarks))
+            {
+                DisplayPageNr = DisplayPageNr,
+                PhysicalPageNr = PhysicalPageNr,
+                Section = Section,
+                SectionPages = SectionPages,
+                NumPages = NumPages,
+                Date = Date
+            };
+
         internal void AddBookmark(string name)
         {
             if (PhysicalPageNr <= 0)

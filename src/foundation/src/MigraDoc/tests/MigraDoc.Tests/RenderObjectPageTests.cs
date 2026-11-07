@@ -115,6 +115,56 @@ public class RenderObjectPageTests : IDisposable
         Texts(pdf).Should().Equal("Legacy");
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ReformattingBookmarkObjectDoesNotMovePreparedReferences(int objectKind)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        var section = document.AddSection();
+        section.PageSetup.StartingNumber = 9;
+        DocumentObject source;
+        Paragraph target;
+        if (objectKind == 1)
+        {
+            var frame = section.AddTextFrame();
+            frame.Width = Unit.FromPoint(200);
+            frame.Height = Unit.FromPoint(40);
+            target = frame.AddParagraph("Target");
+            source = frame;
+        }
+        else if (objectKind == 2)
+        {
+            var table = section.AddTable();
+            table.AddColumn(Unit.FromPoint(200));
+            target = table.AddRow().Cells[0].AddParagraph("Target");
+            source = table;
+        }
+        else
+            source = target = section.AddParagraph("Target");
+        target.AddBookmark("FixedTarget");
+        section.AddPageBreak();
+        section.AddParagraph("Second");
+        section = document.AddSection();
+        var reference = section.AddParagraph("Reference ");
+        reference.AddPageRefField("FixedTarget");
+        var renderer = new DocumentRenderer(document);
+        renderer.PrepareDocument();
+        using (var moved = new PdfDocument())
+        using (var gfx = XGraphics.FromPdfPage(moved.AddPage()))
+            renderer.RenderObject(gfx, 20, 30, 400, source, 2);
+        using var objectOutput = new PdfDocument();
+        using (var gfx = XGraphics.FromPdfPage(objectOutput.AddPage()))
+            renderer.RenderObject(gfx, 20, 30, 400, reference, 3);
+        Texts(objectOutput).Should().Equal("Reference", "9");
+        using var pageOutput = new PdfDocument();
+        using (var gfx = XGraphics.FromPdfPage(pageOutput.AddPage()))
+            renderer.RenderPage(gfx, 3);
+        Texts(pageOutput).Should().Equal("Reference", "9");
+    }
+
     static string[] Texts(PdfDocument document)
     {
         var stream = PdfFileHelper.GetPageContentStreamEnumerator(document, 0);
