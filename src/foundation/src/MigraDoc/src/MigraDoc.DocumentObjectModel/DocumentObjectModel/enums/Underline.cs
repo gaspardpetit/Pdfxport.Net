@@ -53,8 +53,12 @@ namespace MigraDoc.DocumentObjectModel
         /// </summary>
         Double = 8,
 
+        /// <summary>
+        /// A continuous curved underline.
+        /// </summary>
+        Wavy = 9,
+
         /* --- unsupported ---
-          Wavy            = 11,
           WavyHeavy       = 27,
           DottedHeavy     = 20,
           DashHeavy       = 23,
