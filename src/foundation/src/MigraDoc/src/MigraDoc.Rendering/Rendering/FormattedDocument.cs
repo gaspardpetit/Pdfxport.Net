@@ -197,10 +197,34 @@ namespace MigraDoc.Rendering
             height -= pageSetup.BottomMargin.Point;
             // A bottom-aligned footer can grow above the nominal bottom margin.
             // Keep body lines out of the area occupied by its formatted content.
-            var pagePosition = _sectionPages == 1 ? PagePosition.First :
-                _shownPageNumber % 2 == 0 ? PagePosition.Even : PagePosition.Odd;
+            var pageOffset = page - _currentPage;
+            var shownPageNumber = _shownPageNumber + pageOffset;
+            var pagePosition = _sectionPages + pageOffset == 1 ? PagePosition.First :
+                shownPageNumber % 2 == 0 ? PagePosition.Even : PagePosition.Odd;
             var footerPosition = new HeaderFooterPosition(_sectionNumber, pagePosition);
-            if (_formattedFooters.TryGetValue(footerPosition, out var formattedFooter))
+            _formattedFooters.TryGetValue(footerPosition, out var formattedFooter);
+            if (pageOffset != 0)
+            {
+                // Lookahead may reach a footer variant that has not been formatted yet.
+                // Use target-page fields without caching speculative layout or changing current state.
+                var footer = ChooseHeaderFooter(_currentSection.Values.Footers, pagePosition, shownPageNumber);
+                formattedFooter = null;
+                if (footer != null)
+                {
+                    var fields = new FieldInfos(new Dictionary<string, FieldInfos.BookmarkInfo>(_bookmarks))
+                    {
+                        PhysicalPageNr = page,
+                        DisplayPageNr = shownPageNumber,
+                        Section = _sectionNumber
+                    };
+                    formattedFooter = new FormattedHeaderFooter(footer, _documentRenderer, fields)
+                    {
+                        ContentRect = GetFooterArea(_currentSection, page)
+                    };
+                    formattedFooter.Format(_gfx);
+                }
+            }
+            if (formattedFooter != null)
             {
                 // Only flowing items are moved by footer bottom alignment.
                 // Empty footers and absolute-positioned shapes reserve no body space.
@@ -358,7 +382,7 @@ namespace MigraDoc.Rendering
             return new Rectangle(xPos, yPos, width, height);
         }
 
-        HeaderFooter? ChooseHeaderFooter(HeadersFooters? hfs, PagePosition pagePos)
+        HeaderFooter? ChooseHeaderFooter(HeadersFooters? hfs, PagePosition pagePos, int? shownPageNumber = null)
         {
             if (hfs == null)
                 return null;
@@ -370,7 +394,7 @@ namespace MigraDoc.Rendering
                 if (pageSetup.DifferentFirstPageHeaderFooter)
                     return hfs.Values.FirstPage;
             }
-            if (pagePos == PagePosition.Even || _shownPageNumber/*_currentPage*/ % 2 == 0)
+            if (pagePos == PagePosition.Even || (shownPageNumber ?? _shownPageNumber) % 2 == 0)
             {
                 if (pageSetup.OddAndEvenPagesHeaderFooter)
                     return hfs.Values.EvenPage;

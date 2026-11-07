@@ -104,6 +104,41 @@ public class BodyBottomReservationTests : IDisposable
         reserved.FooterY.Should().Be(baseline.FooterY);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void WidowLookaheadUsesTargetFooterWithRestartedNumbering(int startingNumber)
+    {
+        var document = CreateDocument(6);
+        var section = document.LastSection;
+        section.PageSetup.StartingNumber = startingNumber;
+        section.PageSetup.DifferentFirstPageHeaderFooter = true;
+        section.PageSetup.OddAndEvenPagesHeaderFooter = true;
+        var tallFooter = startingNumber == 1 ? section.Footers.EvenPage : section.Footers.Primary;
+        for (var index = 0; index < 6; index++)
+            tallFooter.AddParagraph("Footer" + index);
+        var paragraph = section.AddParagraph();
+        paragraph.Format.WidowControl = true;
+        for (var index = 0; index < 7; index++)
+        {
+            if (index > 0) paragraph.AddLineBreak();
+            paragraph.AddText("Body" + (7 + index));
+        }
+        var seen = new List<int>();
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.BodyBottomReservation = page =>
+        {
+            seen.Add(page);
+            return page == 3 ? 80 : 0;
+        };
+        renderer.RenderDocument();
+        seen.Should().Contain(3);
+        renderer.PageCount.Should().Be(2);
+        Enumerable.Range(1, 2).Select(page => BodyTexts(renderer, page).Length).Should().Equal(11, 2);
+        Enumerable.Range(1, 2).SelectMany(page => BodyTexts(renderer, page))
+            .Should().Equal(Enumerable.Range(1, 13).Select(index => "Body" + index));
+    }
+
     static string[] BodyTexts(PdfDocumentRenderer renderer, int page)
     {
         var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, page - 1);
