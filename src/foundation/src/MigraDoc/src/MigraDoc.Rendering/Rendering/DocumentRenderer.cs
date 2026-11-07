@@ -405,6 +405,37 @@ namespace MigraDoc.Rendering
         /// <param name="documentObject">The document object to render. Can be paragraph, table, or shape.</param>
         /// <remarks>This function is still in an experimental state.</remarks>
         public void RenderObject(XGraphics graphics, XUnitPt xPosition, XUnitPt yPosition, XUnitPt width, DocumentObject documentObject)
+            => RenderObjectCore(graphics, xPosition, yPosition, width, documentObject, null);
+
+        /// <summary>
+        /// Renders an object using the field context of a prepared physical page.
+        /// </summary>
+        /// <param name="graphics">The graphics object to render on.</param>
+        /// <param name="xPosition">The left position of the rendered object.</param>
+        /// <param name="yPosition">The top position of the rendered object.</param>
+        /// <param name="width">The available width.</param>
+        /// <param name="documentObject">The paragraph, table, or shape to render.</param>
+        /// <param name="page">The one-based physical page supplying page, section, bookmark, and date fields.</param>
+        /// <remarks>
+        /// Call PrepareDocument first. Automatically inserted blank pages have no field context.
+        /// The object is formatted anew at the supplied position and width rather than reusing its prepared layout.
+        /// </remarks>
+        public void RenderObject(XGraphics graphics, XUnitPt xPosition, XUnitPt yPosition, XUnitPt width,
+            DocumentObject documentObject, int page)
+        {
+            var formattedDocument = _formattedDocument ??
+                throw new InvalidOperationException("Prepare the document before rendering an object with a page context.");
+            if (page < 1 || page > formattedDocument.PageCount)
+                throw new ArgumentOutOfRangeException(nameof(page));
+            if (formattedDocument.IsEmptyPage(page))
+                throw new ArgumentException("An automatically inserted blank page has no field context.", nameof(page));
+            var fieldInfos = formattedDocument.GetFieldInfos(page).CreateSnapshot();
+            fieldInfos.Date = PrintDate ?? DateTimeOffset.Now;
+            RenderObjectCore(graphics, xPosition, yPosition, width, documentObject, fieldInfos);
+        }
+
+        void RenderObjectCore(XGraphics graphics, XUnitPt xPosition, XUnitPt yPosition, XUnitPt width,
+            DocumentObject documentObject, FieldInfos? fieldInfos)
         {
             if (graphics == null)
                 throw new ArgumentNullException(nameof(graphics));
@@ -417,14 +448,14 @@ namespace MigraDoc.Rendering
                 documentObject is not Paragraph)
                 throw new ArgumentException(MdPdfMsgs.ObjectNotRenderable(documentObject.GetType().Name).Message);
 
-            var renderer = Renderer.Create(graphics, this, documentObject, null);
+            var renderer = Renderer.Create(graphics, this, documentObject, fieldInfos);
             renderer!.Format(new Rectangle(xPosition, yPosition, width, Single.MaxValue), null);
 
             RenderInfo renderInfo = renderer.RenderInfo;
             renderInfo.LayoutInfo.ContentArea.X = xPosition;
             renderInfo.LayoutInfo.ContentArea.Y = yPosition;
 
-            renderer = Renderer.Create(graphics, this, renderer.RenderInfo, null);
+            renderer = Renderer.Create(graphics, this, renderer.RenderInfo, fieldInfos);
             renderer.Render();
         }
 
