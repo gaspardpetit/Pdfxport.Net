@@ -139,6 +139,51 @@ public class BodyBottomReservationTests : IDisposable
             .Should().Equal(Enumerable.Range(1, 13).Select(index => "Body" + index));
     }
 
+    [Theory]
+    [InlineData(ListType.NumberList1, false)]
+    [InlineData(ListType.NumberList1, true)]
+    [InlineData(ListType.NumberList2, false)]
+    [InlineData(ListType.NumberList2, true)]
+    [InlineData(ListType.NumberList3, false)]
+    [InlineData(ListType.NumberList3, true)]
+    public void SpeculativeNumberedFooterDoesNotAdvanceBodyList(ListType listType, bool continueFooterList)
+    {
+        var document = CreateDocument(6);
+        var section = document.LastSection;
+        section.PageSetup.DifferentFirstPageHeaderFooter = true;
+        section.PageSetup.OddAndEvenPagesHeaderFooter = true;
+        for (var index = 0; index < 6; index++)
+            section.Footers.EvenPage.AddParagraph("Footer" + index);
+        for (var index = 0; index < 2; index++)
+        {
+            var footer = section.Footers.Primary.AddParagraph("ProbeOnly" + index);
+            footer.Format.ListInfo.ListType = listType;
+            footer.Format.ListInfo.ContinuePreviousList = continueFooterList;
+        }
+        var paragraph = section.AddParagraph();
+        paragraph.Format.WidowControl = true;
+        for (var index = 0; index < 7; index++)
+        {
+            if (index > 0) paragraph.AddLineBreak();
+            paragraph.AddText("Body" + (7 + index));
+        }
+        var numbered = section.AddParagraph("NumberedBody");
+        numbered.Format.ListInfo.ListType = listType;
+        numbered.Format.ListInfo.ContinuePreviousList = true;
+        var seen = new List<int>();
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.BodyBottomReservation = page => { seen.Add(page); return 0; };
+        renderer.RenderDocument();
+        renderer.PageCount.Should().Be(2);
+        seen.Should().Contain(3, "widow control probes a footer on a page that is never created");
+        var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 1);
+        var texts = new List<string>();
+        while (stream.Text.MoveAndGetNext(true, out var text)) texts.Add(text!.Text);
+        var expected = listType == ListType.NumberList1 ? "1." : listType == ListType.NumberList2 ? "a." : "i.";
+        texts.Should().Contain(expected);
+        texts.Should().NotContain(text => text.StartsWith("ProbeOnly", StringComparison.Ordinal));
+    }
+
     static string[] BodyTexts(PdfDocumentRenderer renderer, int page)
     {
         var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, page - 1);

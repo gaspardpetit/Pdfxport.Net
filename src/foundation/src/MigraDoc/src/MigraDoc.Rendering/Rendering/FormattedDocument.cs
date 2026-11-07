@@ -221,7 +221,7 @@ namespace MigraDoc.Rendering
                     {
                         ContentRect = GetFooterArea(_currentSection, page)
                     };
-                    formattedFooter.Format(_gfx);
+                    _documentRenderer.PreserveListNumbering(() => formattedFooter.Format(_gfx));
                 }
             }
             if (formattedFooter != null)

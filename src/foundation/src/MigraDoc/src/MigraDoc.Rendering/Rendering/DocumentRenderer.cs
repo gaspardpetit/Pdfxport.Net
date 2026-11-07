@@ -517,6 +517,26 @@ namespace MigraDoc.Rendering
             return outline;
         }
 
+        /// <summary>
+        /// Measures speculative content without advancing the document's list sequence.
+        /// </summary>
+        internal void PreserveListNumbering(Action format)
+        {
+            var previousListInfo = _previousListInfo;
+            var previousListNumbers = new Dictionary<ListType, int>(_previousListNumbers);
+            try
+            {
+                format();
+            }
+            finally
+            {
+                _previousListInfo = previousListInfo;
+                _previousListNumbers.Clear();
+                foreach (var entry in previousListNumbers)
+                    _previousListNumbers.Add(entry.Key, entry.Value);
+            }
+        }
+
         internal int NextListNumber(ListInfo listInfo)
         {
             var listType = listInfo.ListType;
