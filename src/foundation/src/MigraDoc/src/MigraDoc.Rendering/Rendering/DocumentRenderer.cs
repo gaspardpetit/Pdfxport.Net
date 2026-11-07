@@ -28,6 +28,17 @@ namespace MigraDoc.Rendering
     /// <param name="document">The MigraDoc document to render.</param>
     public class DocumentRenderer(Document document)
     {
+        /// <summary>
+        /// Reserves additional body space in points above the usable page bottom,
+        /// after footer clearance. The callback receives the one-based physical page
+        /// number, regardless of displayed page numbering. Null or zero reserves nothing.
+        /// Results must be finite, nonnegative, and leave positive body height.
+        /// The callback can be evaluated repeatedly while formatting and must return
+        /// a stable value for each page during a preparation pass. Prepare again after
+        /// changing reservations. Footer placement is unchanged.
+        /// </summary>
+        public Func<int, double>? BodyBottomReservation { get; set; }
+
         /// <summary>Optional underline stroke width as a fraction of font size. The default is 1/16.</summary>
         public double? UnderlineStrokeWidthFactor { get; set; }
 

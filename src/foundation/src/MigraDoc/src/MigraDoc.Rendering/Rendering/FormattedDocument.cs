@@ -217,6 +217,12 @@ namespace MigraDoc.Rendering
                     height = Math.Min(height, footerTop - pageSetup.TopMargin.Point);
                 }
             }
+            var reservation = _documentRenderer.BodyBottomReservation?.Invoke(page) ?? 0;
+            if (double.IsNaN(reservation) || double.IsInfinity(reservation) || reservation < 0 ||
+                (reservation > 0 && reservation >= height.Point))
+                throw new ArgumentOutOfRangeException(nameof(DocumentRenderer.BodyBottomReservation),
+                    reservation, "A reservation must be finite, nonnegative, and leave positive body height.");
+            height -= reservation;
             XUnitPt x;
             XUnitPt y = pageSetup.TopMargin.Point;
             if (pageSetup.MirrorMargins)
