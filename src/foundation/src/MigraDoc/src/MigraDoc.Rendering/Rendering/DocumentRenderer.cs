@@ -285,6 +285,18 @@ namespace MigraDoc.Rendering
         FormattedDocument? _formattedDocument;
 
         /// <summary>
+        /// Selects top-level text frames to omit from automatic body, header, and footer
+        /// painting. Layout and pagination are unchanged. Null or false paints normally.
+        /// Evaluated during RenderPage with CurrentRenderPage set; not evaluated during
+        /// preparation or explicit RenderPreparedObject calls. Callers can paint the
+        /// retained render infos explicitly in their own order. Nested frames are not selected.
+        /// </summary>
+        public Func<TextFrame, bool>? DeferTextFramePaint { get; set; }
+
+        bool ShouldDeferFrame(RenderInfo info)
+            => info.DocumentObject is TextFrame frame && DeferTextFramePaint?.Invoke(frame) == true;
+
+        /// <summary>
         /// Paints caller-owned content after page headers and footers and before body
         /// content, including behind-content text frames. Receives the graphics object
         /// and one-based physical page number. Invoked only when RenderContent is
@@ -352,13 +364,13 @@ namespace MigraDoc.Rendering
                                             : TextFrameLayer.Normal);
                             }
                             for (int idx = 0; idx < count; idx++)
-                                if (layers[idx] == TextFrameLayer.BehindContent)
+                                if (layers[idx] == TextFrameLayer.BehindContent && !ShouldDeferFrame(renderInfos[idx]))
                                     Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
                             for (int idx = 0; idx < count; idx++)
-                                if (layers[idx] == TextFrameLayer.Normal)
+                                if (layers[idx] == TextFrameLayer.Normal && !ShouldDeferFrame(renderInfos[idx]))
                                     Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
                             for (int idx = 0; idx < count; idx++)
-                                if (layers[idx] == TextFrameLayer.AboveContent)
+                                if (layers[idx] == TextFrameLayer.AboveContent && !ShouldDeferFrame(renderInfos[idx]))
                                     Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
                         }
                         else
@@ -366,6 +378,8 @@ namespace MigraDoc.Rendering
                             for (int idx = 0; idx < count; idx++)
                             {
                                 var renderInfo = renderInfos[idx];
+                                if (ShouldDeferFrame(renderInfo))
+                                    continue;
                                 var renderer = Renderer.Create(gfx, this, renderInfo, fieldInfos);
                                 renderer.Render();
                             }
@@ -567,6 +581,8 @@ namespace MigraDoc.Rendering
             var fieldInfos = FormattedDocument.GetFieldInfos(page);
             foreach (RenderInfo renderInfo in renderInfos)
             {
+                if (ShouldDeferFrame(renderInfo))
+                    continue;
                 var renderer = Renderer.Create(graphics, this, renderInfo, fieldInfos);
                 renderer.Render();
             }
@@ -584,18 +600,15 @@ namespace MigraDoc.Rendering
             // The footer is bottom-aligned and grows with its contents. topY specifies the Y position where the footer begins.
             XUnitPt topY = footerArea.Y + footerArea.Height - RenderInfo.GetTotalHeight(renderInfos);
             // offsetY specifies the offset (amount of movement) for all footer items. It’s the difference between topY and the position calculated for the first item.
-            XUnitPt offsetY = 0;
-            bool notFirst = false;
+            XUnitPt offsetY = renderInfos.Length > 0
+                ? renderInfos[0].LayoutInfo.ContentArea.Y - topY : 0;
 
             var fieldInfos = FormattedDocument.GetFieldInfos(page);
             foreach (RenderInfo renderInfo in renderInfos)
             {
+                if (ShouldDeferFrame(renderInfo))
+                    continue;
                 var renderer = Renderer.Create(graphics, this, renderInfo, fieldInfos);
-                if (!notFirst)
-                {
-                    offsetY = renderer.RenderInfo.LayoutInfo.ContentArea.Y - topY;
-                    notFirst = true;
-                }
                 var savedY = renderer.RenderInfo.LayoutInfo.ContentArea.Y;
                 // Apply offsetY only to items that do not have an absolute position.
                 if (renderer.RenderInfo.LayoutInfo.Floating != Floating.None)
