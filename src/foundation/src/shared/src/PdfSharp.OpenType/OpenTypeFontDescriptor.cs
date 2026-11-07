@@ -547,7 +547,8 @@ namespace PdfSharp.Internal.OpenType
         }
 
         /// <summary>
-        /// Converts the width of a glyph identified by its index to PDF design units.
+        /// Converts the width of a glyph identified by its index to integer PDF design units,
+        /// rounding to the nearest integer with midpoints away from zero.
         /// Index 0 also returns a valid font specific width for the non-existing glyph.
         /// </summary>
         public int GlyphIndexToPdfWidth(ushort glyphIndex)
@@ -565,7 +566,8 @@ namespace PdfSharp.Internal.OpenType
                 // Sometimes the unitsPerEm is 1000, sometimes a power of 2.
                 if (UnitsPerEm == 1000)
                     return width;
-                return width * 1000 / UnitsPerEm; // normalize
+                return (int)Math.Round(width * 1000.0 / UnitsPerEm,
+                    MidpointRounding.AwayFromZero);
             }
             // ReSharper disable once RedundantCatchClause
             catch (Exception)

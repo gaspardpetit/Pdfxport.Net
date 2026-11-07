@@ -67,6 +67,31 @@ public class FractionalFontWidthTests : IDisposable
             PdfFontEmbedding.TryComputeSubset, false);
     }
 
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(127, 62)]
+    [InlineData(128, 63)]
+    [InlineData(129, 63)]
+    [InlineData(65535, 32000)]
+    public void IntegerWidthsRoundToNearestWithMidpointsAwayFromZero(ushort advance, int expected)
+    {
+        var font = new XFont(UnitTestFontResolver.ArialFont, 12);
+        var descriptor = font.OpenTypeDescriptor;
+        descriptor.UnitsPerEm.Should().Be(2048);
+        var metric = descriptor.FontFace.hmtx.HorzMetrics[0];
+        var original = metric.advanceWidth;
+        try
+        {
+            // Exercise exact normalization boundaries independently of the fixture's glyph repertoire.
+            metric.advanceWidth = advance;
+            descriptor.GlyphIndexToPdfWidth(0).Should().Be(expected);
+        }
+        finally
+        {
+            metric.advanceWidth = original;
+        }
+    }
+
     static void CheckWidths(string family, string text, int[] ansiCodes, PdfFontEncoding encoding,
         PdfFontEmbedding embedding, bool expectFraction)
     {
@@ -103,8 +128,12 @@ public class FractionalFontWidthTests : IDisposable
                 ansiCodes[index], glyph);
             actual.Should().BeApproximately(expected, 0.001);
             totalWidth += actual;
-            // Changing PDF metadata must not change the existing integer-width API.
-            descriptor.GlyphIndexToPdfWidth(glyph).Should().Be((int)expected);
+            // The integer API rounds independently of the fractional PDF metadata.
+            descriptor.GlyphIndexToPdfWidth(glyph).Should().Be(
+                (int)Math.Round(expected, MidpointRounding.AwayFromZero));
+            if (encoding == PdfFontEncoding.WinAnsi && !descriptor.IsSymbolFont)
+                descriptor.Widths[ansiCodes[index]].Should().Be(
+                    (int)Math.Round(expected, MidpointRounding.AwayFromZero));
             if (family == "BlankGlyph")
             {
                 descriptor.UnitsPerEm.Should().Be(1000);
