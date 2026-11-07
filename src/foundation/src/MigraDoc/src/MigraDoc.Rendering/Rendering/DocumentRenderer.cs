@@ -285,6 +285,16 @@ namespace MigraDoc.Rendering
         FormattedDocument? _formattedDocument;
 
         /// <summary>
+        /// Paints caller-owned content after page headers and footers and before body
+        /// content, including behind-content text frames. Receives the graphics object
+        /// and one-based physical page number. Invoked only when RenderContent is
+        /// selected, and never for automatically inserted blank pages.
+        /// Graphics state is restored after the callback, including on exceptions.
+        /// Exceptions propagate to the caller. This callback does not affect layout.
+        /// </summary>
+        public Action<XGraphics, int>? PaintBehindContent { get; set; }
+
+        /// <summary>
         /// Renders a MigraDoc document to the specified graphics object.
         /// </summary>
         public void RenderPage(XGraphics gfx, int page)
@@ -309,6 +319,18 @@ namespace MigraDoc.Rendering
 
             if ((options & PageRenderOptions.RenderContent) == PageRenderOptions.RenderContent)
             {
+                if (PaintBehindContent is { } paintBehindContent)
+                {
+                    var state = gfx.Save();
+                    try
+                    {
+                        paintBehindContent(gfx, page);
+                    }
+                    finally
+                    {
+                        gfx.Restore(state);
+                    }
+                }
                 var renderInfos = _formattedDocument.GetRenderInfos(page);
                 if (renderInfos != null)
                 {
