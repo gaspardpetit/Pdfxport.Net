@@ -29,6 +29,16 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects a resolved font for an inline image's line metrics and run
+        /// decoration. Null uses the containing run or paragraph font. The font
+        /// must be fully resolved; missing properties are not inherited from the
+        /// containing run. Does not resize the picture or replace adjacent text's font.
+        /// Must return stable fonts throughout preparation and painting; prepare
+        /// again after changing the policy or selected font.
+        /// </summary>
+        public Func<Image, Font?>? InlineImageRunFont { get; set; }
+
+        /// <summary>
         /// Selects the height, in points, occupied by an inline image in line layout.
         /// The full-sized picture is top-aligned with that effective image slot;
         /// its own dimensions, horizontal advance and painted extent are unchanged.

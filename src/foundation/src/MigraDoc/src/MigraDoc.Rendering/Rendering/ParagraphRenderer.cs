@@ -3538,6 +3538,12 @@ namespace MigraDoc.Rendering
 
                 if (_currentLeaf != null)
                 {
+                    if (_currentLeaf.Current is Image inlineImage &&
+                        _documentRenderer.InlineImageRunFont?.Invoke(inlineImage) is { } imageFont)
+                    {
+                        _currentObject = inlineImage;
+                        return _currentDomFont = imageFont;
+                    }
                     var parent = DocumentRelations.GetParent(_currentLeaf.Current);
                     parent = DocumentRelations.GetParent(parent);
 
@@ -3567,6 +3573,9 @@ namespace MigraDoc.Rendering
             {
                 if (_currentLeaf != null)
                 {
+                    if (_currentLeaf.Current is Image inlineImage &&
+                        _documentRenderer.InlineImageRunFont?.Invoke(inlineImage) is { } imageFont)
+                        return imageFont;
                     var parent = DocumentRelations.GetParent(_currentLeaf.Current);
                     parent = DocumentRelations.GetParent(parent);
 
