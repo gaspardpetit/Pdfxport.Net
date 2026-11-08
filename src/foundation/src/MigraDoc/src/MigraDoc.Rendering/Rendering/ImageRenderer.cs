@@ -73,47 +73,65 @@ namespace MigraDoc.Rendering
             Area contentArea = _renderInfo.LayoutInfo.ContentArea;
             XRect destRect = new XRect(contentArea.X, contentArea.Y, formatInfo.Width, formatInfo.Height);
             if (_documentRenderer.ImagePaintRectangle?.Invoke(_image, destRect) is { } replacement &&
-                !replacement.IsEmpty &&
-                !double.IsNaN(replacement.X) && !double.IsInfinity(replacement.X) &&
-                !double.IsNaN(replacement.Y) && !double.IsInfinity(replacement.Y) &&
-                !double.IsNaN(replacement.Width) && !double.IsInfinity(replacement.Width) &&
-                !double.IsNaN(replacement.Height) && !double.IsInfinity(replacement.Height) &&
-                replacement.Width > 0 && replacement.Height > 0)
+                IsUsablePaintRectangle(replacement))
                 destRect = replacement;
 
-            if (formatInfo.Failure == ImageFailure.None)
+            var paintClip = _documentRenderer.ImagePaintClipRectangle?.Invoke(_image, destRect);
+            if (paintClip is { } clip && !IsUsablePaintRectangle(clip))
+                paintClip = null;
+            var clipState = paintClip.HasValue ? _gfx.Save() : null;
+            try
             {
-                XImage? xImage = null;
-                try
+                if (paintClip.HasValue)
+                    _gfx.IntersectClip(paintClip.Value);
+                if (formatInfo.Failure == ImageFailure.None)
                 {
-                    XRect srcRect = new(formatInfo.CropX, formatInfo.CropY, formatInfo.CropWidth, formatInfo.CropHeight);
-                    //xImage = XImage.FromFile(formatInfo.ImagePath);
-                    xImage = CreateXImage(formatInfo.ImagePath);
-                    xImage.Interpolate = _image.Interpolate;
-                    _gfx.DrawImage(xImage, destRect, srcRect, XGraphicsUnit.Point); //Pixel.
+                    XImage? xImage = null;
+                    try
+                    {
+                        XRect srcRect = new(formatInfo.CropX, formatInfo.CropY, formatInfo.CropWidth, formatInfo.CropHeight);
+                        //xImage = XImage.FromFile(formatInfo.ImagePath);
+                        xImage = CreateXImage(formatInfo.ImagePath);
+                        xImage.Interpolate = _image.Interpolate;
+                        _gfx.DrawImage(xImage, destRect, srcRect, XGraphicsUnit.Point); //Pixel.
+                    }
+                    catch (Exception)
+                    {
+                        RenderFailureImage(destRect, formatInfo.ImagePath);
+                    }
+                    finally
+                    {
+                        xImage?.Dispose();
+                    }
                 }
-                catch (Exception)
-                {
+                else
                     RenderFailureImage(destRect, formatInfo.ImagePath);
-                }
-                finally
-                {
-                    xImage?.Dispose();
-                }
             }
-            else
-                RenderFailureImage(destRect, formatInfo.ImagePath);
+            finally
+            {
+                if (clipState != null)
+                    _gfx.Restore(clipState);
+            }
 
             RenderLine();
-            if (_gfx.PdfPage is { } page)
+            var linkBounds = paintClip.HasValue ? XRect.Intersect(destRect, paintClip.Value) : destRect;
+            if (_gfx.PdfPage is { } page && !linkBounds.IsEmpty && linkBounds.Width > 0 && linkBounds.Height > 0)
             {
-                var rectangle = new PdfRectangle(_gfx.Transformer.WorldToDefaultPage(destRect).AsXRect);
+                var rectangle = new PdfRectangle(_gfx.Transformer.WorldToDefaultPage(linkBounds).AsXRect);
                 if (_documentRenderer.ImageWebLink?.Invoke(_image, destRect) is { Length: > 0 } webTarget)
                     page.AddWebLink(rectangle, webTarget);
                 else if (_documentRenderer.ImageDocumentLink?.Invoke(_image, destRect) is { Length: > 0 } bookmarkTarget)
                     page.AddDocumentLink(rectangle, bookmarkTarget);
             }
         }
+
+        static bool IsUsablePaintRectangle(XRect rectangle) =>
+            !rectangle.IsEmpty &&
+            !double.IsNaN(rectangle.X) && !double.IsInfinity(rectangle.X) &&
+            !double.IsNaN(rectangle.Y) && !double.IsInfinity(rectangle.Y) &&
+            !double.IsNaN(rectangle.Width) && !double.IsInfinity(rectangle.Width) &&
+            !double.IsNaN(rectangle.Height) && !double.IsInfinity(rectangle.Height) &&
+            rectangle.Width > 0 && rectangle.Height > 0;
 
         void RenderFailureImage(XRect destRect, string? imagePath)
         {
