@@ -124,6 +124,37 @@ public class NonterminalSpaceContractionTests : IDisposable
         (end.X + Width(last)).Should().BeApproximately(20 + result.BodyWidth, 0.02);
     }
 
+    [Theory]
+    [InlineData(false, 1, false)]
+    [InlineData(true, 1, false)]
+    [InlineData(false, 2, false)]
+    [InlineData(true, 2, false)]
+    [InlineData(false, 1, true)]
+    [InlineData(true, 1, true)]
+    [InlineData(false, 2, true)]
+    [InlineData(true, 2, true)]
+    public void TabsLimitBudgetToFollowingSpaces(bool split, int tabs, bool final)
+    {
+        var normal = Render(null, split: split, tail: !final, tabs: tabs, missingSpaceFraction: 0.75);
+        var limited = Render(final ? null : 0.5, split: split, finalFactor: final ? 0.5 : null,
+            tail: !final, tabs: tabs, missingSpaceFraction: 0.75);
+        limited.Words.Should().Equal(normal.Words, "earlier tab segments cannot supply contraction budget");
+        var last = split ? "vo" : "Bravo";
+        normal.Words.Single(w => w.Text == last).Y.Should()
+            .NotBe(normal.Words.Single(w => w.Text == "Alpha").Y);
+
+        var allowed = Render(final ? null : 0.5, split: split, finalFactor: final ? 0.5 : null,
+            tail: !final, tabs: tabs);
+        var alpha = allowed.Words.Single(w => w.Text == "Alpha");
+        var end = allowed.Words.Single(w => w.Text == last);
+        end.Y.Should().BeApproximately(alpha.Y, 0.001);
+        (end.X + Width(last)).Should().BeApproximately(20 + allowed.BodyWidth, 0.02);
+        var start = allowed.Words.Single(w => w.Text == (split ? "Bra" : "Bravo"));
+        (start.X - alpha.X - Width("Alpha")).Should().BeApproximately(Width(" ") * 0.75, 0.02);
+        allowed.Words.TakeWhile(w => w.Text != "Alpha").Should()
+            .Equal(normal.Words.TakeWhile(w => w.Text != "Alpha"));
+    }
+
     static double Width(string text)
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(500, 500), XGraphicsUnit.Point,
@@ -133,16 +164,24 @@ public class NonterminalSpaceContractionTests : IDisposable
 
     static ((string Text, double X, double Y)[] Words, double BodyWidth) Render(double? factor,
         bool split = false, double? finalFactor = null, bool tail = true,
-        ParagraphAlignment alignment = ParagraphAlignment.Justify, int suffix = -1)
+        ParagraphAlignment alignment = ParagraphAlignment.Justify, int suffix = -1,
+        int tabs = 0, double missingSpaceFraction = 0.25)
     {
-        var bodyWidth = Width("Alpha Bravo") - Width(" ") * 0.25;
+        var bodyWidth = tabs * 120 + Width("Alpha Bravo") - Width(" ") * missingSpaceFraction;
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
         document.Styles.Normal.Font.Size = 12;
         var section = document.AddSection();
         section.PageSetup.PageWidth = Unit.FromPoint(bodyWidth + 40);
         section.PageSetup.LeftMargin = section.PageSetup.RightMargin = Unit.FromPoint(20);
-        var paragraph = section.AddParagraph("Alpha ");
+        var paragraph = section.AddParagraph();
+        for (var tab = 1; tab <= tabs; tab++)
+        {
+            paragraph.Format.AddTabStop(Unit.FromPoint(tab * 120), TabAlignment.Left);
+            paragraph.AddText("One Two Three ");
+            paragraph.AddTab();
+        }
+        paragraph.AddText("Alpha ");
         if (split)
         {
             paragraph.AddFormattedText("Bra");
