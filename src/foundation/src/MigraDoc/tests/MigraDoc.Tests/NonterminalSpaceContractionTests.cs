@@ -4,6 +4,7 @@
 using FluentAssertions;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.Fields;
+using MigraDoc.DocumentObjectModel.Shapes;
 using MigraDoc.Rendering;
 using PdfSharp.Diagnostics;
 using PdfSharp.Drawing;
@@ -155,26 +156,75 @@ public class NonterminalSpaceContractionTests : IDisposable
             .Equal(normal.Words.TakeWhile(w => w.Text != "Alpha"));
     }
 
-    static double Width(string text)
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public void BudgetUsesActualSpacesInCurrentInterval(bool split, bool final, bool wrap)
+    {
+        var wordSize = wrap ? 12 : 48;
+        var normal = Render(null, split: split, tail: !final, wordSize: wordSize,
+            wrap: wrap, missingSpaceFraction: 1.25);
+        var limited = Render(final ? null : 0.5, split: split, finalFactor: final ? 0.5 : null,
+            tail: !final, wordSize: wordSize, wrap: wrap, missingSpaceFraction: 1.25);
+        limited.Words.Should().Equal(normal.Words, "neither earlier intervals nor the incoming font supply space width");
+        var last = split ? "vo" : "Bravo";
+        normal.Words.Single(w => w.Text == last).Y.Should()
+            .NotBe(normal.Words.Single(w => w.Text == "Alpha").Y);
+
+        var allowed = Render(final ? null : 0.5, split: split, finalFactor: final ? 0.5 : null,
+            tail: !final, wordSize: wordSize, wrap: wrap);
+        var alpha = allowed.Words.Single(w => w.Text == "Alpha");
+        var end = allowed.Words.Single(w => w.Text == last);
+        end.Y.Should().BeApproximately(alpha.Y, 0.001);
+        (end.X + Width(last, wordSize)).Should().BeApproximately(20 + allowed.BodyWidth, 0.02);
+        var start = allowed.Words.Single(w => w.Text == (split ? "Bra" : "Bravo"));
+        (start.X - alpha.X - Width("Alpha")).Should().BeApproximately(Width(" ") * 0.75, 0.02);
+    }
+
+    static double Width(string text, double size = 12)
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(500, 500), XGraphicsUnit.Point,
             XPageDirection.Downwards);
-        return gfx.MeasureString(text, new XFont("Arial", 12)).Width;
+        return gfx.MeasureString(text, new XFont("Arial", size)).Width;
     }
 
     static ((string Text, double X, double Y)[] Words, double BodyWidth) Render(double? factor,
         bool split = false, double? finalFactor = null, bool tail = true,
         ParagraphAlignment alignment = ParagraphAlignment.Justify, int suffix = -1,
-        int tabs = 0, double missingSpaceFraction = 0.25)
+        int tabs = 0, double missingSpaceFraction = 0.25, double wordSize = 12, bool wrap = false)
     {
-        var bodyWidth = tabs * 120 + Width("Alpha Bravo") - Width(" ") * missingSpaceFraction;
+        var leftWidth = wrap ? Width("One Two Three") + Width(" ") * 0.25 : 0;
+        var segmentOffset = tabs * 120 + (wrap ? leftWidth + 40 : 0);
+        var bodyWidth = segmentOffset + Width("Alpha ") + Width("Bravo", wordSize) -
+            Width(" ") * missingSpaceFraction;
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
         document.Styles.Normal.Font.Size = 12;
         var section = document.AddSection();
         section.PageSetup.PageWidth = Unit.FromPoint(bodyWidth + 40);
         section.PageSetup.LeftMargin = section.PageSetup.RightMargin = Unit.FromPoint(20);
+        if (wrap)
+        {
+            section.PageSetup.TopMargin = Unit.FromPoint(20);
+            var image = section.AddImage(
+                "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+            image.RelativeHorizontal = RelativeHorizontal.Margin;
+            image.RelativeVertical = RelativeVertical.Margin;
+            image.Left = Unit.FromPoint(leftWidth);
+            image.Top = Unit.FromPoint(0);
+            image.Width = Unit.FromPoint(40);
+            image.Height = Unit.FromPoint(90);
+            image.WrapFormat.Style = WrapStyle.BothSides;
+        }
         var paragraph = section.AddParagraph();
+        if (wrap)
+            paragraph.AddText("One Two Three ");
         for (var tab = 1; tab <= tabs; tab++)
         {
             paragraph.Format.AddTabStop(Unit.FromPoint(tab * 120), TabAlignment.Left);
@@ -184,11 +234,11 @@ public class NonterminalSpaceContractionTests : IDisposable
         paragraph.AddText("Alpha ");
         if (split)
         {
-            paragraph.AddFormattedText("Bra");
-            paragraph.AddFormattedText("vo");
+            paragraph.AddFormattedText("Bra").Font.Size = Unit.FromPoint(wordSize);
+            paragraph.AddFormattedText("vo").Font.Size = Unit.FromPoint(wordSize);
         }
         else
-            paragraph.AddText("Bravo");
+            paragraph.AddFormattedText("Bravo").Font.Size = Unit.FromPoint(wordSize);
         switch (suffix)
         {
             case 0:

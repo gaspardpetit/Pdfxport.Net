@@ -235,19 +235,19 @@ namespace MigraDoc.Tests
         }
 
         [Theory]
-        [InlineData(12, 24, 1)]
-        [InlineData(24, 12, 2)]
-        public void JoinedTerminalContractionUsesFinalFragmentFont(int firstSize, int finalSize, int expectedLines)
+        [InlineData(12, 24)]
+        [InlineData(24, 12)]
+        public void JoinedTerminalContractionUsesActualPrecedingSpace(int firstSize, int finalSize)
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(200, 200),
                 XGraphicsUnit.Point, XPageDirection.Downwards);
             var firstFont = new XFont("Arial", firstSize);
             var finalFont = new XFont("Arial", finalSize);
-            var firstAllowance = 0.5 * measure.MeasureString(" ", firstFont).Width;
-            var finalAllowance = 0.5 * measure.MeasureString(" ", finalFont).Width;
+            // The preceding space is 12 point, regardless of either joined fragment's size.
+            var overrun = 0.75 * measure.MeasureString(" ", new XFont("Arial", 12)).Width;
             var bodyWidth = measure.MeasureString("Lead ", new XFont("Arial", 12)).Width +
                 measure.MeasureString("Alpha", firstFont).Width + measure.MeasureString("bet", finalFont).Width -
-                (firstAllowance + finalAllowance) / 2;
+                overrun;
             var document = CreateDocument(bodyWidth);
             var paragraph = document.LastSection.AddParagraph("Lead ");
             paragraph.Format.Alignment = ParagraphAlignment.Justify;
@@ -257,7 +257,7 @@ namespace MigraDoc.Tests
             renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = _ => 0.5;
             renderer.RenderDocument();
             renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
-                .OfType<ParagraphRenderInfo>().Single().LineCount.Should().Be(expectedLines);
+                .OfType<ParagraphRenderInfo>().Single().LineCount.Should().Be(2, "the overrun exceeds half of the actual preceding space width");
         }
 
         [Theory]
