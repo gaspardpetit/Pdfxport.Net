@@ -128,9 +128,9 @@ namespace PdfSharp.Internal.OpenType
             bool os2SeemsToBeEmpty = FontFace.os2 is { sTypoAscender: 0, sTypoDescender: 0, sTypoLineGap: 0 };
             //Debug.Assert(!os2SeemsToBeEmpty); // Are there fonts without OS/2 table?
 
-            // Check bit 8 of fsSelection (WWS).
-            bool dontUseWinLineMetrics = (FontFace.os2.fsSelection & 128) != 0;
-            if (!os2SeemsToBeEmpty && dontUseWinLineMetrics)
+            // Bit 7 is USE_TYPO_METRICS; bit 8 is WWS and does not select line metrics.
+            bool useTypographicLineMetrics = (FontFace.os2.fsSelection & 128) != 0;
+            if (!os2SeemsToBeEmpty && useTypographicLineMetrics)
             {
                 // Comment from WPF: The font specifies that the sTypoAscender, sTypoDescender, and sTypoLineGap fields are valid and
                 // should be used instead of winAscent and winDescent.
