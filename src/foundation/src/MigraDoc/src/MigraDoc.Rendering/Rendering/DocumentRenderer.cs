@@ -29,6 +29,15 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Optionally clips image painting in drawing coordinates, after selecting
+        /// ImagePaintRectangle. Does not change layout, wrapping or the image border.
+        /// Null, empty, nonfinite or nonpositive rectangles leave painting unclipped.
+        /// Also clips failure placeholders. Image links cover only the intersection
+        /// with painted bounds; link selectors are skipped when it has no area.
+        /// </summary>
+        public Func<Image, XRect, XRect?>? ImagePaintClipRectangle { get; set; }
+
+        /// <summary>
         /// Optionally replaces the painted image rectangle, in drawing coordinates.
         /// The original frame still controls layout, wrapping and the image border.
         /// Image link callbacks receive the replacement rectangle. Also applies to
