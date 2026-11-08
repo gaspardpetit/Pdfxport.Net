@@ -139,13 +139,17 @@ namespace MigraDoc.Tests
         }
 
         [Theory]
-        [InlineData(false, false, false)]
-        [InlineData(true, false, false)]
-        [InlineData(false, true, false)]
-        [InlineData(true, true, false)]
-        [InlineData(false, false, true)]
-        [InlineData(true, false, true)]
-        public void JustifiedClippedMarkUsesFullPaintWidth(bool splitMark, bool wrap, bool leftAligned)
+        [InlineData(false, false, false, false)]
+        [InlineData(true, false, false, false)]
+        [InlineData(false, true, false, false)]
+        [InlineData(true, true, false, false)]
+        [InlineData(false, false, true, false)]
+        [InlineData(true, false, true, false)]
+        [InlineData(false, false, false, true)]
+        [InlineData(false, true, false, true)]
+        [InlineData(true, false, false, true)]
+        [InlineData(true, true, false, true)]
+        public void JustifiedClippedMarkUsesFullPaintWidth(bool splitMark, bool wrap, bool leftAligned, bool softHyphen)
         {
             using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300),
                 XGraphicsUnit.Point, XPageDirection.Downwards);
@@ -178,11 +182,11 @@ namespace MigraDoc.Tests
             }
             if (splitMark)
             {
-                paragraph.AddText("A short sequence authors.");
+                paragraph.AddText(softHyphen ? "A short sequence auth\u00ADors." : "A short sequence authors.");
                 paragraph.AddFormattedText("\"").Color = Colors.Red;
             }
             else
-                paragraph.AddText(firstLine);
+                paragraph.AddText(softHyphen ? firstLine.Replace("authors", "auth\u00ADors") : firstLine);
             paragraph.AddText(" next words here.");
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.DocumentRenderer.LineEndOverhang = (_, word, _) =>
