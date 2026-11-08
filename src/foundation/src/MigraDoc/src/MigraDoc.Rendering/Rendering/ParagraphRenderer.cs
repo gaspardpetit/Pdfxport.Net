@@ -1205,6 +1205,20 @@ namespace MigraDoc.Rendering
                 !double.IsNaN(offset) && !double.IsInfinity(offset))
                 top += offset;
             RenderByInfos(_currentXPosition, top, [renderInfo]);
+            if (_documentRenderer.InlineImageOverlay is { } overlay)
+            {
+                var state = _gfx.Save();
+                try
+                {
+                    overlay(image, _gfx, _currentXPosition.Point, top.Point,
+                        contentArea.Width.Point, contentArea.Height.Point);
+                }
+                finally
+                {
+                    _gfx.Restore(state);
+                }
+            }
+
 
             RenderUnderline(contentArea.Width, true);
             RealizeHyperlink(contentArea.Width);

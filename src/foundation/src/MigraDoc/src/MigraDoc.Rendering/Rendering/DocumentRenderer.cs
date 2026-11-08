@@ -29,6 +29,16 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Paints additional content after an inline image (including its failure
+        /// placeholder). Receives the image, graphics surface, and resolved layout
+        /// frame x, y, width and height in drawing points. Paint-only image bounds
+        /// and clipping callbacks do not alter this frame or clip the overlay.
+        /// Runs only while painting inline images. Graphics state is saved and
+        /// restored around the callback; it must balance any state scopes it opens.
+        /// </summary>
+        public Action<Image, XGraphics, double, double, double, double>? InlineImageOverlay { get; set; }
+
+        /// <summary>
         /// Optionally clips image painting in drawing coordinates, after selecting
         /// ImagePaintRectangle. Does not change layout, wrapping or the image border.
         /// Null, empty, nonfinite or nonpositive rectangles leave painting unclipped.
