@@ -29,6 +29,15 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Optionally replaces the painted image rectangle, in drawing coordinates.
+        /// The original frame still controls layout, wrapping and the image border.
+        /// Image link callbacks receive the replacement rectangle. Also applies to
+        /// failure placeholders. Empty, nonfinite or nonpositive rectangles are ignored.
+        /// Called during painting; changing this callback does not require preparation.
+        /// </summary>
+        public Func<Image, XRect, XRect>? ImagePaintRectangle { get; set; }
+
+        /// <summary>
         /// Selects a web link for a painted image. Receives the image and its
         /// destination rectangle in drawing coordinates. Null or empty omits the
         /// link; a nonempty web target takes precedence over ImageDocumentLink.

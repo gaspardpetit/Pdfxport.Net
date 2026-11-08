@@ -72,6 +72,14 @@ namespace MigraDoc.Rendering
             ImageFormatInfo formatInfo = (ImageFormatInfo)_renderInfo.FormatInfo;
             Area contentArea = _renderInfo.LayoutInfo.ContentArea;
             XRect destRect = new XRect(contentArea.X, contentArea.Y, formatInfo.Width, formatInfo.Height);
+            if (_documentRenderer.ImagePaintRectangle?.Invoke(_image, destRect) is { } replacement &&
+                !replacement.IsEmpty &&
+                !double.IsNaN(replacement.X) && !double.IsInfinity(replacement.X) &&
+                !double.IsNaN(replacement.Y) && !double.IsInfinity(replacement.Y) &&
+                !double.IsNaN(replacement.Width) && !double.IsInfinity(replacement.Width) &&
+                !double.IsNaN(replacement.Height) && !double.IsInfinity(replacement.Height) &&
+                replacement.Width > 0 && replacement.Height > 0)
+                destRect = replacement;
 
             if (formatInfo.Failure == ImageFailure.None)
             {
