@@ -29,6 +29,16 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects the height, in points, occupied by an inline image in line layout.
+        /// The full-sized picture is top-aligned with that effective image slot;
+        /// its own dimensions, horizontal advance and painted extent are unchanged.
+        /// Paragraph line-spacing rules still apply. Null, nonfinite or nonpositive
+        /// values use the original height. Must return stable values throughout
+        /// preparation and painting; prepare again after changing the policy.
+        /// </summary>
+        public Func<Image, double?>? InlineImageLayoutHeight { get; set; }
+
+        /// <summary>
         /// Paints additional content after an inline image (including its failure
         /// placeholder). Receives the image, graphics surface, and resolved layout
         /// frame x, y, width and height in drawing points. Paint-only image bounds
