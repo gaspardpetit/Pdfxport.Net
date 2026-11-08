@@ -1186,6 +1186,16 @@ namespace MigraDoc.Rendering
             }
         }
 
+        (double Left, double Top, double Right, double Bottom) GetInlineImageEffectExtent(Image image)
+        {
+            var selected = _documentRenderer.InlineImageEffectExtent?.Invoke(image);
+            if (selected is not { } extent ||
+                extent.Left < 0 || extent.Top < 0 || extent.Right < 0 || extent.Bottom < 0 ||
+                !IsFinite(extent.Left + extent.Top + extent.Right + extent.Bottom))
+                return default;
+            return extent;
+        }
+
         XUnitPt GetInlineImageLayoutHeight(Image image, XUnitPt originalHeight)
         {
             var selected = _documentRenderer.InlineImageLayoutHeight?.Invoke(image);
@@ -1200,26 +1210,29 @@ namespace MigraDoc.Rendering
             var contentArea = renderInfo?.LayoutInfo.ContentArea ?? NRT.ThrowOnNull<Area>();
             top -= contentArea.Height;
             var layoutHeight = GetInlineImageLayoutHeight(image, contentArea.Height);
-            if (IsSoleImageInTableCell && layoutHeight > CurrentFont.GetHeight() &&
+            var effect = GetInlineImageEffectExtent(image);
+            var occupiedHeight = layoutHeight + effect.Top + effect.Bottom;
+            top -= effect.Bottom;
+            if (IsSoleImageInTableCell && occupiedHeight > CurrentFont.GetHeight() &&
                 _paragraph.Format.LineSpacingRule != LineSpacingRule.Exactly)
             {
                 // Use the stored effective space, which already includes
                 // paragraph spacing and MinimumLineMetricsForFont. A minimum
                 // that prevents the baseline from moving needs no compensation.
-                var originalSpace = layoutHeight + CurrentFont.GetHeight() - FontHandler.GetAscent(CurrentFont);
+                var originalSpace = occupiedHeight + CurrentFont.GetHeight() - FontHandler.GetAscent(CurrentFont);
                 top += Math.Max(0, originalSpace - _currentVerticalInfo.InherentLineSpace);
             }
             if (_documentRenderer.InlineImageVerticalOffset?.Invoke(image) is double offset &&
                 !double.IsNaN(offset) && !double.IsInfinity(offset))
                 top += offset;
             top += contentArea.Height - layoutHeight;
-            RenderByInfos(_currentXPosition, top, [renderInfo]);
+            RenderByInfos(_currentXPosition + effect.Left, top, [renderInfo]);
             if (_documentRenderer.InlineImageOverlay is { } overlay)
             {
                 var state = _gfx.Save();
                 try
                 {
-                    overlay(image, _gfx, _currentXPosition.Point, top.Point,
+                    overlay(image, _gfx, (_currentXPosition + effect.Left).Point, top.Point,
                         contentArea.Width.Point, contentArea.Height.Point);
                 }
                 finally
@@ -1229,10 +1242,11 @@ namespace MigraDoc.Rendering
             }
 
 
-            RenderUnderline(contentArea.Width, true);
-            RealizeHyperlink(contentArea.Width);
+            var occupiedWidth = contentArea.Width + effect.Left + effect.Right;
+            RenderUnderline(occupiedWidth, true);
+            RealizeHyperlink(occupiedWidth);
 
-            _currentXPosition += contentArea.Width;
+            _currentXPosition += occupiedWidth;
         }
 
         void RenderDateField(DateField dateField)
@@ -2104,7 +2118,8 @@ namespace MigraDoc.Rendering
 #pragma warning restore IDE0060
         {
             XUnitPt width = CurrentImageRenderInfo?.LayoutInfo.ContentArea.Width ?? NRT.ThrowOnNull<XUnitPt>();
-            return FormatAsWord(width, fittingRect);
+            var effect = GetInlineImageEffectExtent(image);
+            return FormatAsWord(width + effect.Left + effect.Right, fittingRect);
         }
 
         RenderInfo CalcImageRenderInfo(Image image)
@@ -3418,6 +3433,11 @@ namespace MigraDoc.Rendering
                 imageHeight = _currentLeaf?.Current is Image image
                     ? GetInlineImageLayoutHeight(image, imageRenderInfo.LayoutInfo.ContentArea.Height)
                     : imageRenderInfo.LayoutInfo.ContentArea.Height;
+                if (_currentLeaf?.Current is Image inlineImage)
+                {
+                    var effect = GetInlineImageEffectExtent(inlineImage);
+                    imageHeight += effect.Top + effect.Bottom;
+                }
                 singleLineSpace = IsSoleImageInTableCell && imageHeight > singleLineSpace
                     ? imageHeight
                     : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;

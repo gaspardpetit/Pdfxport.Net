@@ -29,6 +29,18 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects additional space around an inline image, in drawing points.
+        /// Left/right extents increase horizontal advance; top/bottom extents
+        /// increase the effective image slot used by line layout. The picture
+        /// retains its dimensions inside this padded slot. Paragraph spacing rules
+        /// still apply. Null or extents with negative/nonfinite components or an
+        /// overflowing total use zero extents. Must return stable values during
+        /// preparation and painting; prepare again after changing the policy.
+        /// </summary>
+        public Func<Image, (double Left, double Top, double Right, double Bottom)?>?
+            InlineImageEffectExtent { get; set; }
+
+        /// <summary>
         /// Selects a resolved font for an inline image's line metrics and run
         /// decoration. Null uses the containing run or paragraph font. The font
         /// must be fully resolved; missing properties are not inherited from the
