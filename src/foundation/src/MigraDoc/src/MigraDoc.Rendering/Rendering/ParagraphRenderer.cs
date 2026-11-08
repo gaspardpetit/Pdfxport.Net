@@ -1186,24 +1186,33 @@ namespace MigraDoc.Rendering
             }
         }
 
+        XUnitPt GetInlineImageLayoutHeight(Image image, XUnitPt originalHeight)
+        {
+            var selected = _documentRenderer.InlineImageLayoutHeight?.Invoke(image);
+            return selected is double height && height > 0 && IsFinite(height)
+                ? XUnitPt.FromPoint(height) : originalHeight;
+        }
+
         void RenderImage(Image image)
         {
             var renderInfo = CurrentImageRenderInfo;
             XUnitPt top = CurrentBaselinePosition;
             var contentArea = renderInfo?.LayoutInfo.ContentArea ?? NRT.ThrowOnNull<Area>();
             top -= contentArea.Height;
-            if (IsSoleImageInTableCell && contentArea.Height > CurrentFont.GetHeight() &&
+            var layoutHeight = GetInlineImageLayoutHeight(image, contentArea.Height);
+            if (IsSoleImageInTableCell && layoutHeight > CurrentFont.GetHeight() &&
                 _paragraph.Format.LineSpacingRule != LineSpacingRule.Exactly)
             {
                 // Use the stored effective space, which already includes
                 // paragraph spacing and MinimumLineMetricsForFont. A minimum
                 // that prevents the baseline from moving needs no compensation.
-                var originalSpace = contentArea.Height + CurrentFont.GetHeight() - FontHandler.GetAscent(CurrentFont);
+                var originalSpace = layoutHeight + CurrentFont.GetHeight() - FontHandler.GetAscent(CurrentFont);
                 top += Math.Max(0, originalSpace - _currentVerticalInfo.InherentLineSpace);
             }
             if (_documentRenderer.InlineImageVerticalOffset?.Invoke(image) is double offset &&
                 !double.IsNaN(offset) && !double.IsInfinity(offset))
                 top += offset;
+            top += contentArea.Height - layoutHeight;
             RenderByInfos(_currentXPosition, top, [renderInfo]);
             if (_documentRenderer.InlineImageOverlay is { } overlay)
             {
@@ -3403,10 +3412,16 @@ namespace MigraDoc.Rendering
                     sideExclusion.NaturalFontHeight = _currentLineNaturalFontHeight;
             }
             var imageRenderInfo = CurrentImageRenderInfo;
+            XUnitPt imageHeight = XUnitPt.Zero;
             if (imageRenderInfo != null)
-                singleLineSpace = IsSoleImageInTableCell && imageRenderInfo.LayoutInfo.ContentArea.Height > singleLineSpace
-                    ? imageRenderInfo.LayoutInfo.ContentArea.Height
-                    : singleLineSpace - FontHandler.GetAscent(font) + imageRenderInfo.LayoutInfo.ContentArea.Height;
+            {
+                imageHeight = _currentLeaf?.Current is Image image
+                    ? GetInlineImageLayoutHeight(image, imageRenderInfo.LayoutInfo.ContentArea.Height)
+                    : imageRenderInfo.LayoutInfo.ContentArea.Height;
+                singleLineSpace = IsSoleImageInTableCell && imageHeight > singleLineSpace
+                    ? imageHeight
+                    : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;
+            }
 
             XUnitPt inherentLineSpace, lineHeight;
             if (lineSpacingRule == LineSpacingRule.Exactly)
@@ -3451,7 +3466,7 @@ namespace MigraDoc.Rendering
                 // between original and multiplied singleLineSpace value will be located at the bottom of the text line.
                 lineHeight = singleLineSpace * factor;
                 if (imageRenderInfo != null)
-                    lineHeight -= Math.Max(0, imageRenderInfo.LayoutInfo.ContentArea.Height - FontHandler.GetAscent(font)) *
+                    lineHeight -= Math.Max(0, imageHeight - FontHandler.GetAscent(font)) *
                                   (factor - 1);
                 lineHeight = Math.Max(lineHeight, _currentVerticalInfo.Height);
             }
