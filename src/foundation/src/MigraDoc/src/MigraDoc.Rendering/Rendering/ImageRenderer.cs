@@ -6,6 +6,7 @@ using PdfSharp.Drawing;
 using MigraDoc.DocumentObjectModel.Shapes;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.Logging;
+using PdfSharp.Pdf;
 
 namespace MigraDoc.Rendering
 {
@@ -96,6 +97,14 @@ namespace MigraDoc.Rendering
                 RenderFailureImage(destRect, formatInfo.ImagePath);
 
             RenderLine();
+            if (_gfx.PdfPage is { } page)
+            {
+                var rectangle = new PdfRectangle(_gfx.Transformer.WorldToDefaultPage(destRect).AsXRect);
+                if (_documentRenderer.ImageWebLink?.Invoke(_image, destRect) is { Length: > 0 } webTarget)
+                    page.AddWebLink(rectangle, webTarget);
+                else if (_documentRenderer.ImageDocumentLink?.Invoke(_image, destRect) is { Length: > 0 } bookmarkTarget)
+                    page.AddDocumentLink(rectangle, bookmarkTarget);
+            }
         }
 
         void RenderFailureImage(XRect destRect, string? imagePath)

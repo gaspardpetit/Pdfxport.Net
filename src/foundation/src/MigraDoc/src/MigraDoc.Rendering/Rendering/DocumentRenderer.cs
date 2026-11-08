@@ -29,6 +29,22 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects a web link for a painted image. Receives the image and its
+        /// destination rectangle in drawing coordinates. Null or empty omits the
+        /// link; a nonempty web target takes precedence over ImageDocumentLink.
+        /// Invoked during painting, including inline images and failure placeholders.
+        /// </summary>
+        public Func<Image, XRect, string?>? ImageWebLink { get; set; }
+
+        /// <summary>
+        /// Selects a named bookmark destination for a painted image when ImageWebLink
+        /// supplies no target. The bookmark must exist in the rendered document.
+        /// Null or empty omits the link. The hit area follows the image's transformed
+        /// destination rectangle; neither callback changes image layout.
+        /// </summary>
+        public Func<Image, XRect, string?>? ImageDocumentLink { get; set; }
+
+        /// <summary>
         /// Reserves additional body space in points above the usable page bottom,
         /// after footer clearance. The callback receives the one-based physical page
         /// number, regardless of displayed page numbering. Null or zero reserves nothing.
