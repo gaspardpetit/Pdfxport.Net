@@ -52,7 +52,7 @@ namespace MigraDoc.Rendering
     }
 
     readonly record struct LineSegmentInfo(Rectangle Rect, ParagraphIterator? StartIter,
-        XUnitPt WordsBefore, int BlanksBefore, bool PreviousSegmentNeedsContraction);
+        XUnitPt WordsBefore, int BlanksBefore, bool PreviousSegmentNeedsContraction, XUnitPt ClippedWidthBefore);
 
     /// <summary>
     /// Formatting information for a paragraph.
