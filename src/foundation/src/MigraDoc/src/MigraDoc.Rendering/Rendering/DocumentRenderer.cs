@@ -222,6 +222,15 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, double?>? JustifiedSpaceShrinkFactorForParagraph { get; set; }
 
         /// <summary>
+        /// Gets the minimum fraction of normal space width allowed when fitting
+        /// a nonfinal word on a justified line. Null or values outside the exclusive
+        /// interval (0, 1) disable contraction. The final word uses
+        /// <see cref="JustifiedSpaceShrinkFactorForParagraph"/> instead.
+        /// </summary>
+        public Func<Paragraph, double?>? JustifiedNonterminalSpaceShrinkFactorForParagraph { get; set; }
+
+
+        /// <summary>
         /// Marks explicit space characters whose width should be dropped when the
         /// following word would not fit on the current line. Other explicit spaces
         /// retain their normal MigraDoc behavior.

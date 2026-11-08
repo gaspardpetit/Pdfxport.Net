@@ -317,9 +317,12 @@ namespace MigraDoc.Rendering
             if (!notFitting)
             {
                 // For correct right paragraph alignment with tabs
-                if (!IgnoreHorizontalGrowth)
+                if (!IgnoreHorizontalGrowth &&
+                    !(_phase == Phase.Rendering && _paragraph.Format.Alignment == ParagraphAlignment.Justify))
                     _currentLineWidth += _currentXPosition - xPositionBeforeTab;
 
+                _currentContractionSpaceWidth = 0;
+                _savedBlankWidth = 0;
                 _tabOffsets.Add(new TabOffset(nextTabStop.Leader, _currentXPosition - xPositionBeforeTab));
                 if (_currentLeaf != null)
                     _lastTab = _currentLeaf.Current;
@@ -373,7 +376,7 @@ namespace MigraDoc.Rendering
         {
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak, out var naturalFontHeight);
+                out var lineEndsWithLineBreak, out var naturalFontHeight, out var contractionSpaceWidth);
             //------------------------------------------
 
             XUnitPt xPositionAfterTab = xPosition;
@@ -384,7 +387,7 @@ namespace MigraDoc.Rendering
                 xPositionAfterTab = _formattingArea.X + tabStopPosition;
 
             //--- Restore ---------------------------------
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight, contractionSpaceWidth);
             //------------------------------------------
             return xPositionAfterTab;
         }
@@ -399,7 +402,7 @@ namespace MigraDoc.Rendering
         {
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak, out var naturalFontHeight);
+                out var lineEndsWithLineBreak, out var naturalFontHeight, out var contractionSpaceWidth);
             //------------------------------------------
 
             XUnitPt xPositionAfterTab = xPosition;
@@ -409,7 +412,7 @@ namespace MigraDoc.Rendering
                 xPositionAfterTab = _formattingArea.X + tabStopPosition - _currentLineWidth;
 
             //--- Restore ------------------------------
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight, contractionSpaceWidth);
             //------------------------------------------
             return xPositionAfterTab;
         }
@@ -443,7 +446,7 @@ namespace MigraDoc.Rendering
         {
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak, out var naturalFontHeight);
+                out var lineEndsWithLineBreak, out var naturalFontHeight, out var contractionSpaceWidth);
             //------------------------------------------
 
             XUnitPt xPositionAfterTab = xPosition;
@@ -470,7 +473,7 @@ namespace MigraDoc.Rendering
             }
 
             //--- Restore ------------------------------
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight, contractionSpaceWidth);
             //------------------------------------------
             return xPositionAfterTab;
         }
@@ -487,7 +490,7 @@ namespace MigraDoc.Rendering
 
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak, out var naturalFontHeight);
+                out var lineEndsWithLineBreak, out var naturalFontHeight, out var contractionSpaceWidth);
             //------------------------------------------
 
             try
@@ -575,7 +578,7 @@ namespace MigraDoc.Rendering
             finally
             {
                 //--- Restore ------------------------------
-                RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
+                RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight, contractionSpaceWidth);
                 //------------------------------------------
             }
 
@@ -583,7 +586,7 @@ namespace MigraDoc.Rendering
         }
 
         void SaveBeforeProbing(out ParagraphIterator? paragraphIter, out int blankCount, out XUnitPt wordsWidth, out XUnitPt xPosition, out XUnitPt lineWidth, out XUnitPt blankWidth,
-            out bool lineEndsWithLineBreak, out double naturalFontHeight)
+            out bool lineEndsWithLineBreak, out double naturalFontHeight, out XUnitPt contractionSpaceWidth)
         {
             paragraphIter = _currentLeaf;
             blankCount = _currentBlankCount;
@@ -593,10 +596,11 @@ namespace MigraDoc.Rendering
             blankWidth = _savedBlankWidth;
             lineEndsWithLineBreak = _currentLineEndsWithLineBreak;
             naturalFontHeight = _currentLineNaturalFontHeight;
+            contractionSpaceWidth = _currentContractionSpaceWidth;
         }
 
         void RestoreAfterProbing(ParagraphIterator? paragraphIter, int blankCount, XUnitPt wordsWidth, XUnitPt xPosition, XUnitPt lineWidth, XUnitPt blankWidth,
-            bool lineEndsWithLineBreak, double naturalFontHeight)
+            bool lineEndsWithLineBreak, double naturalFontHeight, XUnitPt contractionSpaceWidth)
         {
             _currentLeaf = paragraphIter;
             _currentBlankCount = blankCount;
@@ -606,6 +610,7 @@ namespace MigraDoc.Rendering
             _savedBlankWidth = blankWidth;
             _currentLineEndsWithLineBreak = lineEndsWithLineBreak;
             _currentLineNaturalFontHeight = naturalFontHeight;
+            _currentContractionSpaceWidth = contractionSpaceWidth;
             if (_formattingArea is SideExclusionArea sideExclusion)
                 sideExclusion.NaturalFontHeight = naturalFontHeight;
         }
@@ -619,6 +624,7 @@ namespace MigraDoc.Rendering
         {
             _currentLineWidth = 0;
             _currentBlankCount = 0;
+            _currentContractionSpaceWidth = 0;
             // Extra for auto tab after list symbol.
 
             // Check if this conditional statement is still required.
@@ -811,6 +817,8 @@ namespace MigraDoc.Rendering
                 ? transitions[0].WordsBefore : lineInfo.WordsWidth;
             _currentLineBlankCount = transitions is { Count: > 0 }
                 ? transitions[0].BlanksBefore : lineInfo.BlankCount;
+            _currentSegmentNeedsContraction = transitions is { Count: > 0 } &&
+                transitions[0].PreviousSegmentNeedsContraction;
             _currentVerticalInfo = lineInfo.Vertical;
             _currentLeaf = lineInfo.StartIter;
             _startLeaf = lineInfo.StartIter;
@@ -921,6 +929,8 @@ namespace MigraDoc.Rendering
                     _currentXPosition = transition.Rect.X;
                     _currentLineRect = transition.Rect;
                     segmentIndex++;
+                    _currentSegmentNeedsContraction = segmentIndex < transitions.Count &&
+                        transitions[segmentIndex].PreviousSegmentNeedsContraction;
                     _currentLineWordsWidth = (segmentIndex < transitions.Count
                         ? transitions[segmentIndex].WordsBefore : lineInfo.WordsWidth) -
                         transition.WordsBefore;
@@ -954,7 +964,7 @@ namespace MigraDoc.Rendering
         {
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak, out var naturalFontHeight);
+                out var lineEndsWithLineBreak, out var naturalFontHeight, out var contractionSpaceWidth);
             bool origLastTabPassed = _lastTabPassed;
             var clippedTrailingWidth = _currentClippedTrailingWidth;
             //------------------------------------------
@@ -966,6 +976,10 @@ namespace MigraDoc.Rendering
             _currentLineWidth = 0;
             _currentClippedTrailingWidth = 0;
             _currentWordsWidth = 0;
+            _currentBlankCount = 0;
+            _currentContractionSpaceWidth = 0;
+            _savedBlankWidth = 0;
+            _lastTabPassed = lineInfo.LastTab == null;
             _currentLineEndsWithLineBreak = false;
 
             var fittingRect = _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height);
@@ -996,7 +1010,7 @@ namespace MigraDoc.Rendering
                 lineInfo.ReMeasureLine = false;
                 _lastTabPassed = origLastTabPassed;
             }
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight, contractionSpaceWidth);
             _currentClippedTrailingWidth = clippedTrailingWidth;
         }
 
@@ -1071,27 +1085,21 @@ namespace MigraDoc.Rendering
                 if (_phase == Phase.Rendering &&
                   _paragraph.Format.Alignment == ParagraphAlignment.Justify && _lastTabPassed)
                 {
+                    var contentArea = _renderInfo.LayoutInfo.ContentArea;
+                    XUnitPt width = _currentLineRect?.Width ??
+                        contentArea.GetFittingRect(_currentYPosition,
+                            _currentVerticalInfo.Height)?.Width ?? NRT.ThrowOnNull<XUnitPt>();
+                    if (_lastTabPosition > 0)
+                        width -= _lastTabPosition - contentArea.X;
+                    else
+                        width -= LeftIndent;
+                    width -= RightIndent;
                     if (_currentLineBlankCount >= 1 &&
                         (!(_isLastLine && _renderInfo.FormatInfo.IsEnding) ||
+                         _currentSegmentNeedsContraction ||
                          _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1 &&
-                         _currentLineWidth > (_currentLineRect?.Width ??
-                             _renderInfo.LayoutInfo.ContentArea.Width) - LeftIndent - RightIndent))
-                    {
-                        var contentArea = _renderInfo.LayoutInfo.ContentArea;
-                        XUnitPt width = _currentLineRect?.Width ??
-                            contentArea.GetFittingRect(_currentYPosition,
-                                _currentVerticalInfo.Height)?.Width ?? NRT.ThrowOnNull<XUnitPt>();
-                        if (_lastTabPosition > 0)
-                        {
-                            width -= (_lastTabPosition -
-                            contentArea.X);
-                        }
-                        else
-                            width -= LeftIndent;
-
-                        width -= RightIndent;
+                         _currentLineWidth > width))
                         return (width - _currentLineWordsWidth) / _currentLineBlankCount;
-                    }
                 }
                 return MeasureString(" ");
             }
@@ -2243,7 +2251,6 @@ namespace MigraDoc.Rendering
                     var lastText = word;
                     var joined = false;
                     double overhangAllowance = 0;
-                    XUnitPt finalBlankWidth = 0;
                     try
                     {
                         while (next?.Current is Text text && text.Content.Length > 0 &&
@@ -2257,8 +2264,6 @@ namespace MigraDoc.Rendering
                             lastText = text.Content;
                             next = next.GetNextLeaf();
                         }
-                        if (joined)
-                            finalBlankWidth = MeasureString(" ");
                         if (joined && _documentRenderer.LineEndOverhang?.Invoke(
                                 _paragraph, ((Text)_currentLeaf.Current).Content, CurrentFont) is double allowance &&
                             allowance > 0 && IsFinite(allowance))
@@ -2271,16 +2276,14 @@ namespace MigraDoc.Rendering
                     if (joined)
                     {
                         var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
-                        var followingLeaf = next;
-                        while (followingLeaf != null && IsBlank(followingLeaf.Current))
-                            followingLeaf = followingLeaf.GetNextLeaf();
+                        var followingLeaf = SkipContractionPolicyLeaves(next);
                         var shrinkFactor = followingLeaf == null
                             ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
-                            : null;
-                        var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
+                            : _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
+                        var spaceWidth = _currentContractionSpaceWidth + _savedBlankWidth;
                         var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
-                            _paragraph.Format.Alignment == ParagraphAlignment.Justify && blankCount > 0
-                            ? (1 - shrinkFactor.Value) * finalBlankWidth * blankCount : 0;
+                            _paragraph.Format.Alignment == ParagraphAlignment.Justify && spaceWidth > 0
+                            ? (1 - shrinkFactor.Value) * spaceWidth : 0;
                         var fitAllowance = _documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null
                             ? (double)shrinkAllowance + overhangAllowance
                             : Math.Max((double)shrinkAllowance, overhangAllowance);
@@ -2384,21 +2387,41 @@ namespace MigraDoc.Rendering
             _phase == Phase.Rendering && _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
             !_lastTabPassed;
 
+        ParagraphIterator? SkipContractionPolicyLeaves(ParagraphIterator? leaf)
+        {
+            // Bookmarks and other nonpainting leaves do not make the preceding word nonfinal.
+            while (leaf != null && (IsBlank(leaf.Current) || IsNonpaintingLeaf(leaf.Current)))
+                leaf = leaf.GetNextLeaf();
+            if (leaf != null && (IsLineBreak(leaf.Current) || IsTab(leaf.Current)))
+            {
+                // A terminal break or tab leaves this as the final line, including
+                // a tab rejected at the right edge and discarded by Format().
+                // Trailing bookmarks/ignored blanks preserve that behavior.
+                var afterBreak = leaf.GetNextLeaf();
+                while (afterBreak != null &&
+                       (afterBreak.Current is BookmarkField || IsBlank(afterBreak.Current)))
+                    afterBreak = afterBreak.GetNextLeaf();
+                if (afterBreak == null)
+                    return null;
+            }
+            return leaf;
+        }
+
         FormatResult FormatAsWord(XUnitPt width, Rectangle fittingRect, double overhangAllowance = 0)
         {
             _savedWordWidth = width;
 
             var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
             var overrun = _currentXPosition + width - right;
-            var shrinkFactor = _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
-            var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
-            var nextLeaf = _currentLeaf?.GetNextLeaf();
-            while (nextLeaf != null && IsBlank(nextLeaf.Current))
-                nextLeaf = nextLeaf.GetNextLeaf();
+            var nextLeaf = SkipContractionPolicyLeaves(_currentLeaf?.GetNextLeaf());
+            var shrinkFactor = nextLeaf == null
+                ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
+                : _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
+            var spaceWidth = _currentContractionSpaceWidth + _savedBlankWidth;
             var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
                 _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
-                blankCount > 0 && nextLeaf == null
-                ? (1 - shrinkFactor.Value) * MeasureString(" ") * blankCount
+                spaceWidth > 0
+                ? (1 - shrinkFactor.Value) * spaceWidth
                 : 0;
             if (overrun > 0)
             {
@@ -2414,7 +2437,10 @@ namespace MigraDoc.Rendering
             {
                 // For Tabs in justified context.
                 if (!IgnoreHorizontalGrowth)
+                {
                     ++_currentBlankCount;
+                    _currentContractionSpaceWidth += _savedBlankWidth;
+                }
             }
             // For Tabs in justified context.
             if (!IgnoreHorizontalGrowth)
@@ -2438,9 +2464,14 @@ namespace MigraDoc.Rendering
             var secondary = intervals[nextIndex];
 
             _currentSecondaryRect = secondary;
+            var current = intervals[_currentSegmentIndex];
+            var needsContraction = _currentContractionSpaceWidth > 0 &&
+                _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1 &&
+                _currentXPosition > current.X + current.Width - RightIndent + Tolerance;
             _currentSegmentTransitions.Add(new LineSegmentInfo(secondary, _currentLeaf,
-                _currentWordsWidth, _currentBlankCount));
+                _currentWordsWidth, _currentBlankCount, needsContraction));
             _savedBlankWidth = 0;
+            _currentContractionSpaceWidth = 0;
             _currentXPosition = secondary.X;
             _currentSegmentIndex = nextIndex;
             return true;
@@ -2670,7 +2701,7 @@ namespace MigraDoc.Rendering
                 var following = _currentLeaf?.GetNextLeaf();
                 while (following != null)
                 {
-                    if (IsTransparentOptionalSpaceLeaf(following.Current))
+                    if (IsNonpaintingLeaf(following.Current))
                     {
                         following = following.GetNextLeaf();
                         continue;
@@ -2717,7 +2748,7 @@ namespace MigraDoc.Rendering
             return FormatAsWord(width, fittingRect);
         }
 
-        bool IsTransparentOptionalSpaceLeaf(DocumentObject element) =>
+        bool IsNonpaintingLeaf(DocumentObject element) =>
             element is BookmarkField or Text { Content.Length: 0 } or
                 ParagraphElements { Count: 0 } ||
             IsSoftHyphen(element) ||
@@ -2752,6 +2783,7 @@ namespace MigraDoc.Rendering
             var savedLineWidth = _currentLineWidth;
             var savedWordsWidth = _currentWordsWidth;
             var savedBlankCount = _currentBlankCount;
+            var savedContractionSpaceWidth = _currentContractionSpaceWidth;
             var savedBlankWidth = _savedBlankWidth;
             var savedClippedWidth = _currentClippedTrailingWidth;
             var savedWordWidth = _savedWordWidth;
@@ -2802,6 +2834,7 @@ namespace MigraDoc.Rendering
                 _currentLineWidth = savedLineWidth;
                 _currentWordsWidth = savedWordsWidth;
                 _currentBlankCount = savedBlankCount;
+                _currentContractionSpaceWidth = savedContractionSpaceWidth;
                 _savedBlankWidth = savedBlankWidth;
                 _currentClippedTrailingWidth = savedClippedWidth;
                 _savedWordWidth = savedWordWidth;
@@ -2978,18 +3011,18 @@ namespace MigraDoc.Rendering
 
             //--- Save ---------------------------------
             SaveBeforeProbing(out var iter, out var blankCount, out var wordsWidth, out var xPosition, out var lineWidth, out var blankWidth,
-                out var lineEndsWithLineBreak, out var naturalFontHeight);
+                out var lineEndsWithLineBreak, out var naturalFontHeight, out var contractionSpaceWidth);
             //------------------------------------------
             _currentLeaf = nextIter;
             var result = FormatElement(nextIter.Current);
 
             //--- Restore ------------------------------
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight, contractionSpaceWidth);
             //------------------------------------------
             if (result == FormatResult.Continue)
                 return FormatResult.Continue;
 
-            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight);
+            RestoreAfterProbing(iter, blankCount, wordsWidth, xPosition, lineWidth, blankWidth, lineEndsWithLineBreak, naturalFontHeight, contractionSpaceWidth);
             var fittingRect = _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height);
             if (fittingRect is null)
                 NRT.ThrowOnNull();
@@ -3084,6 +3117,7 @@ namespace MigraDoc.Rendering
             _currentVerticalInfo = CalcCurrentVerticalInfo();
             _startLeaf = _currentLeaf;
             _currentBlankCount = 0;
+            _currentContractionSpaceWidth = 0;
             _currentWordsWidth = 0;
             _currentLineWidth = 0;
             _currentClippedTrailingWidth = 0;
@@ -3726,6 +3760,8 @@ namespace MigraDoc.Rendering
 
         XUnitPt _currentWordsWidth;
         int _currentBlankCount;
+        XUnitPt _currentContractionSpaceWidth;
+        bool _currentSegmentNeedsContraction;
         XUnitPt _currentLineWidth;
         XUnitPt _currentClippedTrailingWidth;
         bool _currentLineEndsWithLineBreak;
