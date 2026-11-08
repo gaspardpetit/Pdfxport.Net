@@ -87,6 +87,12 @@ public class NonterminalSpaceContractionTests : IDisposable
     [InlineData(true, 8)]
     [InlineData(false, 7)]
     [InlineData(true, 7)]
+    [InlineData(false, 10)]
+    [InlineData(true, 10)]
+    [InlineData(false, 11)]
+    [InlineData(true, 11)]
+    [InlineData(false, 12)]
+    [InlineData(true, 12)]
     public void FinalLineSuffixUsesFinalPolicy(bool split, int suffix)
     {
         var normal = Render(null, split: split, tail: false, suffix: suffix);
@@ -116,9 +122,13 @@ public class NonterminalSpaceContractionTests : IDisposable
     [InlineData(true, 6)]
     [InlineData(false, 5)]
     [InlineData(true, 5)]
+    [InlineData(false, 10)]
+    [InlineData(true, 10)]
+    [InlineData(false, 13)]
+    [InlineData(true, 13)]
     public void BreakWithFollowingLineUsesNonfinalPolicy(bool split, int suffix)
     {
-        var result = Render(0.5, split: split, tail: suffix == 5, suffix: suffix);
+        var result = Render(0.5, split: split, tail: suffix is 5 or 10, suffix: suffix);
         var last = split ? "vo" : "Bravo";
         var end = result.Words.Single(w => w.Text == last);
         end.Y.Should().BeApproximately(result.Words[0].Y, 0.001);
@@ -187,6 +197,29 @@ public class NonterminalSpaceContractionTests : IDisposable
         (start.X - alpha.X - Width("Alpha")).Should().BeApproximately(Width(" ") * 0.75, 0.02);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EarlierIntervalContractsEvenWhenParagraphEndsInNextInterval(bool split)
+    {
+        var normal = Render(null, split: split, finalAcrossIntervals: true);
+        var last = split ? "vo" : "Bravo";
+        normal.Words.Single(w => w.Text == last).Y.Should().NotBe(normal.Words[0].Y);
+        var allowed = Render(0.5, split: split, finalAcrossIntervals: true);
+        var end = allowed.Words.Single(w => w.Text == last);
+        end.Y.Should().BeApproximately(allowed.Words[0].Y, 0.001);
+        var leftEdge = 20 + Width("Alpha Bravo") - Width(" ") * 0.25;
+        (end.X + Width(last)).Should().BeApproximately(leftEdge, 0.02);
+        var final = allowed.Words.Single(w => w.Text == "I");
+        final.Y.Should().BeApproximately(end.Y, 0.001);
+        final.X.Should().BeGreaterOrEqualTo(leftEdge + 40 - 0.02);
+        Render(0.5, split: split, finalAcrossIntervals: true, missingSpaceFraction: 0.75).Words.Should()
+            .Equal(Render(null, split: split, finalAcrossIntervals: true, missingSpaceFraction: 0.75).Words);
+        Render(0.5, split: split, finalAcrossIntervals: true, missingSpaceFraction: -0.25).Words.Should()
+            .Equal(Render(null, split: split, finalAcrossIntervals: true, missingSpaceFraction: -0.25).Words,
+                "an earlier final-line interval that fits naturally must not be expanded");
+    }
+
     static double Width(string text, double size = 12)
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(500, 500), XGraphicsUnit.Point,
@@ -197,11 +230,13 @@ public class NonterminalSpaceContractionTests : IDisposable
     static ((string Text, double X, double Y)[] Words, double BodyWidth) Render(double? factor,
         bool split = false, double? finalFactor = null, bool tail = true,
         ParagraphAlignment alignment = ParagraphAlignment.Justify, int suffix = -1,
-        int tabs = 0, double missingSpaceFraction = 0.25, double wordSize = 12, bool wrap = false)
+        int tabs = 0, double missingSpaceFraction = 0.25, double wordSize = 12, bool wrap = false, bool finalAcrossIntervals = false)
     {
-        var leftWidth = wrap ? Width("One Two Three") + Width(" ") * 0.25 : 0;
+        var leftWidth = finalAcrossIntervals ? Width("Alpha Bravo") - Width(" ") * missingSpaceFraction :
+            wrap ? Width("One Two Three") + Width(" ") * 0.25 : 0;
         var segmentOffset = tabs * 120 + (wrap ? leftWidth + 40 : 0);
-        var bodyWidth = segmentOffset + Width("Alpha ") + Width("Bravo", wordSize) -
+        var bodyWidth = finalAcrossIntervals ? leftWidth + 40 + Width("I") + 1 :
+            segmentOffset + Width("Alpha ") + Width("Bravo", wordSize) -
             Width(" ") * missingSpaceFraction;
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -209,7 +244,7 @@ public class NonterminalSpaceContractionTests : IDisposable
         var section = document.AddSection();
         section.PageSetup.PageWidth = Unit.FromPoint(bodyWidth + 40);
         section.PageSetup.LeftMargin = section.PageSetup.RightMargin = Unit.FromPoint(20);
-        if (wrap)
+        if (wrap || finalAcrossIntervals)
         {
             section.PageSetup.TopMargin = Unit.FromPoint(20);
             var image = section.AddImage(
@@ -270,13 +305,28 @@ public class NonterminalSpaceContractionTests : IDisposable
                 paragraph.AddLineBreak();
                 paragraph.AddBookmark("AfterBreak", false);
                 break;
+            case 10:
+                paragraph.AddTab();
+                break;
+            case 11:
+                paragraph.AddBookmark("BeforeTab", false);
+                paragraph.AddTab();
+                break;
+            case 12:
+                paragraph.AddTab();
+                paragraph.AddBookmark("AfterTab", false);
+                break;
+            case 13:
+                paragraph.AddTab();
+                paragraph.AddTab();
+                break;
             case 8:
                 paragraph.AddBookmark("BeforeBreak", false);
                 paragraph.AddLineBreak();
                 break;
         }
         if (tail)
-            paragraph.AddText(" Delta");
+            paragraph.AddText(finalAcrossIntervals ? " I" : " Delta");
         paragraph.Format.Alignment = alignment;
         var renderer = new PdfDocumentRenderer { Document = document };
         renderer.DocumentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph = _ => factor;

@@ -817,6 +817,8 @@ namespace MigraDoc.Rendering
                 ? transitions[0].WordsBefore : lineInfo.WordsWidth;
             _currentLineBlankCount = transitions is { Count: > 0 }
                 ? transitions[0].BlanksBefore : lineInfo.BlankCount;
+            _currentSegmentNeedsContraction = transitions is { Count: > 0 } &&
+                transitions[0].PreviousSegmentNeedsContraction;
             _currentVerticalInfo = lineInfo.Vertical;
             _currentLeaf = lineInfo.StartIter;
             _startLeaf = lineInfo.StartIter;
@@ -927,6 +929,8 @@ namespace MigraDoc.Rendering
                     _currentXPosition = transition.Rect.X;
                     _currentLineRect = transition.Rect;
                     segmentIndex++;
+                    _currentSegmentNeedsContraction = segmentIndex < transitions.Count &&
+                        transitions[segmentIndex].PreviousSegmentNeedsContraction;
                     _currentLineWordsWidth = (segmentIndex < transitions.Count
                         ? transitions[segmentIndex].WordsBefore : lineInfo.WordsWidth) -
                         transition.WordsBefore;
@@ -974,6 +978,8 @@ namespace MigraDoc.Rendering
             _currentWordsWidth = 0;
             _currentBlankCount = 0;
             _currentContractionSpaceWidth = 0;
+            _savedBlankWidth = 0;
+            _lastTabPassed = lineInfo.LastTab == null;
             _currentLineEndsWithLineBreak = false;
 
             var fittingRect = _formattingArea.GetFittingRect(_currentYPosition, _currentVerticalInfo.Height);
@@ -1090,6 +1096,7 @@ namespace MigraDoc.Rendering
                     width -= RightIndent;
                     if (_currentLineBlankCount >= 1 &&
                         (!(_isLastLine && _renderInfo.FormatInfo.IsEnding) ||
+                         _currentSegmentNeedsContraction ||
                          _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1 &&
                          _currentLineWidth > width))
                         return (width - _currentLineWordsWidth) / _currentLineBlankCount;
@@ -2385,11 +2392,11 @@ namespace MigraDoc.Rendering
             // Bookmarks and other nonpainting leaves do not make the preceding word nonfinal.
             while (leaf != null && (IsBlank(leaf.Current) || IsNonpaintingLeaf(leaf.Current)))
                 leaf = leaf.GetNextLeaf();
-            if (leaf != null && IsLineBreak(leaf.Current))
+            if (leaf != null && (IsLineBreak(leaf.Current) || IsTab(leaf.Current)))
             {
-                // A terminal break stores this line without adding a final empty line.
-                // Trailing bookmarks/ignored blanks preserve that behavior;
-                // another break or following content must retain the nonfinal policy.
+                // A terminal break or tab leaves this as the final line, including
+                // a tab rejected at the right edge and discarded by Format().
+                // Trailing bookmarks/ignored blanks preserve that behavior.
                 var afterBreak = leaf.GetNextLeaf();
                 while (afterBreak != null &&
                        (afterBreak.Current is BookmarkField || IsBlank(afterBreak.Current)))
@@ -2457,8 +2464,12 @@ namespace MigraDoc.Rendering
             var secondary = intervals[nextIndex];
 
             _currentSecondaryRect = secondary;
+            var current = intervals[_currentSegmentIndex];
+            var needsContraction = _currentContractionSpaceWidth > 0 &&
+                _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1 &&
+                _currentXPosition > current.X + current.Width - RightIndent + Tolerance;
             _currentSegmentTransitions.Add(new LineSegmentInfo(secondary, _currentLeaf,
-                _currentWordsWidth, _currentBlankCount));
+                _currentWordsWidth, _currentBlankCount, needsContraction));
             _savedBlankWidth = 0;
             _currentContractionSpaceWidth = 0;
             _currentXPosition = secondary.X;
@@ -3750,6 +3761,7 @@ namespace MigraDoc.Rendering
         XUnitPt _currentWordsWidth;
         int _currentBlankCount;
         XUnitPt _currentContractionSpaceWidth;
+        bool _currentSegmentNeedsContraction;
         XUnitPt _currentLineWidth;
         XUnitPt _currentClippedTrailingWidth;
         bool _currentLineEndsWithLineBreak;
