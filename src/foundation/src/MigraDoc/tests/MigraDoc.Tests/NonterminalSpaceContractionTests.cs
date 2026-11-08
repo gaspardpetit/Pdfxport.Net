@@ -3,6 +3,7 @@
 
 using FluentAssertions;
 using MigraDoc.DocumentObjectModel;
+using MigraDoc.DocumentObjectModel.Fields;
 using MigraDoc.Rendering;
 using PdfSharp.Diagnostics;
 using PdfSharp.Drawing;
@@ -68,6 +69,41 @@ public class NonterminalSpaceContractionTests : IDisposable
         final.Words.Single(w => w.Text == "Bravo").Y.Should().BeApproximately(final.Words[0].Y, 0.001);
     }
 
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    [InlineData(false, 2)]
+    [InlineData(true, 2)]
+    [InlineData(false, 3)]
+    [InlineData(true, 3)]
+    [InlineData(false, 4)]
+    [InlineData(true, 4)]
+    public void NonpaintingSuffixUsesFinalPolicy(bool split, int suffix)
+    {
+        var normal = Render(null, split: split, tail: false, suffix: suffix);
+        Render(0.5, split: split, tail: false, suffix: suffix).Words.Should().Equal(normal.Words);
+        var last = split ? "vo" : "Bravo";
+        normal.Words.Single(w => w.Text == last).Y.Should().NotBe(normal.Words[0].Y);
+
+        var final = Render(null, split: split, finalFactor: 0.5, tail: false, suffix: suffix);
+        var end = final.Words.Single(w => w.Text == last);
+        end.Y.Should().BeApproximately(final.Words[0].Y, 0.001);
+        (end.X + Width(last)).Should().BeApproximately(20 + final.BodyWidth, 0.02);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void VisibleContentAfterBookmarksStillUsesNonfinalPolicy(bool split)
+    {
+        var result = Render(0.5, split: split, suffix: 0);
+        var last = split ? "vo" : "Bravo";
+        result.Words.Single(w => w.Text == last).Y.Should().BeApproximately(result.Words[0].Y, 0.001);
+        result.Words.Single(w => w.Text == "Delta").Y.Should().NotBe(result.Words[0].Y);
+    }
+
     static double Width(string text)
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(500, 500), XGraphicsUnit.Point,
@@ -77,7 +113,7 @@ public class NonterminalSpaceContractionTests : IDisposable
 
     static ((string Text, double X, double Y)[] Words, double BodyWidth) Render(double? factor,
         bool split = false, double? finalFactor = null, bool tail = true,
-        ParagraphAlignment alignment = ParagraphAlignment.Justify)
+        ParagraphAlignment alignment = ParagraphAlignment.Justify, int suffix = -1)
     {
         var bodyWidth = Width("Alpha Bravo") - Width(" ") * 0.25;
         var document = new Document();
@@ -94,6 +130,27 @@ public class NonterminalSpaceContractionTests : IDisposable
         }
         else
             paragraph.AddText("Bravo");
+        switch (suffix)
+        {
+            case 0:
+                paragraph.AddBookmark("End", false);
+                break;
+            case 1:
+                paragraph.AddText("");
+                break;
+            case 2:
+                paragraph.AddInfoField(InfoFieldType.Title);
+                break;
+            case 3:
+                paragraph.AddText("\u00AD");
+                break;
+            case 4:
+                paragraph.AddBookmark("End1", false);
+                paragraph.AddText(" ");
+                paragraph.AddBookmark("End2", false);
+                paragraph.AddText("");
+                break;
+        }
         if (tail)
             paragraph.AddText(" Delta");
         paragraph.Format.Alignment = alignment;

@@ -2271,9 +2271,7 @@ namespace MigraDoc.Rendering
                     if (joined)
                     {
                         var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
-                        var followingLeaf = next;
-                        while (followingLeaf != null && IsBlank(followingLeaf.Current))
-                            followingLeaf = followingLeaf.GetNextLeaf();
+                        var followingLeaf = SkipContractionPolicyLeaves(next);
                         var shrinkFactor = followingLeaf == null
                             ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
                             : _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
@@ -2384,15 +2382,21 @@ namespace MigraDoc.Rendering
             _phase == Phase.Rendering && _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
             !_lastTabPassed;
 
+        ParagraphIterator? SkipContractionPolicyLeaves(ParagraphIterator? leaf)
+        {
+            // Bookmarks and other nonpainting leaves do not make the preceding word nonfinal.
+            while (leaf != null && (IsBlank(leaf.Current) || IsNonpaintingLeaf(leaf.Current)))
+                leaf = leaf.GetNextLeaf();
+            return leaf;
+        }
+
         FormatResult FormatAsWord(XUnitPt width, Rectangle fittingRect, double overhangAllowance = 0)
         {
             _savedWordWidth = width;
 
             var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
             var overrun = _currentXPosition + width - right;
-            var nextLeaf = _currentLeaf?.GetNextLeaf();
-            while (nextLeaf != null && IsBlank(nextLeaf.Current))
-                nextLeaf = nextLeaf.GetNextLeaf();
+            var nextLeaf = SkipContractionPolicyLeaves(_currentLeaf?.GetNextLeaf());
             var shrinkFactor = nextLeaf == null
                 ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
                 : _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
@@ -2672,7 +2676,7 @@ namespace MigraDoc.Rendering
                 var following = _currentLeaf?.GetNextLeaf();
                 while (following != null)
                 {
-                    if (IsTransparentOptionalSpaceLeaf(following.Current))
+                    if (IsNonpaintingLeaf(following.Current))
                     {
                         following = following.GetNextLeaf();
                         continue;
@@ -2719,7 +2723,7 @@ namespace MigraDoc.Rendering
             return FormatAsWord(width, fittingRect);
         }
 
-        bool IsTransparentOptionalSpaceLeaf(DocumentObject element) =>
+        bool IsNonpaintingLeaf(DocumentObject element) =>
             element is BookmarkField or Text { Content.Length: 0 } or
                 ParagraphElements { Count: 0 } ||
             IsSoftHyphen(element) ||
