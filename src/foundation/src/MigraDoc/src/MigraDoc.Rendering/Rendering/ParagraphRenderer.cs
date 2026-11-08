@@ -3412,9 +3412,10 @@ namespace MigraDoc.Rendering
                     sideExclusion.NaturalFontHeight = _currentLineNaturalFontHeight;
             }
             var imageRenderInfo = CurrentImageRenderInfo;
+            XUnitPt imageHeight = XUnitPt.Zero;
             if (imageRenderInfo != null)
             {
-                var imageHeight = _currentLeaf?.Current is Image image
+                imageHeight = _currentLeaf?.Current is Image image
                     ? GetInlineImageLayoutHeight(image, imageRenderInfo.LayoutInfo.ContentArea.Height)
                     : imageRenderInfo.LayoutInfo.ContentArea.Height;
                 singleLineSpace = IsSoleImageInTableCell && imageHeight > singleLineSpace
@@ -3465,7 +3466,7 @@ namespace MigraDoc.Rendering
                 // between original and multiplied singleLineSpace value will be located at the bottom of the text line.
                 lineHeight = singleLineSpace * factor;
                 if (imageRenderInfo != null)
-                    lineHeight -= Math.Max(0, imageRenderInfo.LayoutInfo.ContentArea.Height - FontHandler.GetAscent(font)) *
+                    lineHeight -= Math.Max(0, imageHeight - FontHandler.GetAscent(font)) *
                                   (factor - 1);
                 lineHeight = Math.Max(lineHeight, _currentVerticalInfo.Height);
             }

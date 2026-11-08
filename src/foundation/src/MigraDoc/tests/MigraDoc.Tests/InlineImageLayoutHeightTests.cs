@@ -81,7 +81,36 @@ public class InlineImageLayoutHeightTests : IDisposable
         result.Frame.Height.Should().BeApproximately(50, 0.001);
     }
 
-    static Result Render(int location, double? height, bool missing = false, LineSpacingRule rule = LineSpacingRule.Single)
+    [Theory]
+    [InlineData(LineSpacingRule.Double, 0, 30)]
+    [InlineData(LineSpacingRule.Double, 0, 70)]
+    [InlineData(LineSpacingRule.Double, 1, 30)]
+    [InlineData(LineSpacingRule.Double, 1, 70)]
+    [InlineData(LineSpacingRule.Double, 2, 30)]
+    [InlineData(LineSpacingRule.Double, 2, 70)]
+    [InlineData(LineSpacingRule.OnePtFive, 0, 30)]
+    [InlineData(LineSpacingRule.OnePtFive, 0, 70)]
+    [InlineData(LineSpacingRule.OnePtFive, 1, 30)]
+    [InlineData(LineSpacingRule.OnePtFive, 1, 70)]
+    [InlineData(LineSpacingRule.OnePtFive, 2, 30)]
+    [InlineData(LineSpacingRule.OnePtFive, 2, 70)]
+    [InlineData(LineSpacingRule.Multiple, 0, 30)]
+    [InlineData(LineSpacingRule.Multiple, 0, 70)]
+    [InlineData(LineSpacingRule.Multiple, 1, 30)]
+    [InlineData(LineSpacingRule.Multiple, 1, 70)]
+    [InlineData(LineSpacingRule.Multiple, 2, 30)]
+    [InlineData(LineSpacingRule.Multiple, 2, 70)]
+    public void MultipliedSpacingUsesEffectiveHeight(LineSpacingRule rule, int location, double height)
+    {
+        var baseline = Render(location, null, rule: rule, physicalHeight: height);
+        var result = Render(location, height, rule: rule);
+        result.FirstHeight.Should().BeApproximately(baseline.FirstHeight, 0.001);
+        result.FollowingY.Should().BeApproximately(baseline.FollowingY, 0.001);
+        result.Text.Should().Equal(baseline.Text);
+        result.Frame.Height.Should().BeApproximately(50, 0.001);
+    }
+
+    static Result Render(int location, double? height, bool missing = false, LineSpacingRule rule = LineSpacingRule.Single, double physicalHeight = 50)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -97,11 +126,12 @@ public class InlineImageLayoutHeightTests : IDisposable
         else
             paragraph = section.AddParagraph();
         paragraph.Format.LineSpacingRule = rule;
-        if (rule != LineSpacingRule.Single) paragraph.Format.LineSpacing = Unit.FromPoint(100);
+        if (rule != LineSpacingRule.Single)
+            paragraph.Format.LineSpacing = Unit.FromPoint(rule == LineSpacingRule.Multiple ? 1.75 : 100);
         if (location == 1) paragraph.AddText("Before ");
         var image = paragraph.AddImage(missing ? "missing-layout-height-test.png" : Pixel);
         image.Width = Unit.FromPoint(60);
-        image.Height = Unit.FromPoint(50);
+        image.Height = Unit.FromPoint(physicalHeight);
         if (location == 1) paragraph.AddText(" After");
         section.AddParagraph("Following");
         var renderer = new PdfDocumentRenderer { Document = document };
