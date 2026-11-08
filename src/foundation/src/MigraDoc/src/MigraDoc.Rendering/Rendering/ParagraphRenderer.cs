@@ -2294,6 +2294,7 @@ namespace MigraDoc.Rendering
                         var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
                             _paragraph.Format.Alignment == ParagraphAlignment.Justify && spaceWidth > 0
                             ? (1 - shrinkFactor.Value) * spaceWidth : 0;
+                        shrinkAllowance = CapWordContraction(shrinkAllowance, width);
                         var fitAllowance = _documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null
                             ? (double)shrinkAllowance + overhangAllowance
                             : Math.Max((double)shrinkAllowance, overhangAllowance);
@@ -2433,6 +2434,7 @@ namespace MigraDoc.Rendering
                 spaceWidth > 0
                 ? (1 - shrinkFactor.Value) * spaceWidth
                 : 0;
+            shrinkAllowance = CapWordContraction(shrinkAllowance, width);
             if (overrun > 0)
             {
                 if (!TryMoveToSecondary(width) && overrun > shrinkAllowance + overhangAllowance)
@@ -2457,6 +2459,61 @@ namespace MigraDoc.Rendering
                 _currentLineWidth += width + PopSavedBlankWidth();
             _minWidth = Math.Max(_minWidth, width);
             return FormatResult.Continue;
+        }
+
+        XUnitPt CapWordContraction(XUnitPt allowance, XUnitPt fragmentWidth)
+        {
+            if (allowance <= 0 ||
+                (_documentRenderer.JustifiedTerminalWordOverrunLimitForParagraph == null &&
+                 _documentRenderer.JustifiedNonterminalWordOverrunLimitForParagraph == null))
+                return allowance;
+
+            var original = _currentLeaf;
+            var first = original;
+            var wordWidth = fragmentWidth;
+            var following = original?.GetNextLeaf();
+            var spaceWidth = MeasureString(" ");
+            try
+            {
+                // Use the same boundaries as the joined-word admission guard.
+                while (first?.GetPreviousLeaf() is { } previous && Joins(first, previous))
+                    first = previous;
+                if (first?.Current is Text)
+                {
+                    wordWidth = 0;
+                    for (var leaf = first; leaf != null;)
+                    {
+                        _currentLeaf = leaf;
+                        wordWidth += MeasureString(((Text)leaf.Current).Content);
+                        following = leaf.GetNextLeaf();
+                        if (following == null || !Joins(following, leaf))
+                        {
+                            spaceWidth = MeasureString(" ");
+                            break;
+                        }
+                        leaf = following;
+                    }
+                }
+            }
+            finally
+            {
+                _currentLeaf = original;
+            }
+            var limit = SkipContractionPolicyLeaves(following) == null
+                ? _documentRenderer.JustifiedTerminalWordOverrunLimitForParagraph?.Invoke(_paragraph)
+                : _documentRenderer.JustifiedNonterminalWordOverrunLimitForParagraph?.Invoke(_paragraph);
+            if (limit is not { } cap || !IsFinite(cap.WordWidthFraction) ||
+                !IsFinite(cap.SpaceWidthFloor) || cap.WordWidthFraction < 0 || cap.SpaceWidthFloor < 0)
+                return allowance;
+            return Math.Min(allowance, Math.Max(wordWidth * cap.WordWidthFraction,
+                spaceWidth * cap.SpaceWidthFloor));
+
+            static bool Joins(ParagraphIterator current, ParagraphIterator previous) =>
+                current.Current is Text { Content.Length: > 0 } text &&
+                previous.Current is Text { Content.Length: > 0 } prior &&
+                !text.HasExplicitBreakBefore && !IsBlankOrSoftHyphen(text) &&
+                !IsBlankOrSoftHyphen(prior) && !text.Content.Contains(' ') && !prior.Content.Contains(' ') &&
+                IsJoinedWordCharacter(prior.Content, true) && IsJoinedWordCharacter(text.Content, false);
         }
 
         bool TryMoveToSecondary(XUnitPt width)
