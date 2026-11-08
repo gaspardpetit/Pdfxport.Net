@@ -2276,7 +2276,7 @@ namespace MigraDoc.Rendering
                             followingLeaf = followingLeaf.GetNextLeaf();
                         var shrinkFactor = followingLeaf == null
                             ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
-                            : null;
+                            : _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
                         var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
                         var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
                             _paragraph.Format.Alignment == ParagraphAlignment.Justify && blankCount > 0
@@ -2390,14 +2390,16 @@ namespace MigraDoc.Rendering
 
             var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
             var overrun = _currentXPosition + width - right;
-            var shrinkFactor = _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
-            var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
             var nextLeaf = _currentLeaf?.GetNextLeaf();
             while (nextLeaf != null && IsBlank(nextLeaf.Current))
                 nextLeaf = nextLeaf.GetNextLeaf();
+            var shrinkFactor = nextLeaf == null
+                ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
+                : _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
+            var blankCount = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
             var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
                 _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
-                blankCount > 0 && nextLeaf == null
+                blankCount > 0
                 ? (1 - shrinkFactor.Value) * MeasureString(" ") * blankCount
                 : 0;
             if (overrun > 0)
