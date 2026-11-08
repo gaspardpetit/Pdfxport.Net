@@ -2387,6 +2387,18 @@ namespace MigraDoc.Rendering
             // Bookmarks and other nonpainting leaves do not make the preceding word nonfinal.
             while (leaf != null && (IsBlank(leaf.Current) || IsNonpaintingLeaf(leaf.Current)))
                 leaf = leaf.GetNextLeaf();
+            if (leaf != null && IsLineBreak(leaf.Current))
+            {
+                // A terminal break stores this line without adding a final empty line.
+                // Trailing bookmarks/ignored blanks preserve that behavior;
+                // another break or following content must retain the nonfinal policy.
+                var afterBreak = leaf.GetNextLeaf();
+                while (afterBreak != null &&
+                       (afterBreak.Current is BookmarkField || IsBlank(afterBreak.Current)))
+                    afterBreak = afterBreak.GetNextLeaf();
+                if (afterBreak == null)
+                    return null;
+            }
             return leaf;
         }
 

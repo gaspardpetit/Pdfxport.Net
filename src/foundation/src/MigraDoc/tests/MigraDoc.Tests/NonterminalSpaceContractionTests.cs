@@ -80,7 +80,13 @@ public class NonterminalSpaceContractionTests : IDisposable
     [InlineData(true, 3)]
     [InlineData(false, 4)]
     [InlineData(true, 4)]
-    public void NonpaintingSuffixUsesFinalPolicy(bool split, int suffix)
+    [InlineData(false, 5)]
+    [InlineData(true, 5)]
+    [InlineData(false, 8)]
+    [InlineData(true, 8)]
+    [InlineData(false, 7)]
+    [InlineData(true, 7)]
+    public void FinalLineSuffixUsesFinalPolicy(bool split, int suffix)
     {
         var normal = Render(null, split: split, tail: false, suffix: suffix);
         Render(0.5, split: split, tail: false, suffix: suffix).Words.Should().Equal(normal.Words);
@@ -102,6 +108,20 @@ public class NonterminalSpaceContractionTests : IDisposable
         var last = split ? "vo" : "Bravo";
         result.Words.Single(w => w.Text == last).Y.Should().BeApproximately(result.Words[0].Y, 0.001);
         result.Words.Single(w => w.Text == "Delta").Y.Should().NotBe(result.Words[0].Y);
+    }
+
+    [Theory]
+    [InlineData(false, 6)]
+    [InlineData(true, 6)]
+    [InlineData(false, 5)]
+    [InlineData(true, 5)]
+    public void BreakWithFollowingLineUsesNonfinalPolicy(bool split, int suffix)
+    {
+        var result = Render(0.5, split: split, tail: suffix == 5, suffix: suffix);
+        var last = split ? "vo" : "Bravo";
+        var end = result.Words.Single(w => w.Text == last);
+        end.Y.Should().BeApproximately(result.Words[0].Y, 0.001);
+        (end.X + Width(last)).Should().BeApproximately(20 + result.BodyWidth, 0.02);
     }
 
     static double Width(string text)
@@ -136,7 +156,7 @@ public class NonterminalSpaceContractionTests : IDisposable
                 paragraph.AddBookmark("End", false);
                 break;
             case 1:
-                paragraph.AddText("");
+                paragraph.Elements.Add(new Text(""));
                 break;
             case 2:
                 paragraph.AddInfoField(InfoFieldType.Title);
@@ -149,6 +169,21 @@ public class NonterminalSpaceContractionTests : IDisposable
                 paragraph.AddText(" ");
                 paragraph.AddBookmark("End2", false);
                 paragraph.AddText("");
+                break;
+            case 5:
+                paragraph.AddLineBreak();
+                break;
+            case 6:
+                paragraph.AddLineBreak();
+                paragraph.AddLineBreak();
+                break;
+            case 7:
+                paragraph.AddLineBreak();
+                paragraph.AddBookmark("AfterBreak", false);
+                break;
+            case 8:
+                paragraph.AddBookmark("BeforeBreak", false);
+                paragraph.AddLineBreak();
                 break;
         }
         if (tail)
