@@ -138,6 +138,70 @@ namespace MigraDoc.Tests
             adjusted[1].Should().Be(baseline[1]);
         }
 
+        [Theory]
+        [InlineData(false, false, false)]
+        [InlineData(true, false, false)]
+        [InlineData(false, true, false)]
+        [InlineData(true, true, false)]
+        [InlineData(false, false, true)]
+        [InlineData(true, false, true)]
+        public void JustifiedClippedMarkUsesFullPaintWidth(bool splitMark, bool wrap, bool leftAligned)
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300),
+                XGraphicsUnit.Point, XPageDirection.Downwards);
+            var font = new XFont("Arial", 12);
+            const string firstLine = "A short sequence authors.\"";
+            var width = measure.MeasureString(firstLine, font).Width - 2;
+            var offset = wrap ? measure.MeasureString("One Two Three", font).Width + 50 : 0;
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 12;
+            var section = document.AddSection();
+            section.PageSetup.PageWidth = Unit.FromPoint(offset + width + 40);
+            section.PageSetup.LeftMargin = Unit.FromPoint(20);
+            section.PageSetup.RightMargin = Unit.FromPoint(20);
+            var paragraph = section.AddParagraph();
+            paragraph.Format.Alignment = leftAligned ? ParagraphAlignment.Left : ParagraphAlignment.Justify;
+            if (wrap)
+            {
+                section.PageSetup.TopMargin = Unit.FromPoint(20);
+                var image = new MigraDoc.DocumentObjectModel.Shapes.Image { Name = "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==" };
+                image.RelativeHorizontal = MigraDoc.DocumentObjectModel.Shapes.RelativeHorizontal.Margin;
+                image.RelativeVertical = MigraDoc.DocumentObjectModel.Shapes.RelativeVertical.Margin;
+                image.Left = Unit.FromPoint(offset - 40);
+                image.Width = Unit.FromPoint(40);
+                image.Height = Unit.FromPoint(90);
+                image.WrapFormat.Style = MigraDoc.DocumentObjectModel.Shapes.WrapStyle.BothSides;
+                // Put the exclusion before the paragraph in document order.
+                section.Elements.InsertObject(0, image);
+                paragraph.AddText("One Two Three ");
+            }
+            if (splitMark)
+            {
+                paragraph.AddText("A short sequence authors.");
+                paragraph.AddFormattedText("\"").Color = Colors.Red;
+            }
+            else
+                paragraph.AddText(firstLine);
+            paragraph.AddText(" next words here.");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.LineEndOverhang = (_, word, _) =>
+                word.EndsWith("\"", StringComparison.Ordinal) ? 5 : null;
+            renderer.RenderDocument();
+            var stream = PdfFileHelper.GetPageContentStreamEnumerator(renderer.PdfDocument, 0);
+            var words = new List<(string Text, double X, double Y)>();
+            while (stream.Text.MoveAndGetNext(true, out var text))
+                words.Add((text!.Text, text.X, text.Y));
+            var first = words.Single(word => word.Text == "A");
+            var mark = words.Single(word => word.Text.EndsWith("\"", StringComparison.Ordinal));
+            mark.Y.Should().BeApproximately(first.Y, 0.01);
+            words.Single(word => word.Text == "next").Y.Should().NotBe(first.Y);
+            // Fitting may clip the closing mark, but justification must budget
+            // its full painted advance when distributing the spaces.
+            (mark.X + measure.MeasureString(mark.Text, font).Width)
+                .Should().BeApproximately(20 + offset + width + (leftAligned ? 2 : 0), 0.02);
+        }
+
         [Fact]
         public void NonterminalHangingSpaceUsesWidthClippedDuringLineFitting()
         {

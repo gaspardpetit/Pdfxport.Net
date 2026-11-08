@@ -871,6 +871,12 @@ namespace MigraDoc.Rendering
             _currentClippedTrailingWidth = lineInfo.ClippedTrailingWidth;
             _currentLineEndsWithLineBreak = lineInfo.LineEndsWithLineBreak;
             _currentWordsWidth = lineInfo.WordsWidth;
+            // Fitting may clip closing marks, but every interval paints their
+            // full advance. Include only this interval's clipped width when
+            // distributing justified spaces.
+            if (_paragraph.Format.Alignment == ParagraphAlignment.Justify)
+                _currentLineWordsWidth += transitions is { Count: > 0 }
+                    ? transitions[0].ClippedWidthBefore : lineInfo.ClippedTrailingWidth;
             double[]? renderWidthAdjustments = null;
             if (_paragraph.Format.Alignment == ParagraphAlignment.Justify &&
                 _documentRenderer.JustifiedRenderWordWidthAdjustment is { } renderWidthAdjustment)
@@ -934,6 +940,10 @@ namespace MigraDoc.Rendering
                     _currentLineWordsWidth = (segmentIndex < transitions.Count
                         ? transitions[segmentIndex].WordsBefore : lineInfo.WordsWidth) -
                         transition.WordsBefore;
+                    if (_paragraph.Format.Alignment == ParagraphAlignment.Justify)
+                        _currentLineWordsWidth += (segmentIndex < transitions.Count
+                            ? transitions[segmentIndex].ClippedWidthBefore : lineInfo.ClippedTrailingWidth) -
+                            transition.ClippedWidthBefore;
                     if (renderWidthAdjustments != null)
                         _currentLineWordsWidth += renderWidthAdjustments[segmentIndex];
                     _currentLineBlankCount = (segmentIndex < transitions.Count
@@ -2469,7 +2479,7 @@ namespace MigraDoc.Rendering
                 _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1 &&
                 _currentXPosition > current.X + current.Width - RightIndent + Tolerance;
             _currentSegmentTransitions.Add(new LineSegmentInfo(secondary, _currentLeaf,
-                _currentWordsWidth, _currentBlankCount, needsContraction));
+                _currentWordsWidth, _currentBlankCount, needsContraction, _currentClippedTrailingWidth));
             _savedBlankWidth = 0;
             _currentContractionSpaceWidth = 0;
             _currentXPosition = secondary.X;
