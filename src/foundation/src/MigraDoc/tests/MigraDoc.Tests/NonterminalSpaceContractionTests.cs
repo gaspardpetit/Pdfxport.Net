@@ -227,10 +227,105 @@ public class NonterminalSpaceContractionTests : IDisposable
         return gfx.MeasureString(text, new XFont("Arial", size)).Width;
     }
 
+    [Theory]
+    [InlineData(false, false, 0, false)]
+    [InlineData(false, false, 1, false)]
+    [InlineData(false, false, 0, true)]
+    [InlineData(false, true, 0, false)]
+    [InlineData(false, true, 1, false)]
+    [InlineData(false, true, 0, true)]
+    [InlineData(true, false, 0, false)]
+    [InlineData(true, false, 1, false)]
+    [InlineData(true, false, 0, true)]
+    [InlineData(true, true, 0, false)]
+    [InlineData(true, true, 1, false)]
+    [InlineData(true, true, 0, true)]
+    public void WordLimitCapsContractionWithoutEnablingIt(bool final, bool split, int tabs, bool wrap)
+    {
+        var normal = Render(null, split: split, tail: !final, tabs: tabs, wrap: wrap);
+        var allowed = Render(final ? null : 0.5, split: split, tail: !final, tabs: tabs, wrap: wrap,
+            finalFactor: final ? 0.5 : null);
+        var capped = Render(final ? null : 0.5, split: split, tail: !final, tabs: tabs, wrap: wrap,
+            finalFactor: final ? 0.5 : null,
+            finalLimit: final ? (0, 0) : null, nonfinalLimit: final ? null : (0, 0));
+        capped.Words.Should().Equal(normal.Words);
+        var last = split ? "vo" : "Bravo";
+        allowed.Words.Single(w => w.Text == last).Y.Should()
+            .BeApproximately(allowed.Words.Single(w => w.Text == "Alpha").Y, 0.001);
+        var disabled = Render(null, split: split, tail: !final, tabs: tabs, wrap: wrap,
+            finalLimit: (1, 1), nonfinalLimit: (1, 1));
+        disabled.Words.Should().Equal(normal.Words);
+        var insufficient = Render(final ? null : 0.9, split: split, tail: !final, tabs: tabs, wrap: wrap,
+            finalFactor: final ? 0.9 : null, finalLimit: (1, 1), nonfinalLimit: (1, 1));
+        insufficient.Words.Should().Equal(normal.Words, "a word cap cannot increase the space budget");
+        // A cap for the other policy cannot affect this word.
+        var other = Render(final ? null : 0.5, split: split, tail: !final, tabs: tabs, wrap: wrap,
+            finalFactor: final ? 0.5 : null,
+            finalLimit: final ? null : (0, 0), nonfinalLimit: final ? (0, 0) : null);
+        other.Words.Should().Equal(allowed.Words);
+    }
+
+    [Theory]
+    [InlineData(0.01, 0, false)]
+    [InlineData(0.1, 0, true)]
+    [InlineData(0.04, 0, true)]
+    [InlineData(0, 0.1, false)]
+    [InlineData(0, 0.5, true)]
+    [InlineData(-1, 0, true)]
+    [InlineData(0, -1, true)]
+    [InlineData(double.NaN, 0, true)]
+    [InlineData(0, double.PositiveInfinity, true)]
+    public void WordLimitUsesWholeWordOrSpaceFloor(double fraction, double floor, bool fits)
+    {
+        foreach (var final in new[] { false, true })
+        foreach (var split in new[] { false, true })
+        {
+            var result = Render(final ? null : 0.5, split: split, tail: !final,
+                finalFactor: final ? 0.5 : null,
+                finalLimit: final ? (fraction, floor) : null,
+                nonfinalLimit: final ? null : (fraction, floor));
+            var alpha = result.Words.Single(w => w.Text == "Alpha");
+            var end = result.Words.Single(w => w.Text == (split ? "vo" : "Bravo"));
+            if (fits)
+            {
+                end.Y.Should().BeApproximately(alpha.Y, 0.001);
+                (end.X + Width(split ? "vo" : "Bravo")).Should()
+                    .BeApproximately(20 + result.BodyWidth, 0.02);
+            }
+            else
+            {
+                end.Y.Should().NotBe(alpha.Y);
+                if (split)
+                    result.Words.Single(w => w.Text == "Bra").Y.Should().BeApproximately(end.Y, 0.001);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(10)]
+    public void TerminalWordCapIgnoresNonpaintingSuffix(int suffix)
+    {
+        foreach (var split in new[] { false, true })
+        {
+            var normal = Render(null, split: split, tail: false, suffix: suffix);
+            var capped = Render(null, split: split, tail: false, suffix: suffix,
+                finalFactor: 0.5, finalLimit: (0, 0));
+            capped.Words.Should().Equal(normal.Words);
+            var allowed = Render(null, split: split, tail: false, suffix: suffix,
+                finalFactor: 0.5, nonfinalLimit: (0, 0));
+            allowed.Words.Single(w => w.Text == (split ? "vo" : "Bravo")).Y.Should()
+                .BeApproximately(allowed.Words.Single(w => w.Text == "Alpha").Y, 0.001);
+        }
+    }
+
     static ((string Text, double X, double Y)[] Words, double BodyWidth) Render(double? factor,
         bool split = false, double? finalFactor = null, bool tail = true,
         ParagraphAlignment alignment = ParagraphAlignment.Justify, int suffix = -1,
-        int tabs = 0, double missingSpaceFraction = 0.25, double wordSize = 12, bool wrap = false, bool finalAcrossIntervals = false)
+        int tabs = 0, double missingSpaceFraction = 0.25, double wordSize = 12, bool wrap = false, bool finalAcrossIntervals = false,
+        (double WordWidthFraction, double SpaceWidthFloor)? finalLimit = null,
+        (double WordWidthFraction, double SpaceWidthFloor)? nonfinalLimit = null)
     {
         var leftWidth = finalAcrossIntervals ? Width("Alpha Bravo") - Width(" ") * missingSpaceFraction :
             wrap ? Width("One Two Three") + Width(" ") * 0.25 : 0;
@@ -331,6 +426,8 @@ public class NonterminalSpaceContractionTests : IDisposable
         var renderer = new PdfDocumentRenderer { Document = document };
         renderer.DocumentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph = _ => factor;
         renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = _ => finalFactor;
+        renderer.DocumentRenderer.JustifiedTerminalWordOverrunLimitForParagraph = _ => finalLimit;
+        renderer.DocumentRenderer.JustifiedNonterminalWordOverrunLimitForParagraph = _ => nonfinalLimit;
         renderer.RenderDocument();
         using var pdf = renderer.PdfDocument;
         var enumerator = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0);

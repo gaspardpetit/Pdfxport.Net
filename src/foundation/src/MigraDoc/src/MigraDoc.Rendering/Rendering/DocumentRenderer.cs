@@ -229,6 +229,27 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Func<Paragraph, double?>? JustifiedNonterminalSpaceShrinkFactorForParagraph { get; set; }
 
+        /// <summary>
+        /// Optionally caps the space-contraction allowance for the final word of a
+        /// justified paragraph. The cap is the greater of the complete word width
+        /// times WordWidthFraction and a space in the final fragment's font times
+        /// SpaceWidthFloor, in points. It never increases the space-based allowance.
+        /// Null or a tuple containing a negative or nonfinite value leaves that
+        /// allowance unchanged. A (0, 0) cap disables contraction for that word.
+        /// </summary>
+        public Func<Paragraph, (double WordWidthFraction, double SpaceWidthFloor)?>?
+            JustifiedTerminalWordOverrunLimitForParagraph { get; set; }
+
+        /// <summary>
+        /// Optionally caps space contraction for nonfinal words of justified
+        /// paragraphs. Uses the same units and validation as
+        /// <see cref="JustifiedTerminalWordOverrunLimitForParagraph"/>.
+        /// Neither callback enables contraction by itself; configure the corresponding
+        /// space shrink factor. Words split across formatting runs use their total width.
+        /// </summary>
+        public Func<Paragraph, (double WordWidthFraction, double SpaceWidthFloor)?>?
+            JustifiedNonterminalWordOverrunLimitForParagraph { get; set; }
+
 
         /// <summary>
         /// Marks explicit space characters whose width should be dropped when the
