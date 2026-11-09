@@ -42,6 +42,24 @@ public class AdditiveNonterminalOverhangTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SingleCharacterFinalFragmentUsesCombinedAllowance(bool bookmark)
+    {
+        Render(false, splitWord: true, singleCharacter: true, bookmark: bookmark).SameLine.Should().BeFalse();
+        var adjusted = Render(true, splitWord: true, singleCharacter: true, bookmark: bookmark);
+        adjusted.SameLine.Should().BeTrue();
+        adjusted.TailY.Should().BeLessThan(adjusted.BravoY);
+    }
+
+    [Fact]
+    public void SingleCharacterLookaheadRespectsContractionCap()
+    {
+        Render(true, splitWord: true, singleCharacter: true, capContraction: true)
+            .SameLine.Should().BeFalse();
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(double.NaN)]
@@ -76,12 +94,14 @@ public class AdditiveNonterminalOverhangTests : IDisposable
     }
 
     static Result Render(bool enabled, bool bookmark = false, bool splitWord = false,
-        double allowance = 1, bool justify = true, string continuation = " Charlie")
+        double allowance = 1, bool justify = true, string continuation = " Charlie",
+        bool singleCharacter = false, bool capContraction = false)
     {
         using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300),
             XGraphicsUnit.Point, XPageDirection.Downwards);
         var font = new XFont("Arial", 12);
-        var width = measure.MeasureString("Alpha Bravo.", font).Width - 1.6;
+        var closingWord = singleCharacter ? "Bravo" : "Bravo.";
+        var width = measure.MeasureString("Alpha " + closingWord, font).Width - 1.6;
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
         document.Styles.Normal.Font.Size = 12;
@@ -94,11 +114,11 @@ public class AdditiveNonterminalOverhangTests : IDisposable
         paragraph.AddText("Alpha ");
         if (splitWord)
         {
-            paragraph.AddFormattedText("Bra");
-            paragraph.AddFormattedText("vo.");
+            paragraph.AddFormattedText(singleCharacter ? "Brav" : "Bra");
+            paragraph.AddFormattedText(singleCharacter ? "o" : "vo.");
         }
         else
-            paragraph.AddFormattedText("Bravo.");
+            paragraph.AddFormattedText(closingWord);
         if (bookmark) paragraph.AddBookmark("Boundary", false);
         if (continuation.Length > 0) paragraph.AddText(continuation);
         var renderer = new PdfDocumentRenderer { Document = document };
@@ -106,7 +126,9 @@ public class AdditiveNonterminalOverhangTests : IDisposable
         renderer.DocumentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph = _ => 0.75;
         renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = _ => 0.75;
         renderer.DocumentRenderer.LineEndOverhang = (_, word, _) =>
-            word is "Bravo." or "vo." ? allowance : null;
+            word is "Bravo." or "vo." or "Bravo" or "o" ? allowance : null;
+        if (capContraction)
+            renderer.DocumentRenderer.JustifiedNonterminalWordOverrunLimitForParagraph = _ => (0, 0);
         renderer.RenderDocument();
         using var pdf = renderer.PdfDocument;
         pdf.PageCount.Should().Be(1);
@@ -115,10 +137,10 @@ public class AdditiveNonterminalOverhangTests : IDisposable
         while (reader.MoveAndGetNext(true, out var item))
             positions.Add((item!.Text, item.X, item.Y));
         var first = positions.First(item => item.Text == "Alpha");
-        var bravo = positions.First(item => item.Text is "Bravo." or "Bra");
+        var bravo = positions.First(item => item.Text is "Bravo." or "Bra" or "Brav" or "Bravo");
         var tail = positions.FirstOrDefault(item => item.Text.Contains("Charlie", StringComparison.Ordinal));
         if (splitWord)
-            positions.First(item => item.Text == "vo.").Y.Should().Be(bravo.Y);
+            positions.First(item => item.Text == (singleCharacter ? "o" : "vo.")).Y.Should().Be(bravo.Y);
         var content = PdfFileHelper.GetPageContentStream(pdf, 0);
         return new Result(first.Y == bravo.Y, bravo.Y, tail.Y,
             positions.Select(item => item.Text).ToArray(), content);

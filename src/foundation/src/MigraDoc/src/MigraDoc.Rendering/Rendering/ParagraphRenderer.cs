@@ -2395,21 +2395,38 @@ namespace MigraDoc.Rendering
                 var original = _currentLeaf;
                 XUnitPt nextWidth;
                 double? allowance = null;
+                double contractionAllowance = 0;
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
                 try
                 {
                     _currentLeaf = nextLeaf;
                     nextWidth = MeasureString(nextText);
                     if (_currentXPosition + width + nextWidth > right)
+                    {
                         allowance = GetLineEndOverhang(nextText, CurrentFont);
+                        if (allowance is > 0 && IsFinite(allowance.Value) &&
+                            UseAdditiveLineEndOverhang(nextLeaf.GetNextLeaf()))
+                        {
+                            var following = SkipContractionPolicyLeaves(nextLeaf.GetNextLeaf());
+                            var shrinkFactor = following == null
+                                ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
+                                : _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
+                            var spaceWidth = _currentContractionSpaceWidth + _savedBlankWidth;
+                            var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
+                                _paragraph.Format.Alignment == ParagraphAlignment.Justify && spaceWidth > 0
+                                ? (1 - shrinkFactor.Value) * spaceWidth : 0;
+                            contractionAllowance = CapWordContraction(shrinkAllowance, width + nextWidth);
+                        }
+                    }
                 }
                 finally
                 {
                     _currentLeaf = original;
                 }
+                var fitAllowance = allowance.GetValueOrDefault() + contractionAllowance;
                 if (allowance is > 0 && !double.IsInfinity(allowance.Value) &&
-                    _currentXPosition + width + nextWidth - allowance.Value > right &&
-                    width + nextWidth - allowance.Value <= right - StartXPosition)
+                    _currentXPosition + width + nextWidth - fitAllowance > right &&
+                    width + nextWidth - fitAllowance <= right - StartXPosition)
                     return FormatResult.NewLine;
             }
             if (_phase == Phase.Formatting && HasLineEndOverhang &&
