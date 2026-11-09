@@ -29,6 +29,17 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Marks inline images whose effective slot includes the font descent,
+        /// instead of reserving additional font space below the image. Selected
+        /// images contribute at least the current run font's height to line layout.
+        /// Picture dimensions are unchanged; other runs and paragraph spacing rules
+        /// can enlarge or fix the line box. False preserves existing behavior.
+        /// Must remain stable during preparation and painting; prepare again after
+        /// changing the policy.
+        /// </summary>
+        public Func<Image, bool>? InlineImageOccupiesDescent { get; set; }
+
+        /// <summary>
         /// Selects additional space around an inline image, in drawing points.
         /// Left/right extents increase horizontal advance; top/bottom extents
         /// increase the effective image slot used by line layout. The picture
