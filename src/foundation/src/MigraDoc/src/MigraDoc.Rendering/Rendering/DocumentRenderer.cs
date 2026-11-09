@@ -32,6 +32,8 @@ namespace MigraDoc.Rendering
         /// Marks inline images whose effective slot includes the font descent,
         /// instead of reserving additional font space below the image. Selected
         /// images contribute at least the current run font's height to line layout.
+        /// Image-only paragraphs already use this behavior automatically; this
+        /// policy also permits it for images in mixed-content paragraphs.
         /// Picture dimensions are unchanged; other runs and paragraph spacing rules
         /// can enlarge or fix the line box. False preserves existing behavior.
         /// Must remain stable during preparation and painting; prepare again after

@@ -30,10 +30,6 @@ namespace MigraDoc.Rendering
     {
         static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
-        bool IsImageOnlyTableCell =>
-            DocumentRelations.HasParentOfType(_paragraph, typeof(MigraDoc.DocumentObjectModel.Tables.Cell)) &&
-            IsImageOnlyParagraph;
-
         bool IsImageOnlyParagraph
         {
             get
@@ -1249,11 +1245,12 @@ namespace MigraDoc.Rendering
             var effect = GetInlineImageEffectExtent(image);
             var occupiedHeight = layoutHeight + effect.Top + effect.Bottom;
             top -= effect.Bottom;
-            var occupiesDescent = _documentRenderer.InlineImageOccupiesDescent?.Invoke(image) == true;
+            var occupiesDescent = IsImageOnlyParagraph ||
+                _documentRenderer.InlineImageOccupiesDescent?.Invoke(image) == true;
             var lineRule = _paragraph.Format.LineSpacingRule;
             var atLeastHasRoomBelowImage = lineRule == LineSpacingRule.AtLeast &&
                 _paragraph.Format.LineSpacing.Point >= occupiedHeight.Point + FontHandler.GetDescent(CurrentFont).Point;
-            if ((IsImageOnlyTableCell || occupiesDescent) &&
+            if (occupiesDescent &&
                 lineRule != LineSpacingRule.Exactly && !(occupiesDescent && atLeastHasRoomBelowImage))
             {
                 if (occupiedHeight > CurrentFont.GetHeight())
@@ -3482,13 +3479,12 @@ namespace MigraDoc.Rendering
                     var effect = GetInlineImageEffectExtent(inlineImage);
                     imageHeight += effect.Top + effect.Bottom;
                 }
-                var occupiesDescent = _currentLeaf?.Current is Image descentImage &&
+                var occupiesDescent = IsImageOnlyParagraph ||
+                    _currentLeaf?.Current is Image descentImage &&
                     _documentRenderer.InlineImageOccupiesDescent?.Invoke(descentImage) == true;
                 singleLineSpace = occupiesDescent
                     ? Math.Max(singleLineSpace, imageHeight)
-                    : IsImageOnlyTableCell && imageHeight > singleLineSpace
-                        ? imageHeight
-                        : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;
+                    : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;
             }
 
             XUnitPt inherentLineSpace, lineHeight;
