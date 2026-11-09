@@ -36,7 +36,10 @@ public class InlineImageDescentTests : IDisposable
         var baseline = Render(location, null, missing: missing);
         var selected = Render(location, true, missing: missing);
         selected.Height.Should().BeApproximately(50, 0.001);
-        selected.Height.Should().BeLessThan(baseline.Height);
+        if (location == 1)
+            selected.Height.Should().BeLessThan(baseline.Height);
+        else
+            selected.Height.Should().BeApproximately(baseline.Height, 0.001);
         selected.Frame.Should().Be(baseline.Frame);
         selected.FollowingY.Should().BeApproximately(baseline.FollowingY + baseline.Height - selected.Height, 0.001);
     }
@@ -47,9 +50,9 @@ public class InlineImageDescentTests : IDisposable
     [InlineData(LineSpacingRule.Multiple, 1.75)]
     public void MultipliedSpacingUsesTheSelectedSlot(LineSpacingRule rule, double factor)
     {
-        var baseline = Render(0, null, rule);
-        var selected = Render(0, true, rule);
-        var singleDifference = Render(0, null).Height - Render(0, true).Height;
+        var baseline = Render(1, null, rule);
+        var selected = Render(1, true, rule);
+        var singleDifference = Render(1, null).Height - Render(1, true).Height;
         selected.Height.Should().BeApproximately(baseline.Height - singleDifference * factor, 0.001);
         selected.FollowingY.Should().BeApproximately(baseline.FollowingY + singleDifference * factor, 0.001);
     }
