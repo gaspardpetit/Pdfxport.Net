@@ -2353,8 +2353,8 @@ namespace MigraDoc.Rendering
                             lastText = text.Content;
                             next = next.GetNextLeaf();
                         }
-                        if (joined && _documentRenderer.LineEndOverhang?.Invoke(
-                                _paragraph, ((Text)_currentLeaf.Current).Content, CurrentFont) is double allowance &&
+                        if (joined && HasLineEndOverhang && GetLineEndOverhang(
+                                ((Text)_currentLeaf.Current).Content, CurrentFont) is double allowance &&
                             allowance > 0 && IsFinite(allowance))
                             overhangAllowance = allowance;
                     }
@@ -2387,9 +2387,10 @@ namespace MigraDoc.Rendering
                     }
                 }
             }
-            if (_phase == Phase.Formatting && _documentRenderer.LineEndOverhang is { } overhangForNext &&
+            if (_phase == Phase.Formatting && HasLineEndOverhang &&
                 _currentXPosition > StartXPosition + Tolerance &&
-                _currentLeaf?.GetNextLeaf() is { Current: Text { Content: { Length: 1 } nextText } } nextLeaf)
+                _currentLeaf?.GetNextLeaf() is { Current: Text { Content: { Length: 1 } nextText } } nextLeaf &&
+                !IsBlank(nextLeaf.Current) && !IsNonpaintingLeaf(nextLeaf.Current))
             {
                 var original = _currentLeaf;
                 XUnitPt nextWidth;
@@ -2400,7 +2401,7 @@ namespace MigraDoc.Rendering
                     _currentLeaf = nextLeaf;
                     nextWidth = MeasureString(nextText);
                     if (_currentXPosition + width + nextWidth > right)
-                        allowance = overhangForNext(_paragraph, nextText, CurrentFont);
+                        allowance = GetLineEndOverhang(nextText, CurrentFont);
                 }
                 finally
                 {
@@ -2411,16 +2412,17 @@ namespace MigraDoc.Rendering
                     width + nextWidth - allowance.Value <= right - StartXPosition)
                     return FormatResult.NewLine;
             }
-            if (_phase == Phase.Formatting && _documentRenderer.LineEndOverhang is { } overhang &&
+            if (_phase == Phase.Formatting && HasLineEndOverhang &&
                 _currentXPosition > StartXPosition + Tolerance)
             {
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
                 var followingLeaf = _currentLeaf?.GetNextLeaf();
-                while (followingLeaf != null && IsBlank(followingLeaf.Current))
+                while (followingLeaf != null &&
+                       (IsBlank(followingLeaf.Current) || IsNonpaintingLeaf(followingLeaf.Current)))
                     followingLeaf = followingLeaf.GetNextLeaf();
                 if (_documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null &&
                     _currentXPosition + width > right &&
-                    overhang(_paragraph, word, CurrentFont) is double additiveAllowance &&
+                    GetLineEndOverhang(word, CurrentFont) is double additiveAllowance &&
                     additiveAllowance > 0 && IsFinite(additiveAllowance))
                 {
                     var additiveResult = FormatAsWord(width, fittingRect, additiveAllowance);
@@ -2429,7 +2431,7 @@ namespace MigraDoc.Rendering
                     return additiveResult;
                 }
                 if (_currentXPosition + width > right &&
-                    overhang(_paragraph, word, CurrentFont) is double allowance &&
+                    GetLineEndOverhang(word, CurrentFont) is double allowance &&
                     allowance > 0 && !double.IsInfinity(allowance) &&
                     _currentXPosition + width - allowance <= right)
                 {
@@ -2495,6 +2497,25 @@ namespace MigraDoc.Rendering
                     return null;
             }
             return leaf;
+        }
+
+        bool HasLineEndOverhang => _documentRenderer.LineEndOverhang != null ||
+            _documentRenderer.TerminalLineEndOverhangWithSpaceCount != null;
+
+        double? GetLineEndOverhang(string word, XFont font)
+        {
+            var following = _currentLeaf?.GetNextLeaf();
+            while (following != null && (IsBlank(following.Current) || IsNonpaintingLeaf(following.Current)))
+                following = following.GetNextLeaf();
+            var established = _documentRenderer.LineEndOverhang?.Invoke(_paragraph, word, font);
+            if (following != null ||
+                _documentRenderer.TerminalLineEndOverhangWithSpaceCount is not { } withSpaceCount)
+                return established;
+            var eligibleSpaces = _currentBlankCount + (_savedBlankWidth > 0 ? 1 : 0);
+            var lineAllowance = withSpaceCount(_paragraph, word, font, eligibleSpaces);
+            return lineAllowance is { } allowance && allowance > 0 && IsFinite(allowance)
+                ? Math.Max(established is > 0 && IsFinite(established.Value) ? established.Value : 0, allowance)
+                : established;
         }
 
         FormatResult FormatAsWord(XUnitPt width, Rectangle fittingRect, double overhangAllowance = 0)
