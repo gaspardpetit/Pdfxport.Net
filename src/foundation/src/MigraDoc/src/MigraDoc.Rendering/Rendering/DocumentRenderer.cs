@@ -153,6 +153,18 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? LineEndOverhang { get; set; }
 
         /// <summary>
+        /// Supplies an additional overhang allowance in points for the final text
+        /// leaf of a paragraph, using the number of word spaces already on its line
+        /// (including the pending space before the leaf). Trailing blanks are ignored.
+        /// The larger of this allowance and LineEndOverhang is used. Null, nonpositive
+        /// and nonfinite results are ignored. Does not change the painted word width.
+        /// Must remain stable during preparation; prepare again after changing it.
+        /// </summary>
+        public Func<Paragraph, string, XFont, int, double?>?
+            TerminalLineEndOverhangWithSpaceCount { get; set; }
+
+
+        /// <summary>
         /// Adds the permitted overhang to the fit allowance for a final word,
         /// preserving its full measured width for rendering.
         /// </summary>
