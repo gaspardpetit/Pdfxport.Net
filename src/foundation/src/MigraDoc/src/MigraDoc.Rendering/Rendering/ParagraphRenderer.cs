@@ -30,9 +30,45 @@ namespace MigraDoc.Rendering
     {
         static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
-        bool IsSoleImageInTableCell =>
+        bool IsImageOnlyTableCell =>
             DocumentRelations.HasParentOfType(_paragraph, typeof(MigraDoc.DocumentObjectModel.Tables.Cell)) &&
-            _paragraph.Elements.Count == 1 && _paragraph.Elements[0] is Image;
+            IsImageOnlyParagraph;
+
+        bool IsImageOnlyParagraph
+        {
+            get
+            {
+                if (_isImageOnlyParagraph is bool cached)
+                    return cached;
+
+                var hasImage = false;
+                bool IsImageOrWhitespace(DocumentObject element)
+                {
+                    switch (element)
+                    {
+                        case Image:
+                            hasImage = true;
+                            return true;
+                        case Character { SymbolName: SymbolName.Tab or SymbolName.Blank or
+                            SymbolName.En or SymbolName.Em or SymbolName.EmQuarter or SymbolName.NonBreakableBlank }:
+                            return true;
+                        case Text text:
+                            if (!string.IsNullOrWhiteSpace(text.Content))
+                                return false;
+                            return true;
+                        case FormattedText formatted:
+                            return formatted.Elements.Cast<DocumentObject>().All(IsImageOrWhitespace);
+                        default:
+                            return false;
+                    }
+                }
+                if (!_paragraph.Elements.Cast<DocumentObject>().All(IsImageOrWhitespace))
+                    return (_isImageOnlyParagraph = false).Value;
+                return (_isImageOnlyParagraph = hasImage).Value;
+            }
+        }
+
+        bool? _isImageOnlyParagraph;
 
         /// <summary>
         /// Process phases of the renderer.
@@ -1217,7 +1253,7 @@ namespace MigraDoc.Rendering
             var lineRule = _paragraph.Format.LineSpacingRule;
             var atLeastHasRoomBelowImage = lineRule == LineSpacingRule.AtLeast &&
                 _paragraph.Format.LineSpacing.Point >= occupiedHeight.Point + FontHandler.GetDescent(CurrentFont).Point;
-            if ((IsSoleImageInTableCell || occupiesDescent) &&
+            if ((IsImageOnlyTableCell || occupiesDescent) &&
                 lineRule != LineSpacingRule.Exactly && !(occupiesDescent && atLeastHasRoomBelowImage))
             {
                 if (occupiedHeight > CurrentFont.GetHeight())
@@ -3450,7 +3486,7 @@ namespace MigraDoc.Rendering
                     _documentRenderer.InlineImageOccupiesDescent?.Invoke(descentImage) == true;
                 singleLineSpace = occupiesDescent
                     ? Math.Max(singleLineSpace, imageHeight)
-                    : IsSoleImageInTableCell && imageHeight > singleLineSpace
+                    : IsImageOnlyTableCell && imageHeight > singleLineSpace
                         ? imageHeight
                         : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;
             }
