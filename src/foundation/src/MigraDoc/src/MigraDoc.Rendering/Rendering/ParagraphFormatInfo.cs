@@ -74,6 +74,10 @@ namespace MigraDoc.Rendering
         internal void AddLineInfo(LineInfo lineInfo)
             => _lineInfos.Add(lineInfo);
 
+        // Space between the fragment's content origin and the first line,
+        // resolved while formatting (including the border-distance policy).
+        internal XUnitPt TopBorderOffset { get; set; }
+
         internal int LineCount
             => _lineInfos.Count;
 

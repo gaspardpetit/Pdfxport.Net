@@ -3303,6 +3303,9 @@ namespace MigraDoc.Rendering
             }
 
             XUnitPt topBorderOffset = TopBorderOffset(_formattingArea.Y);
+            var paragraphFormatInfo = (ParagraphFormatInfo)_renderInfo.FormatInfo;
+            if (paragraphFormatInfo.LineCount == 0)
+                paragraphFormatInfo.TopBorderOffset = topBorderOffset;
             var contentArea = _renderInfo.LayoutInfo.ContentArea;
             if (topBorderOffset > 0) // May only occur for the first line.
                 contentArea = _formattingArea.GetFittingRect(_formattingArea.Y, topBorderOffset);

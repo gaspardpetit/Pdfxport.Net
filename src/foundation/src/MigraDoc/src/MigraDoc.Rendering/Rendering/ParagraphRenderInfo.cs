@@ -29,6 +29,25 @@ namespace MigraDoc.Rendering
         public int LineCount => _formatInfo.LineCount;
 
         /// <summary>
+        /// Gets the bottom of a prepared line box, in points in the same coordinate
+        /// system as this fragment's content area. Indices are zero-based within
+        /// this fragment. Includes top-border space and gaps preceding the line;
+        /// does not include the paragraph's trailing border or outside margins.
+        /// </summary>
+        public double GetLineBoxBottom(int lineIndex)
+        {
+            if (lineIndex < 0 || lineIndex >= LineCount)
+                throw new ArgumentOutOfRangeException(nameof(lineIndex));
+            var bottom = LayoutInfo.ContentArea.Y.Point + _formatInfo.TopBorderOffset.Point;
+            for (var line = 0; line <= lineIndex; line++)
+            {
+                var info = _formatInfo.GetLineInfo(line);
+                bottom += info.GapBefore.Point + info.Vertical.Height.Point;
+            }
+            return bottom;
+        }
+
+        /// <summary>
         /// Gets the document object to which the layout information applies. Use the Tag property of DocumentObject to identify an object.
         /// </summary>
         public override DocumentObject DocumentObject
