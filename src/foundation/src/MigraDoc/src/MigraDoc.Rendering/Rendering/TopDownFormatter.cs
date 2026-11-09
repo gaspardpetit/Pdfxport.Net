@@ -98,7 +98,11 @@ namespace MigraDoc.Rendering
                 if (prevFormatInfo == null)
                 {
                     LayoutInfo initialLayoutInfo = renderer.InitialLayoutInfo;
-                    XUnitPt distance = prevBottomMargin;
+                    // Positioned nonflowing shapes neither consume the preceding
+                    // paragraph margin nor interrupt collapse with the next one.
+                    var outsideFlow = initialLayoutInfo.VerticalReference != VerticalReference.PreviousElement &&
+                                      initialLayoutInfo.Floating == Floating.None;
+                    XUnitPt distance = outsideFlow ? 0 : prevBottomMargin;
                     if (initialLayoutInfo.VerticalReference == VerticalReference.PreviousElement &&
                         initialLayoutInfo.Floating != Floating.None)
                         distance = MarginMax(initialLayoutInfo.MarginTop, distance);
@@ -158,7 +162,8 @@ namespace MigraDoc.Rendering
                             if (renderer.RenderInfo.LayoutInfo.Floating != Floating.None)
                                 area = area.Lower(renderer.RenderInfo.LayoutInfo.ContentArea.Height);
                         }
-                        else
+                        else if (renderer.RenderInfo.LayoutInfo.VerticalReference == VerticalReference.PreviousElement ||
+                                 renderer.RenderInfo.LayoutInfo.Floating != Floating.None)
                             prevBottomMargin = 0;
 
                         prevFormatInfo = null;
