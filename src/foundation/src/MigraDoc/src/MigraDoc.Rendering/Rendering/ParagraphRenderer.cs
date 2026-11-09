@@ -1213,14 +1213,22 @@ namespace MigraDoc.Rendering
             var effect = GetInlineImageEffectExtent(image);
             var occupiedHeight = layoutHeight + effect.Top + effect.Bottom;
             top -= effect.Bottom;
-            if (IsSoleImageInTableCell && occupiedHeight > CurrentFont.GetHeight() &&
-                _paragraph.Format.LineSpacingRule != LineSpacingRule.Exactly)
+            var occupiesDescent = _documentRenderer.InlineImageOccupiesDescent?.Invoke(image) == true;
+            var lineRule = _paragraph.Format.LineSpacingRule;
+            var atLeastHasRoomBelowImage = lineRule == LineSpacingRule.AtLeast &&
+                _paragraph.Format.LineSpacing.Point >= occupiedHeight.Point + FontHandler.GetDescent(CurrentFont).Point;
+            if ((IsSoleImageInTableCell || occupiesDescent) &&
+                lineRule != LineSpacingRule.Exactly && !(occupiesDescent && atLeastHasRoomBelowImage))
             {
-                // Use the stored effective space, which already includes
-                // paragraph spacing and MinimumLineMetricsForFont. A minimum
-                // that prevents the baseline from moving needs no compensation.
-                var originalSpace = occupiedHeight + CurrentFont.GetHeight() - FontHandler.GetAscent(CurrentFont);
-                top += Math.Max(0, originalSpace - _currentVerticalInfo.InherentLineSpace);
+                if (occupiedHeight > CurrentFont.GetHeight())
+                {
+                    // Preserve compensation for the effective space already
+                    // stored after paragraph spacing and minimum line metrics.
+                    var originalSpace = occupiedHeight + CurrentFont.GetHeight() - FontHandler.GetAscent(CurrentFont);
+                    top += Math.Max(0, originalSpace - _currentVerticalInfo.InherentLineSpace);
+                }
+                else if (occupiesDescent)
+                    top += FontHandler.GetDescent(CurrentFont);
             }
             if (_documentRenderer.InlineImageVerticalOffset?.Invoke(image) is double offset &&
                 !double.IsNaN(offset) && !double.IsInfinity(offset))
@@ -3438,9 +3446,13 @@ namespace MigraDoc.Rendering
                     var effect = GetInlineImageEffectExtent(inlineImage);
                     imageHeight += effect.Top + effect.Bottom;
                 }
-                singleLineSpace = IsSoleImageInTableCell && imageHeight > singleLineSpace
-                    ? imageHeight
-                    : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;
+                var occupiesDescent = _currentLeaf?.Current is Image descentImage &&
+                    _documentRenderer.InlineImageOccupiesDescent?.Invoke(descentImage) == true;
+                singleLineSpace = occupiesDescent
+                    ? Math.Max(singleLineSpace, imageHeight)
+                    : IsSoleImageInTableCell && imageHeight > singleLineSpace
+                        ? imageHeight
+                        : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;
             }
 
             XUnitPt inherentLineSpace, lineHeight;
