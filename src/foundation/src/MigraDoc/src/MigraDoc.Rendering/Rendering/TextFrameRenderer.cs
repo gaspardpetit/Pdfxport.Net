@@ -133,13 +133,19 @@ namespace MigraDoc.Rendering
 
         void RenderFrameContent(RenderInfo[] renderInfos)
         {
+            double uncountedTrailingSpace = 0;
+            if (_textFrame.CenterContentVertically && !_textFrame.Height.IsEmpty && renderInfos.Length > 0 &&
+                _documentRenderer.CenteredTextFrameTrailingSpace?.Invoke(_textFrame) is double trailingSpace &&
+                !double.IsNaN(trailingSpace) && !double.IsInfinity(trailingSpace) && trailingSpace > 0)
+                uncountedTrailingSpace = Math.Max(0, trailingSpace - renderInfos[^1].LayoutInfo.MarginBottom.Point);
+
             XGraphicsState state = Transform();
             if (_textFrame.CenterContentVertically &&
                 !_textFrame.Height.IsEmpty)
             {
                 var availableHeight = _textFrame.Height.Point - _textFrame.MarginTop.Point -
                     _textFrame.MarginBottom.Point - _lineFormatRenderer.GetWidth().Point;
-                var spareHeight = availableHeight - RenderInfo.GetTotalHeight(renderInfos).Point;
+                var spareHeight = availableHeight - RenderInfo.GetTotalHeight(renderInfos).Point - uncountedTrailingSpace;
                 if (spareHeight > 0)
                     _gfx.TranslateTransform(0, spareHeight / 2);
             }

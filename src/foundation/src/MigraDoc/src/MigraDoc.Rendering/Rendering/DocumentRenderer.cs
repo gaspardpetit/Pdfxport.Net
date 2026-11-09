@@ -29,6 +29,15 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects trailing space, in points, to include when vertically centering
+        /// content in a fixed-height text frame. Only the amount beyond the last
+        /// element's already-counted bottom margin is added. Does not change frame
+        /// layout or pagination. Null, nonfinite or nonpositive values are ignored.
+        /// Evaluated during painting for nonempty centered frames.
+        /// </summary>
+        public Func<TextFrame, double?>? CenteredTextFrameTrailingSpace { get; set; }
+
+        /// <summary>
         /// Marks inline images whose effective slot includes the font descent,
         /// instead of reserving additional font space below the image. Selected
         /// images contribute at least the current run font's height to line layout.
