@@ -2374,7 +2374,7 @@ namespace MigraDoc.Rendering
                             _paragraph.Format.Alignment == ParagraphAlignment.Justify && spaceWidth > 0
                             ? (1 - shrinkFactor.Value) * spaceWidth : 0;
                         shrinkAllowance = CapWordContraction(shrinkAllowance, width);
-                        var fitAllowance = _documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null
+                        var fitAllowance = UseAdditiveLineEndOverhang(next, followingLeaf == null)
                             ? (double)shrinkAllowance + overhangAllowance
                             : Math.Max((double)shrinkAllowance, overhangAllowance);
                         if (joinedWidth <= right - StartXPosition + overhangAllowance &&
@@ -2395,32 +2395,45 @@ namespace MigraDoc.Rendering
                 var original = _currentLeaf;
                 XUnitPt nextWidth;
                 double? allowance = null;
+                double contractionAllowance = 0;
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
                 try
                 {
                     _currentLeaf = nextLeaf;
                     nextWidth = MeasureString(nextText);
                     if (_currentXPosition + width + nextWidth > right)
+                    {
                         allowance = GetLineEndOverhang(nextText, CurrentFont);
+                        if (allowance is > 0 && IsFinite(allowance.Value) &&
+                            UseAdditiveLineEndOverhang(nextLeaf.GetNextLeaf()))
+                        {
+                            var following = SkipContractionPolicyLeaves(nextLeaf.GetNextLeaf());
+                            var shrinkFactor = following == null
+                                ? _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph)
+                                : _documentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph?.Invoke(_paragraph);
+                            var spaceWidth = _currentContractionSpaceWidth + _savedBlankWidth;
+                            var shrinkAllowance = shrinkFactor is > 0 and < 1 &&
+                                _paragraph.Format.Alignment == ParagraphAlignment.Justify && spaceWidth > 0
+                                ? (1 - shrinkFactor.Value) * spaceWidth : 0;
+                            contractionAllowance = CapWordContraction(shrinkAllowance, width + nextWidth);
+                        }
+                    }
                 }
                 finally
                 {
                     _currentLeaf = original;
                 }
+                var fitAllowance = allowance.GetValueOrDefault() + contractionAllowance;
                 if (allowance is > 0 && !double.IsInfinity(allowance.Value) &&
-                    _currentXPosition + width + nextWidth - allowance.Value > right &&
-                    width + nextWidth - allowance.Value <= right - StartXPosition)
+                    _currentXPosition + width + nextWidth - fitAllowance > right &&
+                    width + nextWidth - fitAllowance <= right - StartXPosition)
                     return FormatResult.NewLine;
             }
             if (_phase == Phase.Formatting && HasLineEndOverhang &&
                 _currentXPosition > StartXPosition + Tolerance)
             {
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
-                var followingLeaf = _currentLeaf?.GetNextLeaf();
-                while (followingLeaf != null &&
-                       (IsBlank(followingLeaf.Current) || IsNonpaintingLeaf(followingLeaf.Current)))
-                    followingLeaf = followingLeaf.GetNextLeaf();
-                if (_documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null &&
+                if (UseAdditiveLineEndOverhang(_currentLeaf?.GetNextLeaf()) &&
                     _currentXPosition + width > right &&
                     GetLineEndOverhang(word, CurrentFont) is double additiveAllowance &&
                     additiveAllowance > 0 && IsFinite(additiveAllowance))
@@ -2497,6 +2510,19 @@ namespace MigraDoc.Rendering
                     return null;
             }
             return leaf;
+        }
+
+        bool UseAdditiveLineEndOverhang(ParagraphIterator? next, bool? terminal = null)
+        {
+            while (next != null && IsNonpaintingLeaf(next.Current))
+                next = next.GetNextLeaf();
+            var following = next;
+            while (following != null && (IsBlank(following.Current) || IsNonpaintingLeaf(following.Current)))
+                following = following.GetNextLeaf();
+            // Preserve the joined-word guard's existing terminal break/tab classification.
+            return _documentRenderer.AdditiveTerminalLineEndOverhang && (terminal ?? following == null) ||
+                _documentRenderer.AdditiveNonterminalLineEndOverhang &&
+                next != null && IsBlank(next.Current) && SkipContractionPolicyLeaves(following) != null;
         }
 
         bool HasLineEndOverhang => _documentRenderer.LineEndOverhang != null ||

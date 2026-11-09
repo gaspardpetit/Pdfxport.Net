@@ -172,6 +172,16 @@ namespace MigraDoc.Rendering
         public bool AdditiveTerminalLineEndOverhang { get; set; }
 
         /// <summary>
+        /// Adds the line-end overhang allowance to justified-space contraction
+        /// for a word followed by a breakable blank and more paragraph content.
+        /// Nonpainting leaves between the word and blank are ignored. Preserves
+        /// the full word width for painting. False keeps the larger-allowance behavior.
+        /// Prepare the document again after changing this option.
+        /// </summary>
+        public bool AdditiveNonterminalLineEndOverhang { get; set; }
+
+
+        /// <summary>
         /// Adjusts the spacing before a word's final glyph during painting only.
         /// The adjustment does not affect line fitting. Null or non-finite values are ignored.
         /// </summary>
