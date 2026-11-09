@@ -2389,7 +2389,8 @@ namespace MigraDoc.Rendering
             }
             if (_phase == Phase.Formatting && HasLineEndOverhang &&
                 _currentXPosition > StartXPosition + Tolerance &&
-                _currentLeaf?.GetNextLeaf() is { Current: Text { Content: { Length: 1 } nextText } } nextLeaf)
+                _currentLeaf?.GetNextLeaf() is { Current: Text { Content: { Length: 1 } nextText } } nextLeaf &&
+                !IsBlank(nextLeaf.Current))
             {
                 var original = _currentLeaf;
                 XUnitPt nextWidth;

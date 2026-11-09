@@ -41,6 +41,19 @@ public class TerminalSpaceOverhangTests : IDisposable
             Measure(text.TrimEnd()[..^"Bravo.".Length]), 0.01);
     }
 
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("   ")]
+    public void TrailingBlanksDoNotChangeWrappingWithCountOnlySelector(string blanks)
+    {
+        var baseline = Render("Alpha Bravo.", count => count == 1 ? 5 : null, anyWord: true);
+        var result = Render("Alpha Bravo." + blanks, count => count == 1 ? 5 : null, anyWord: true);
+        baseline.SameLine.Should().BeTrue();
+        result.SameLine.Should().BeTrue();
+        result.BravoX.Should().BeApproximately(baseline.BravoX, 0.001);
+        result.Words.Should().NotBeEmpty().And.OnlyContain(word => word == "Bravo.");
+    }
+
     [Fact]
     public void NonterminalWordsDoNotUseTerminalPolicy()
     {
@@ -112,7 +125,7 @@ public class TerminalSpaceOverhangTests : IDisposable
     }
 
     static Result Render(string text, Func<int, double?>? policy = null, double? existing = null,
-        bool hardBreak = false, bool? additive = null)
+        bool hardBreak = false, bool? additive = null, bool anyWord = false)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -137,11 +150,13 @@ public class TerminalSpaceOverhangTests : IDisposable
             renderer.DocumentRenderer.AdditiveTerminalLineEndOverhang = enabled;
         }
         var counts = new List<int>();
+        var words = new List<string>();
         if (policy != null)
             renderer.DocumentRenderer.TerminalLineEndOverhangWithSpaceCount = (actual, word, _, count) =>
             {
                 actual.Should().BeSameAs(paragraph);
-                if (word != "Bravo.") return null;
+                words.Add(word);
+                if (!anyWord && word != "Bravo.") return null;
                 counts.Add(count);
                 return policy(count);
             };
@@ -156,9 +171,9 @@ public class TerminalSpaceOverhangTests : IDisposable
             positions.Add((item!.Text, item.X, item.Y));
         var first = positions.First(item => item.Text == "Alpha");
         var bravo = positions.First(item => item.Text == "Bravo.");
-        return new Result(first.Y == bravo.Y, bravo.X, counts,
+        return new Result(first.Y == bravo.Y, bravo.X, counts, words,
             PdfFileHelper.GetPageContentStream(pdf, 0));
     }
 
-    record Result(bool SameLine, double BravoX, List<int> Counts, string Content);
+    record Result(bool SameLine, double BravoX, List<int> Counts, List<string> Words, string Content);
 }
