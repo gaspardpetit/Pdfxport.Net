@@ -82,6 +82,24 @@ public class TerminalSpaceOverhangTests : IDisposable
         result.Words.Should().NotContain("Bravo.");
     }
 
+    [Theory]
+    [InlineData("\u00AD", false)]
+    [InlineData("\u00AD  ", false)]
+    [InlineData("\u00AD", true)]
+    [InlineData("\u00AD  ", true)]
+    public void TrailingSoftHyphenDoesNotChangeWrapping(string suffix, bool additive)
+    {
+        Measure("\u00AD").Should().BeGreaterThan(3);
+        double? Allowance(int count) => count == 1 ? (additive ? 1.2 : 5) : null;
+        var baseline = Render("Alpha Bravo.", Allowance, anyWord: true, additive: additive ? true : null);
+        var result = Render("Alpha Bravo.", Allowance, anyWord: true,
+            additive: additive ? true : null, suffix: suffix);
+        baseline.SameLine.Should().BeTrue();
+        result.SameLine.Should().BeTrue();
+        result.BravoX.Should().BeApproximately(baseline.BravoX, 0.001);
+        result.Words.Should().NotBeEmpty().And.OnlyContain(word => word == "Bravo.");
+    }
+
     [Fact]
     public void NonterminalWordsDoNotUseTerminalPolicy()
     {
@@ -153,7 +171,7 @@ public class TerminalSpaceOverhangTests : IDisposable
     }
 
     static Result Render(string text, Func<int, double?>? policy = null, double? existing = null,
-        bool hardBreak = false, bool? additive = null, bool anyWord = false, string? bookmarkSuffix = null)
+        bool hardBreak = false, bool? additive = null, bool anyWord = false, string? bookmarkSuffix = null, string? suffix = null)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -170,6 +188,8 @@ public class TerminalSpaceOverhangTests : IDisposable
             paragraph.AddLineBreak();
         }
         paragraph.AddText(text);
+        if (suffix != null)
+            paragraph.AddText(suffix);
         if (bookmarkSuffix != null)
         {
             paragraph.AddBookmark("End", false);
