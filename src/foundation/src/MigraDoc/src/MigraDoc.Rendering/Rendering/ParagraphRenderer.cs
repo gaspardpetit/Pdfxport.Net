@@ -2374,7 +2374,7 @@ namespace MigraDoc.Rendering
                             _paragraph.Format.Alignment == ParagraphAlignment.Justify && spaceWidth > 0
                             ? (1 - shrinkFactor.Value) * spaceWidth : 0;
                         shrinkAllowance = CapWordContraction(shrinkAllowance, width);
-                        var fitAllowance = _documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null
+                        var fitAllowance = UseAdditiveLineEndOverhang(next, followingLeaf == null)
                             ? (double)shrinkAllowance + overhangAllowance
                             : Math.Max((double)shrinkAllowance, overhangAllowance);
                         if (joinedWidth <= right - StartXPosition + overhangAllowance &&
@@ -2416,11 +2416,7 @@ namespace MigraDoc.Rendering
                 _currentXPosition > StartXPosition + Tolerance)
             {
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
-                var followingLeaf = _currentLeaf?.GetNextLeaf();
-                while (followingLeaf != null &&
-                       (IsBlank(followingLeaf.Current) || IsNonpaintingLeaf(followingLeaf.Current)))
-                    followingLeaf = followingLeaf.GetNextLeaf();
-                if (_documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null &&
+                if (UseAdditiveLineEndOverhang(_currentLeaf?.GetNextLeaf()) &&
                     _currentXPosition + width > right &&
                     GetLineEndOverhang(word, CurrentFont) is double additiveAllowance &&
                     additiveAllowance > 0 && IsFinite(additiveAllowance))
@@ -2497,6 +2493,19 @@ namespace MigraDoc.Rendering
                     return null;
             }
             return leaf;
+        }
+
+        bool UseAdditiveLineEndOverhang(ParagraphIterator? next, bool? terminal = null)
+        {
+            while (next != null && IsNonpaintingLeaf(next.Current))
+                next = next.GetNextLeaf();
+            var following = next;
+            while (following != null && (IsBlank(following.Current) || IsNonpaintingLeaf(following.Current)))
+                following = following.GetNextLeaf();
+            // Preserve the joined-word guard's existing terminal break/tab classification.
+            return _documentRenderer.AdditiveTerminalLineEndOverhang && (terminal ?? following == null) ||
+                _documentRenderer.AdditiveNonterminalLineEndOverhang &&
+                next != null && IsBlank(next.Current) && SkipContractionPolicyLeaves(following) != null;
         }
 
         bool HasLineEndOverhang => _documentRenderer.LineEndOverhang != null ||
