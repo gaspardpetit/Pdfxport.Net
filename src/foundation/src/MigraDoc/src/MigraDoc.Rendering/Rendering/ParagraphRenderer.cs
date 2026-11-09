@@ -2417,7 +2417,8 @@ namespace MigraDoc.Rendering
             {
                 var right = fittingRect.X + fittingRect.Width - RightIndent + Tolerance;
                 var followingLeaf = _currentLeaf?.GetNextLeaf();
-                while (followingLeaf != null && IsBlank(followingLeaf.Current))
+                while (followingLeaf != null &&
+                       (IsBlank(followingLeaf.Current) || IsNonpaintingLeaf(followingLeaf.Current)))
                     followingLeaf = followingLeaf.GetNextLeaf();
                 if (_documentRenderer.AdditiveTerminalLineEndOverhang && followingLeaf == null &&
                     _currentXPosition + width > right &&
@@ -2504,7 +2505,7 @@ namespace MigraDoc.Rendering
         double? GetLineEndOverhang(string word, XFont font)
         {
             var following = _currentLeaf?.GetNextLeaf();
-            while (following != null && IsBlank(following.Current))
+            while (following != null && (IsBlank(following.Current) || IsNonpaintingLeaf(following.Current)))
                 following = following.GetNextLeaf();
             var established = _documentRenderer.LineEndOverhang?.Invoke(_paragraph, word, font);
             if (following != null ||

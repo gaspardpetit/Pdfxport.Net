@@ -155,7 +155,8 @@ namespace MigraDoc.Rendering
         /// <summary>
         /// Supplies an additional overhang allowance in points for the final text
         /// leaf of a paragraph, using the number of word spaces already on its line
-        /// (including the pending space before the leaf). Trailing blanks are ignored.
+        /// (including the pending space before the leaf). Trailing blanks and nonpainting
+        /// leaves such as bookmarks are ignored.
         /// The larger of this allowance and LineEndOverhang is used. Null, nonpositive
         /// and nonfinite results are ignored. Does not change the painted word width.
         /// Must remain stable during preparation; prepare again after changing it.

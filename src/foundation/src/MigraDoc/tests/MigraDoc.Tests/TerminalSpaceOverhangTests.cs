@@ -54,6 +54,34 @@ public class TerminalSpaceOverhangTests : IDisposable
         result.Words.Should().NotBeEmpty().And.OnlyContain(word => word == "Bravo.");
     }
 
+    [Theory]
+    [InlineData("", "", false)]
+    [InlineData("  ", "", false)]
+    [InlineData("", "  ", false)]
+    [InlineData("", "", true)]
+    [InlineData("  ", "", true)]
+    [InlineData("", "  ", true)]
+    public void TrailingBookmarkDoesNotChangeTerminalAllowance(string before, string after, bool additive)
+    {
+        double? Allowance(int count) => count == 1 ? (additive ? 1.2 : 5) : null;
+        var baseline = Render("Alpha Bravo.", Allowance, anyWord: true, additive: additive ? true : null);
+        var result = Render("Alpha Bravo." + before, Allowance, anyWord: true,
+            additive: additive ? true : null, bookmarkSuffix: after);
+        baseline.SameLine.Should().BeTrue();
+        result.SameLine.Should().BeTrue();
+        result.BravoX.Should().BeApproximately(baseline.BravoX, 0.001);
+        result.Words.Should().NotBeEmpty().And.OnlyContain(word => word == "Bravo.");
+        result.Counts.Should().OnlyContain(count => count == 1);
+    }
+
+    [Fact]
+    public void BookmarkBeforeMoreTextDoesNotMakeWordTerminal()
+    {
+        var result = Render("Alpha Bravo.", _ => 100, anyWord: true, bookmarkSuffix: " tail");
+        result.SameLine.Should().BeFalse();
+        result.Words.Should().NotContain("Bravo.");
+    }
+
     [Fact]
     public void NonterminalWordsDoNotUseTerminalPolicy()
     {
@@ -125,7 +153,7 @@ public class TerminalSpaceOverhangTests : IDisposable
     }
 
     static Result Render(string text, Func<int, double?>? policy = null, double? existing = null,
-        bool hardBreak = false, bool? additive = null, bool anyWord = false)
+        bool hardBreak = false, bool? additive = null, bool anyWord = false, string? bookmarkSuffix = null)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -142,6 +170,12 @@ public class TerminalSpaceOverhangTests : IDisposable
             paragraph.AddLineBreak();
         }
         paragraph.AddText(text);
+        if (bookmarkSuffix != null)
+        {
+            paragraph.AddBookmark("End", false);
+            if (bookmarkSuffix.Length > 0)
+                paragraph.AddText(bookmarkSuffix);
+        }
         var renderer = new PdfDocumentRenderer { Document = document };
         if (additive is bool enabled)
         {
