@@ -1108,6 +1108,9 @@ namespace MigraDoc.Rendering
                         ? MeasureString(endText[^1..]) : 0;
                     var renderedAdjustment = threshold is >= 0 && IsFinite(threshold.Value)
                         ? GetRenderOnlyTrailingGlyphKerning(endText, font) : 0;
+                    var fitAdjustment = threshold is >= 0 && IsFinite(threshold.Value)
+                        ? _documentRenderer.HangingTerminalLineFitKerning?.Invoke(
+                            _paragraph, endText, font) : null;
                     _currentLeaf = savedLeaf;
                     if (threshold is >= 0 && IsFinite(threshold.Value))
                     {
@@ -1118,9 +1121,12 @@ namespace MigraDoc.Rendering
                             LeftIndent - RightIndent;
                         var renderedLineWidth = _currentLineWidth + renderedAdjustment;
                         var expansion = width - renderedLineWidth + markWidth;
-                        if ((renderedLineWidth - width > threshold.Value ||
+                        var fitLineWidth = _currentLineWidth +
+                            (fitAdjustment is double adjustment && IsFinite(adjustment)
+                                ? adjustment : renderedAdjustment);
+                        if ((fitLineWidth - width > threshold.Value ||
                              nearEdgeThreshold is >= 0 && IsFinite(nearEdgeThreshold.Value) &&
-                             renderedLineWidth - width > -nearEdgeThreshold.Value) && expansion > 0)
+                             fitLineWidth - width > -nearEdgeThreshold.Value) && expansion > 0)
                             return MeasureString(" ") + expansion / _currentLineBlankCount;
                     }
                 }
