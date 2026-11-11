@@ -29,6 +29,16 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects a leading adjustment in points after an ordinary text blank only
+        /// during formatting. Painted leading adjustment still uses the tagged or legacy
+        /// selector. Can change wrapping and alignment through the fitted line width.
+        /// A nonnull tagged selection takes precedence. Null falls back to
+        /// LeadingKerningAfterBlank; nonfinite results disable the formatting adjustment.
+        /// Must remain stable during preparation; prepare again after changing it.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? FitOnlyLeadingKerningAfterBlank { get; set; }
+
+        /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank, using
         /// the current Text leaf's tag, word and font. Applies during fitting and painting.
         /// Null falls back to LeadingKerningAfterBlank; nonfinite results disable the

@@ -2849,6 +2849,9 @@ namespace MigraDoc.Rendering
                 ? _documentRenderer.LeadingKerningAfterBlankWithTextTag?.Invoke(
                     _paragraph, text.Tag, word, CurrentFont) : null;
             var adjustment = taggedAdjustment ??
+                (_phase == Phase.Formatting
+                    ? _documentRenderer.FitOnlyLeadingKerningAfterBlank?.Invoke(_paragraph, word, CurrentFont)
+                    : null) ??
                 _documentRenderer.LeadingKerningAfterBlank?.Invoke(_paragraph, word, CurrentFont);
             return adjustment is double value && IsFinite(value) ? value : 0;
         }
