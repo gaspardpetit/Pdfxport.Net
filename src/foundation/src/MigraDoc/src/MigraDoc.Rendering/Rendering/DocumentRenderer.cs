@@ -29,6 +29,15 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects a leading adjustment in points after an ordinary text blank, using
+        /// the current Text leaf's tag, word and font. Applies during fitting and painting.
+        /// Null falls back to LeadingKerningAfterBlank; nonfinite results disable the
+        /// adjustment. Does not adjust words at the start of a line or without a preceding
+        /// blank. Must remain stable; prepare again after changing the selector.
+        /// </summary>
+        public Func<Paragraph, object?, string, XFont, double?>? LeadingKerningAfterBlankWithTextTag { get; set; }
+
+        /// <summary>
         /// Selects a trailing-glyph adjustment in points using the current Text leaf's
         /// tag, word and font. Applies during fitting and painting, with the same script
         /// scaling as TrailingGlyphKerning. Null falls back to TrailingGlyphKerning;
