@@ -29,6 +29,16 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects a trailing-glyph adjustment in points using the current Text leaf's
+        /// tag, word and font. Applies during fitting and painting, with the same script
+        /// scaling as TrailingGlyphKerning. Null falls back to TrailingGlyphKerning;
+        /// a nonfinite result disables the adjustment. Single-character words and words
+        /// ending in a surrogate pair are excluded. Must remain stable across preparation
+        /// and painting; prepare again after changing the selector.
+        /// </summary>
+        public Func<Paragraph, object?, string, XFont, double?>? TrailingGlyphKerningWithTextTag { get; set; }
+
+        /// <summary>
         /// Selects the total width in points of an explicit space Character from its
         /// tag, measured total width, and count. Applies to blank, em, quarter-em and en
         /// spaces, during both preparation and painting. Null or nonfinite values retain

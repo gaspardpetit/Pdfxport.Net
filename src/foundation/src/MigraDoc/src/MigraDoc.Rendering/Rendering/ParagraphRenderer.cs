@@ -2816,9 +2816,13 @@ namespace MigraDoc.Rendering
 
         double GetTrailingGlyphKerning(string word, XFont xFont)
         {
-            if (word.Length < 2 || char.IsLowSurrogate(word[^1]) ||
-                _documentRenderer.TrailingGlyphKerning?.Invoke(_paragraph, word, xFont) is not double adjustment ||
-                double.IsNaN(adjustment) || double.IsInfinity(adjustment))
+            if (word.Length < 2 || char.IsLowSurrogate(word[^1]))
+                return 0;
+            var taggedAdjustment = _currentLeaf?.Current is Text text
+                ? _documentRenderer.TrailingGlyphKerningWithTextTag?.Invoke(
+                    _paragraph, text.Tag, word, xFont) : null;
+            if ((taggedAdjustment ?? _documentRenderer.TrailingGlyphKerning?.Invoke(
+                    _paragraph, word, xFont)) is not double adjustment || !IsFinite(adjustment))
                 return 0;
             var font = CurrentDomFont;
             return font.Subscript || font.Superscript
