@@ -2856,7 +2856,11 @@ namespace MigraDoc.Rendering
                 SymbolName.En => MeasureString("n"),
                 _ => 0
             };
-            return width * character.Count;
+            width *= character.Count;
+            var measured = _documentRenderer.SpaceWidthFromTextMetrics?.Invoke(
+                character.Tag, width.Point, character.Count);
+            return measured is { } value && IsFinite(value)
+                ? XUnitPt.FromPoint(Math.Max(0, value)) : width;
         }
 
         void RenderListSymbol()
