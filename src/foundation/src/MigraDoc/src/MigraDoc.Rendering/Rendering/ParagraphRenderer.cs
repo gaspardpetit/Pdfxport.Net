@@ -2843,11 +2843,14 @@ namespace MigraDoc.Rendering
         double GetLeadingKerningAfterBlank(string word)
         {
             if (word.Length == 0 || _currentXPosition <= StartXPosition + Tolerance ||
-                _currentLeaf?.GetPreviousLeaf() is not { } previous || !IsBlank(previous.Current) ||
-                _documentRenderer.LeadingKerningAfterBlank?.Invoke(_paragraph, word, CurrentFont)
-                    is not double adjustment || double.IsNaN(adjustment) || double.IsInfinity(adjustment))
+                _currentLeaf?.GetPreviousLeaf() is not { } previous || !IsBlank(previous.Current))
                 return 0;
-            return adjustment;
+            var taggedAdjustment = _currentLeaf.Current is Text text
+                ? _documentRenderer.LeadingKerningAfterBlankWithTextTag?.Invoke(
+                    _paragraph, text.Tag, word, CurrentFont) : null;
+            var adjustment = taggedAdjustment ??
+                _documentRenderer.LeadingKerningAfterBlank?.Invoke(_paragraph, word, CurrentFont);
+            return adjustment is double value && IsFinite(value) ? value : 0;
         }
 
         XUnitPt GetSpaceWidth(Character character)
