@@ -29,6 +29,15 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Adjusts the line width in points only for the decision to expand spaces
+        /// before a hanging terminal mark. Requires HangingTerminalLineSpaceThreshold.
+        /// A finite result replaces the render-only trailing-glyph adjustment in that
+        /// decision; null or nonfinite results retain it. Does not change line fitting,
+        /// glyph painting, or the expansion amount once selected. Evaluated during painting.
+        /// </summary>
+        public Func<Paragraph, string, XFont, double?>? HangingTerminalLineFitKerning { get; set; }
+
+        /// <summary>
         /// Selects trailing space, in points, to include when vertically centering
         /// content in a fixed-height text frame. Only the amount beyond the last
         /// element's already-counted bottom margin is added. Does not change frame
