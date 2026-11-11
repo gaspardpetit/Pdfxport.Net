@@ -29,6 +29,15 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects the total width in points of an explicit space Character from its
+        /// tag, measured total width, and count. Applies to blank, em, quarter-em and en
+        /// spaces, during both preparation and painting. Null or nonfinite values retain
+        /// the measured width; negative values are clamped to zero. Ordinary text blanks
+        /// are unaffected. Must remain stable; prepare again after changing this selector.
+        /// </summary>
+        public Func<object?, double, int, double?>? SpaceWidthFromTextMetrics { get; set; }
+
+        /// <summary>
         /// Adjusts the line width in points only for the decision to expand spaces
         /// before a hanging terminal mark. Requires HangingTerminalLineSpaceThreshold.
         /// A finite result replaces the render-only trailing-glyph adjustment in that
