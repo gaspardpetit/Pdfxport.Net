@@ -135,6 +135,65 @@ public class BoundaryPaintIsolationTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("outside", -20)]
+    [InlineData("outside", -4)]
+    [InlineData("outside", 4)]
+    [InlineData("outside", 20)]
+    [InlineData("adjacent", -20)]
+    [InlineData("adjacent", -4)]
+    [InlineData("adjacent", 4)]
+    [InlineData("adjacent", 20)]
+    [InlineData("inside", -20)]
+    [InlineData("inside", -4)]
+    [InlineData("inside", 4)]
+    [InlineData("inside", 20)]
+    public void HyperlinkBoundsCoverTheirOwnPaintedLeaves(string placement, double shift)
+    {
+        List<(double Left, double Right)> Draw(string location, double adjustment)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 12;
+            var paragraph = document.AddSection().AddParagraph();
+            var first = paragraph.AddHyperlink("https://example.org/first", HyperlinkType.Url);
+            first.AddText("A");
+            if (location == "inside")
+                first.AddText("B").Tag = "B";
+            else if (location == "adjacent")
+                paragraph.AddHyperlink("https://example.org/second", HyperlinkType.Url).AddText("B").Tag = "B";
+            else
+                paragraph.AddText("B").Tag = "B";
+            paragraph.AddText("C");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) => Equals(tag, "B") ? adjustment : null;
+            renderer.RenderDocument();
+            using var pdf = renderer.PdfDocument;
+            return Enumerable.Range(0, pdf.Pages[0].Annotations.Count)
+                .Select(index => pdf.Pages[0].Annotations[index].Rectangle)
+                .Select(rect => (rect.X1, rect.X2)).ToList();
+        }
+        var original = Draw(placement, 0);
+        var selected = Draw(placement, shift);
+        selected.Should().HaveCount(placement == "adjacent" ? 2 : 1);
+        var firstLeaf = placement == "inside" ? Draw("outside", 0)[0] : original[0];
+        if (placement == "inside")
+        {
+            selected[0].Left.Should().BeApproximately(Math.Min(firstLeaf.Left, firstLeaf.Right + shift), .002);
+            selected[0].Right.Should().BeApproximately(Math.Max(firstLeaf.Right, original[0].Right + shift), .002);
+        }
+        else
+        {
+            selected[0].Left.Should().BeApproximately(original[0].Left, .002);
+            selected[0].Right.Should().BeApproximately(original[0].Right, .002);
+        }
+        if (placement == "adjacent")
+        {
+            selected[1].Left.Should().BeApproximately(original[1].Left + shift, .002);
+            selected[1].Right.Should().BeApproximately(original[1].Right + shift, .002);
+        }
+    }
+
     static Result Render(ParagraphAlignment alignment, TabAlignment tab, double shift)
     {
         var document = new Document();

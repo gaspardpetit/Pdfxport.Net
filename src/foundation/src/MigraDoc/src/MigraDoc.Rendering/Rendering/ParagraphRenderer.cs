@@ -1702,9 +1702,8 @@ namespace MigraDoc.Rendering
             _hyperlinkRect = new XRect(left, top, 0, 0);
         }
 
-        void EndHyperlink(Hyperlink hyperlink, XUnitPt right, XUnitPt bottom)
+        void EndHyperlink(Hyperlink hyperlink, XUnitPt bottom)
         {
-            _hyperlinkRect.Width = right - _hyperlinkRect.X;
             _hyperlinkRect.Height = bottom - _hyperlinkRect.Y;
             var page = _gfx.PdfPage;
             if (page != null)
@@ -1774,12 +1773,23 @@ namespace MigraDoc.Rendering
             if (hyperlinkChanged)
             {
                 if (_currentHyperlink != null)
-                    EndHyperlink(_currentHyperlink, left, bottom);
+                    EndHyperlink(_currentHyperlink, bottom);
 
                 if (hyperlink != null)
                     StartHyperlink(left, top);
 
                 _currentHyperlink = hyperlink;
+            }
+
+            if (_currentHyperlink != null)
+            {
+                // Accumulate only this hyperlink's painted spans. The next leaf's
+                // offset must not resize this link, and signed shifts within the
+                // link may place a later span before its original start.
+                var spanLeft = Math.Min(_hyperlinkRect.X, left.Point);
+                var spanRight = Math.Max(_hyperlinkRect.Right, right.Point);
+                _hyperlinkRect.X = spanLeft;
+                _hyperlinkRect.Width = spanRight - spanLeft;
             }
 
             if (_currentLeaf is null || _endLeaf is null)
@@ -1788,7 +1798,7 @@ namespace MigraDoc.Rendering
             if (_currentLeaf.Current == _endLeaf.Current)
             {
                 if (_currentHyperlink != null)
-                    EndHyperlink(_currentHyperlink, right, bottom);
+                    EndHyperlink(_currentHyperlink, bottom);
 
                 _currentHyperlink = null;
             }
