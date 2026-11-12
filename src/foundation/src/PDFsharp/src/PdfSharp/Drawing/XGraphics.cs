@@ -3489,6 +3489,29 @@ namespace PdfSharp.Drawing
         }
 
         /// <summary>
+        /// Draws PDF text with independent horizontal ink and layout scales at a baseline origin.
+        /// Text events resolve the complete run before glyph origins are calculated.
+        /// The trailing kerning, in drawing units, offsets the final resolved glyph only.
+        /// Requires a PDF renderer. Both scales must be finite and in (0, 10).
+        /// </summary>
+        public void DrawStringWithPaintScale(string text, XFont font, XBrush brush,
+            double x, double y, double layoutScale, double paintScale, double trailingKerning = 0)
+        {
+            if (text is null) throw new ArgumentNullException(nameof(text));
+            if (font is null) throw new ArgumentNullException(nameof(font));
+            if (brush is null) throw new ArgumentNullException(nameof(brush));
+            if (!(layoutScale > 0 && layoutScale < 10)) throw new ArgumentOutOfRangeException(nameof(layoutScale));
+            if (!(paintScale > 0 && paintScale < 10)) throw new ArgumentOutOfRangeException(nameof(paintScale));
+            if (double.IsNaN(trailingKerning) || double.IsInfinity(trailingKerning))
+                throw new ArgumentOutOfRangeException(nameof(trailingKerning));
+            if (_renderer is not PdfSharp.Drawing.Pdf.XGraphicsPdfRenderer renderer)
+                throw new InvalidOperationException("Paint scaling requires a PDF renderer.");
+            if (text.Length == 0) return;
+            renderer.DrawStringWithPaintScale(text, font, brush, new XRect(x, y, 0, 0),
+                layoutScale, paintScale, trailingKerning);
+        }
+
+        /// <summary>
         /// Draws PDF text at a baseline origin using explicit distances between successive glyph origins.
         /// Advances are in drawing units, before the graphics transform, and may be zero or negative.
         /// Supply one fewer advance than Unicode scalar values; the final glyph retains its natural width.

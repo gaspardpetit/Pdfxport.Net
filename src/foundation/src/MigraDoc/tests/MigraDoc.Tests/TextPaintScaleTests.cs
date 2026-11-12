@@ -91,8 +91,37 @@ public class TextPaintScaleTests : IDisposable
         selected.FollowingX.Should().BeApproximately(Render(null, word: "A\U0001F600B").FollowingX, .001);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TextEventsResolveWholeRunBeforePaintScaling(bool renderEvent)
+    {
+        var selected = Render(.5, word: "fiZ", substitution: renderEvent);
+        var expected = Render(.5, word: "WZ");
+        selected.Matrices.Should().HaveCount(2);
+        selected.Matrices.Should().Equal(expected.Matrices);
+        selected.FollowingX.Should().BeApproximately(expected.FollowingX, .001);
+        selected.Content.Should().Be(expected.Content);
+    }
+
+    [Fact]
+    public void TextEventsMayCollapseTheCompleteRun()
+    {
+        var selected = Render(.5, word: "fi", substitution: false);
+        selected.Matrices.Should().HaveCount(1);
+        selected.FollowingX.Should().BeApproximately(Render(.5, word: "W").FollowingX, .001);
+    }
+
+    [Fact]
+    public void TextEventMayRemoveAllGlyphs()
+    {
+        var selected = Render(.5, word: "fi", remove: true);
+        selected.Matrices.Should().BeEmpty();
+        selected.FollowingX.Should().BeApproximately(Render(null, word: "fi", remove: true).FollowingX, .001);
+    }
+
     static Result Render(double? paint, double layout = 1, double? overrun = null,
-        bool suffix = true, double? trailing = null, double? kerning = null, string word = "Bravo")
+        bool suffix = true, double? trailing = null, double? kerning = null, string word = "Bravo", bool? substitution = null, bool remove = false)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -119,6 +148,30 @@ public class TextPaintScaleTests : IDisposable
             renderer.DocumentRenderer.TextTrailingAdvance = actual => ReferenceEquals(actual, tag) ? trailing : null;
         if (kerning != null)
             renderer.DocumentRenderer.TrailingGlyphKerningWithTextTag = (_, actual, _, _) => ReferenceEquals(actual, tag) ? kerning : null;
+        if (substitution == false)
+            renderer.PdfDocument.RenderEvents.PrepareTextEvent += (_, args) =>
+            {
+                // Deliberately non-idempotent: reapplying the event to the resolved
+                // W glyph would turn it into X and expose duplicate processing.
+                args.Text = args.Text.Replace("W", "X").Replace("fi", "W");
+            };
+        if (substitution == true)
+            renderer.PdfDocument.RenderEvents.RenderTextEvent += (_, args) =>
+            {
+                var pairs = args.CodePointGlyphIndexPairs;
+                if (pairs.Length >= 2 && pairs[0].CodePoint == 'f' && pairs[1].CodePoint == 'i')
+                {
+                    args.CodePointGlyphIndexPairs = pairs.Skip(1).ToArray();
+                    args.CodePointGlyphIndexPairs[0].CodePoint = 'W';
+                    args.ReevaluateGlyphIndices = true;
+                }
+            };
+        if (remove)
+            renderer.PdfDocument.RenderEvents.RenderTextEvent += (_, args) =>
+            {
+                if (args.CodePointGlyphIndexPairs.Length == 2 && args.CodePointGlyphIndexPairs[0].CodePoint == 'f')
+                    args.CodePointGlyphIndexPairs = [];
+            };
         renderer.RenderDocument();
         using var pdf = renderer.PdfDocument;
         var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;

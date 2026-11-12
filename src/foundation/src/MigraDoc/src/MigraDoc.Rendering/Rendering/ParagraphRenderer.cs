@@ -1624,20 +1624,8 @@ namespace MigraDoc.Rendering
                 var paintScale = GetTextPaintHorizontalScale(layoutScale);
                 if (paintScale != layoutScale)
                 {
-                    // Preserve layout glyph origins even though their painted ink
-                    // has a different width. Never split a UTF-16 surrogate pair.
-                    XUnitPt glyphX = _currentXPosition;
-                    for (var index = 0; index < word.Length;)
-                    {
-                        var length = char.IsHighSurrogate(word[index]) && index + 1 < word.Length &&
-                            char.IsLowSurrogate(word[index + 1]) ? 2 : 1;
-                        var glyph = word.Substring(index, length);
-                        if (index > 0 && index + length == word.Length)
-                            glyphX += kerning;
-                        DrawScaledString(glyph, xFont, glyphX, paintScale);
-                        glyphX += _gfx.MeasureString(glyph, xFont, StringFormat).Width * layoutScale;
-                        index += length;
-                    }
+                    _gfx.DrawStringWithPaintScale(word, xFont, CurrentBrush,
+                        _currentXPosition, CurrentBaselinePosition, layoutScale, paintScale, kerning);
                 }
                 else if (kerning != 0)
                 {

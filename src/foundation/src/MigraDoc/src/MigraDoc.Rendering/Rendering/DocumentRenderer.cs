@@ -65,7 +65,7 @@ namespace MigraDoc.Rendering
         /// continue to use TextHorizontalScale. Ink may extend beyond those bounds.
         /// This is an absolute scale, not a multiplier on TextHorizontalScale.
         /// Null, nonfinite values and values outside (0, 10) use the layout scale.
-        /// When the scales differ, Unicode scalars are painted separately using
+        /// When the scales differ, Resolved glyphs are painted separately using
         /// their layout origins. The selector must remain stable during rendering.
         /// </summary>
         public Func<object?, XFont, double?>? TextPaintHorizontalScale { get; set; }
