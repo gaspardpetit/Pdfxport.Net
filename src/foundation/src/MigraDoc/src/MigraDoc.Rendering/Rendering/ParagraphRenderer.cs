@@ -3106,7 +3106,7 @@ namespace MigraDoc.Rendering
                 priorFont.Size != font.Size || priorFont.Style != font.Style ||
                 priorDomFont.Subscript != domFont.Subscript || priorDomFont.Superscript != domFont.Superscript)
                 return 0;
-            var adjustment = callback(_paragraph, (prior as Text)?.Tag, tag, priorChar, word[0], font);
+            var adjustment = callback(_paragraph, prior.Tag, tag, priorChar, word[0], font);
             return adjustment is { } value && IsFinite(value) ? value : 0;
         }
 

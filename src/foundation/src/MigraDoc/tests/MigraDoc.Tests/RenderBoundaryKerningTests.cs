@@ -77,11 +77,11 @@ public class RenderBoundaryKerningTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void OrdinaryBlankBoundaryCanBeAdjusted(bool character)
+    [InlineData("space")]
+    [InlineData("character")]
+    [InlineData("taggedcharacter")]
+    public void OrdinaryBlankBoundaryCanBeAdjusted(string mode)
     {
-        var mode = character ? "character" : "space";
         var original = Render(null, mode: mode);
         var selected = Render(-2, mode: mode);
         selected.WordX.Should().BeApproximately(original.WordX - 2, .001);
@@ -331,6 +331,7 @@ public class RenderBoundaryKerningTests : IDisposable
             case "startspace": paragraph.AddText(" "); break;
             case "space": paragraph.AddText(" ").Tag = priorTag; break;
             case "character": paragraph.AddCharacter(SymbolName.Blank); break;
+            case "taggedcharacter": paragraph.AddCharacter(SymbolName.Blank).Tag = priorTag; break;
             case "tab": paragraph.AddTab(); break;
             case "linebreak": paragraph.AddLineBreak(); break;
             case "empty": paragraph.Elements.Add(new Text("")); break;
@@ -356,7 +357,7 @@ public class RenderBoundaryKerningTests : IDisposable
             actualParagraph.Should().BeSameAs(paragraph);
             if (mode == "character") previous.Should().BeNull();
             else previous.Should().BeSameAs(priorTag);
-            left.Should().Be(mode is "space" or "character" ? ' ' : 'a');
+            left.Should().Be(mode is "space" or "character" or "taggedcharacter" ? ' ' : 'a');
             right.Should().Be('B');
             font.Size.Should().Be(12);
             calls++;
