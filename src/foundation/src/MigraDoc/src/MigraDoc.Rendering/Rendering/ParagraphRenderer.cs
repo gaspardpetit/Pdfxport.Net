@@ -1620,16 +1620,35 @@ namespace MigraDoc.Rendering
             {
                 var kerning = GetTrailingGlyphKerning(word, CurrentFont) +
                     GetRenderOnlyTrailingGlyphKerning(word, CurrentFont);
-                if (kerning != 0)
+                var layoutScale = GetTextHorizontalScale();
+                var paintScale = GetTextPaintHorizontalScale(layoutScale);
+                if (paintScale != layoutScale)
+                {
+                    // Preserve layout glyph origins even though their painted ink
+                    // has a different width. Never split a UTF-16 surrogate pair.
+                    XUnitPt glyphX = _currentXPosition;
+                    for (var index = 0; index < word.Length;)
+                    {
+                        var length = char.IsHighSurrogate(word[index]) && index + 1 < word.Length &&
+                            char.IsLowSurrogate(word[index + 1]) ? 2 : 1;
+                        var glyph = word.Substring(index, length);
+                        if (index > 0 && index + length == word.Length)
+                            glyphX += kerning;
+                        DrawScaledString(glyph, xFont, glyphX, paintScale);
+                        glyphX += _gfx.MeasureString(glyph, xFont, StringFormat).Width * layoutScale;
+                        index += length;
+                    }
+                }
+                else if (kerning != 0)
                 {
                     var prefix = word[..^1];
-                    DrawScaledString(prefix, xFont, _currentXPosition);
+                    DrawScaledString(prefix, xFont, _currentXPosition, paintScale);
                     DrawScaledString(word[^1..], xFont,
                         _currentXPosition + _gfx.MeasureString(prefix, xFont, StringFormat).Width *
-                            GetTextHorizontalScale() + kerning);
+                            layoutScale + kerning, paintScale);
                 }
                 else
-                    DrawScaledString(word, xFont, _currentXPosition);
+                    DrawScaledString(word, xFont, _currentXPosition, paintScale);
             }
             XUnitPt wordWidth = MeasureString(word);
             RenderUnderline(wordWidth, true);
@@ -1644,9 +1663,15 @@ namespace MigraDoc.Rendering
             return scale is > 0 and < 10 && IsFinite(scale.Value) ? scale.Value : 1;
         }
 
-        void DrawScaledString(string text, XFont font, XUnitPt x)
+        double GetTextPaintHorizontalScale(double layoutScale)
         {
-            var scale = GetTextHorizontalScale();
+            var selected = _currentLeaf?.Current is Text text
+                ? _documentRenderer.TextPaintHorizontalScale?.Invoke(text.Tag, CurrentFont) : null;
+            return selected is > 0 and < 10 && IsFinite(selected.Value) ? selected.Value : layoutScale;
+        }
+
+        void DrawScaledString(string text, XFont font, XUnitPt x, double scale)
+        {
             if (scale == 1)
             {
                 _gfx.DrawString(text, font, CurrentBrush!, x, CurrentBaselinePosition);
