@@ -942,6 +942,14 @@ namespace MigraDoc.Rendering
             _lastTabPassed = lineInfo.LastTab == null;
             _lastTab = lineInfo.LastTab;
 
+            // Selected blank advances are fixed boundary spacing, not stretchable
+            // justification space. Reserve them independently for each flow interval.
+            var blankAdvances = _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
+                _documentRenderer.TextTrailingAdvance != null
+                ? GetJustifiedBlankAdvances(lineInfo) : null;
+            if (blankAdvances != null)
+                _currentLineWordsWidth += blankAdvances[0];
+
             _tabIdx = 0;
             var segmentIndex = 0;
 
@@ -980,6 +988,8 @@ namespace MigraDoc.Rendering
                             transition.ClippedWidthBefore;
                     if (renderWidthAdjustments != null)
                         _currentLineWordsWidth += renderWidthAdjustments[segmentIndex];
+                    if (blankAdvances != null)
+                        _currentLineWordsWidth += blankAdvances[segmentIndex];
                     _currentLineBlankCount = (segmentIndex < transitions.Count
                         ? transitions[segmentIndex].BlanksBefore : lineInfo.BlankCount) -
                         transition.BlanksBefore;
@@ -1147,7 +1157,12 @@ namespace MigraDoc.Rendering
                          _currentSegmentNeedsContraction ||
                          _documentRenderer.JustifiedSpaceShrinkFactorForParagraph?.Invoke(_paragraph) is > 0 and < 1 &&
                          _currentLineWidth > width))
-                        return (width - _currentLineWordsWidth) / _currentLineBlankCount;
+                    {
+                        if (_documentRenderer.TextTrailingAdvance != null && MeasureString(" ") <= 0)
+                            return 0;
+                        return (width - _currentLineWordsWidth) / _currentLineBlankCount +
+                            GetBlankTrailingAdvance();
+                    }
                 }
                 return MeasureString(" ");
             }
@@ -2816,6 +2831,49 @@ namespace MigraDoc.Rendering
             }
 
             return width;
+        }
+
+        double[] GetJustifiedBlankAdvances(LineInfo lineInfo)
+        {
+            var transitions = lineInfo.SegmentTransitions;
+            var advances = new double[(transitions?.Count ?? 0) + 1];
+            var segment = 0;
+            var afterLastTab = lineInfo.LastTab == null;
+            var savedLeaf = _currentLeaf;
+            try
+            {
+                for (var leaf = lineInfo.StartIter; leaf != null; leaf = leaf.GetNextLeaf())
+                {
+                    _currentLeaf = leaf;
+                    var segmentStart = transitions is { Count: > 0 } && segment < transitions.Count &&
+                        transitions[segment].StartIter?.Current == leaf.Current;
+                    if (segmentStart)
+                        segment++;
+                    if (leaf.Current == lineInfo.LastTab)
+                        afterLastTab = true;
+                    if (afterLastTab && !segmentStart && IsBlank(leaf.Current) && !IgnoreBlank())
+                    {
+                        var natural = MeasureString(" ", includeTrailingAdvance: false);
+                        var selected = AddTextTrailingAdvance(natural);
+                        // A collapsed blank was not included in the fitted blank count.
+                        if (selected > 0)
+                            advances[segment] += (selected - natural).Point;
+                    }
+                    if (leaf.Current == lineInfo.EndIter?.Current)
+                        break;
+                }
+            }
+            finally
+            {
+                _currentLeaf = savedLeaf;
+            }
+            return advances;
+        }
+
+        double GetBlankTrailingAdvance()
+        {
+            var natural = MeasureString(" ", includeTrailingAdvance: false);
+            return (AddTextTrailingAdvance(natural) - natural).Point;
         }
 
         XUnitPt AddTextTrailingAdvance(XUnitPt width)

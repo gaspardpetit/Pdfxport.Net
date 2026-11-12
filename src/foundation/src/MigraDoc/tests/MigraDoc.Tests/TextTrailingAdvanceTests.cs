@@ -214,6 +214,54 @@ public class TextTrailingAdvanceTests : IDisposable
         return new Result(first.X, first.Y, next.X, next.Y, PdfFileHelper.GetPageContentStream(pdf, 0));
     }
 
+    [Theory]
+    [InlineData(-10000, "auto")]
+    [InlineData(2, "auto")]
+    [InlineData(-2, "auto")]
+    [InlineData(2, "tab")]
+    [InlineData(-2, "tab")]
+    [InlineData(2, "manual")]
+    [InlineData(-2, "manual")]
+    [InlineData(2, "last")]
+    [InlineData(-2, "last")]
+    public void JustifiedLinePreservesWhichBlankOwnsAdvance(double advance, string mode)
+    {
+        Result RenderJustified(int selectedBlank, string target)
+        {
+            var document = NewDocument(out var section);
+            using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+            section.PageSetup.PageWidth = Unit.FromPoint(50 + (mode == "tab" ? 20 : 0) + gfx.MeasureString("Alpha Bravo Charlie", new XFont("Arial", 12)).Width);
+            var paragraph = section.AddParagraph();
+            paragraph.Format.Alignment = ParagraphAlignment.Justify;
+            if (mode == "tab")
+            {
+                paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(20), TabAlignment.Left);
+                paragraph.AddText("X");
+                paragraph.AddTab();
+            }
+            var tag = new object();
+            paragraph.AddText("Alpha");
+            paragraph.Elements.Add(new Text(" ") { Tag = selectedBlank == 0 ? tag : null });
+            paragraph.AddText("Bravo");
+            paragraph.Elements.Add(new Text(" ") { Tag = selectedBlank == 1 ? tag : null });
+            paragraph.AddText("Charlie");
+            if (mode == "manual") paragraph.AddLineBreak();
+            if (mode != "last") paragraph.AddText(mode == "manual" ? "Delta" : " Delta");
+            return Read(document, tag, advance, "Alpha", target);
+        }
+        var first = RenderJustified(0, "Bravo");
+        var second = RenderJustified(1, "Bravo");
+        first.NextY.Should().BeApproximately(first.FirstY, .001);
+        var boundaryDifference = advance < -SpaceWidth() ? -(2 * SpaceWidth() + 10) : advance;
+        first.NextX.Should().BeApproximately(second.NextX + boundaryDifference, .001);
+        var firstEnd = RenderJustified(0, "Charlie");
+        var secondEnd = RenderJustified(1, "Charlie");
+        firstEnd.NextY.Should().BeApproximately(firstEnd.FirstY, .001);
+        firstEnd.NextX.Should().BeApproximately(secondEnd.NextX, .001);
+        if (mode != "last")
+            RenderJustified(0, "Delta").NextY.Should().BeLessThan(first.FirstY);
+    }
+
     static double SpaceWidth()
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
