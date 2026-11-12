@@ -2803,6 +2803,8 @@ namespace MigraDoc.Rendering
             if (_phase == Phase.Rendering)
                 width += GetRenderOnlyTrailingGlyphKerning(word, xFont);
 
+            width += Math.Max(GetTextTrailingAdvance(), -width.Point);
+
             if (_phase == Phase.Formatting)
             {
                 var adjustment = _documentRenderer.TextWidthAdjustment?.Invoke(_paragraph, word, xFont);
@@ -2812,6 +2814,21 @@ namespace MigraDoc.Rendering
             }
 
             return width;
+        }
+
+        double GetTextTrailingAdvance()
+        {
+            if (_currentLeaf?.Current is not Text text ||
+                _documentRenderer.TextTrailingAdvance?.Invoke(text.Tag) is not double advance ||
+                advance == 0 || !IsFinite(advance))
+                return 0;
+            var next = _currentLeaf.GetNextLeaf();
+            while (next?.Current is ParagraphElements { Count: 0 })
+                next = next.GetNextLeaf();
+            if (next != null && next.Current is not Text and not Image and not
+                    Character { SymbolName: SymbolName.LineBreak })
+                return 0;
+            return advance;
         }
 
         double GetTrailingGlyphKerning(string word, XFont xFont)

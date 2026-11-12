@@ -39,6 +39,18 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, string, XFont, double?>? FitOnlyLeadingKerningAfterBlank { get; set; }
 
         /// <summary>
+        /// Selects an outgoing advance in points for a text leaf by its tag.
+        /// Applied during fitting and painting, including at paragraph ends and before
+        /// manual line breaks. Crosses empty formatted runs; applies before text or an
+        /// inline image, but not before other elements such as tabs or fields.
+        /// Null and nonfinite values are ignored. Negative advances cannot reduce the
+        /// measured leaf width below zero. Does not space glyphs within a leaf.
+        /// Must remain stable during preparation and rendering; prepare again after changes.
+        /// </summary>
+        public Func<object?, double?>? TextTrailingAdvance { get; set; }
+
+
+        /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank, using
         /// the current Text leaf's tag, word and font. Applies during fitting and painting.
         /// Null falls back to LeadingKerningAfterBlank; nonfinite results disable the
