@@ -95,6 +95,7 @@ namespace MigraDoc.Rendering
                     continue;
                 }
                 ///////////////////////////////////////////
+                XUnitPt uncollapsedTopMargin = 0;
                 if (prevFormatInfo == null)
                 {
                     LayoutInfo initialLayoutInfo = renderer.InitialLayoutInfo;
@@ -103,6 +104,9 @@ namespace MigraDoc.Rendering
                     var outsideFlow = initialLayoutInfo.VerticalReference != VerticalReference.PreviousElement &&
                                       initialLayoutInfo.Floating == Floating.None;
                     XUnitPt distance = outsideFlow ? 0 : prevBottomMargin;
+                    if (docObj is Paragraph)
+                        uncollapsedTopMargin = Math.Max(0,
+                            MarginMax(prevBottomMargin, initialLayoutInfo.MarginTop) - prevBottomMargin);
                     if (initialLayoutInfo.VerticalReference == VerticalReference.PreviousElement &&
                         initialLayoutInfo.Floating != Floating.None)
                         distance = MarginMax(initialLayoutInfo.MarginTop, distance);
@@ -110,6 +114,7 @@ namespace MigraDoc.Rendering
                     area = area.Lower(distance);
                 }
                 renderer.Format(area, prevFormatInfo);
+                renderer.RenderInfo.LayoutInfo.UncollapsedTopMargin = uncollapsedTopMargin;
                 _areaProvider.PositionHorizontally(renderer.RenderInfo.LayoutInfo);
                 // Page- and margin-positioned shapes do not establish body flow.
                 // Ignore PageBreakBefore on the first flowing element after them,

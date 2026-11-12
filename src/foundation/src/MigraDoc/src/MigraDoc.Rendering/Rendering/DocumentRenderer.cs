@@ -537,6 +537,24 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, double?>? TextLinkLeadingSpaceForParagraph { get; set; }
 
         /// <summary>
+        /// Includes positive paragraph spacing in text hyperlink hit areas:
+        /// the laid-out uncollapsed top margin on the complete paragraph's first
+        /// line and configured SpaceAfter on its final line. Page continuations
+        /// receive neither first-line nor final-line spacing at the page break.
+        /// Adds to TextLinkLeadingSpaceForParagraph. Changes annotations only.
+        /// Disabled by default. Nonfinite and overflowing extensions are ignored.
+        /// </summary>
+        public bool IncludeParagraphSpacingInTextLinkBounds { get; set; }
+
+        /// <summary>
+        /// Additional hit-area padding in points on each horizontal side of every
+        /// text hyperlink line rectangle. Changes annotations only; text drawing
+        /// and layout are unchanged. Zero by default. Nonpositive, nonfinite and
+        /// overflowing padding is ignored.
+        /// </summary>
+        public double TextLinkHorizontalPadding { get; set; }
+
+        /// <summary>
         /// Optionally caps space contraction for nonfinal words of justified
         /// paragraphs. Uses the same units and validation as
         /// <see cref="JustifiedTerminalWordOverrunLimitForParagraph"/>.
