@@ -203,6 +203,48 @@ public class RenderBoundaryKerningTests : IDisposable
         false.Should().BeTrue("the final text leaf must be drawn");
     }
 
+    [Theory]
+    [InlineData(true, false, 2)]
+    [InlineData(true, false, -2)]
+    [InlineData(false, false, 2)]
+    [InlineData(false, false, -2)]
+    [InlineData(true, true, 2)]
+    [InlineData(true, true, -2)]
+    [InlineData(false, true, 2)]
+    [InlineData(false, true, -2)]
+    public void InitialTabPreservesLeadingKerning(bool tagged, bool boundarySelector, double leading)
+    {
+        var original = RenderAfterInitialTab(tagged, boundarySelector, 0);
+        var selected = RenderAfterInitialTab(tagged, boundarySelector, leading);
+        selected.Should().BeApproximately(original + leading, .001);
+    }
+
+    static double RenderAfterInitialTab(bool tagged, bool boundarySelector, double leading)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var paragraph = document.AddSection().AddParagraph();
+        paragraph.AddTab();
+        paragraph.AddText(" ");
+        paragraph.AddText("Bravo").Tag = "Bravo";
+        var renderer = new PdfDocumentRenderer { Document = document };
+        if (tagged)
+            renderer.DocumentRenderer.LeadingKerningAfterBlankWithTextTag = (_, tag, _, _) => Equals(tag, "Bravo") ? leading : null;
+        else
+            renderer.DocumentRenderer.LeadingKerningAfterBlank = (_, word, _) => word == "Bravo" ? leading : null;
+        var calls = 0;
+        if (boundarySelector)
+            renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, _, _, _, _) => { calls++; return 99; };
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        calls.Should().Be(0, "an initial tab and ignored blank do not establish a text boundary");
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        while (reader.MoveAndGetNext(true, out var item))
+            if (item!.Text == "Bravo") return item.X;
+        throw new InvalidOperationException("The word after the initial tab must be drawn.");
+    }
+
     static Result Render(double? adjustment, string mode = "adjacent", bool wrap = false, double? leading = null,
         double layout = 1, ParagraphAlignment alignment = ParagraphAlignment.Left)
     {

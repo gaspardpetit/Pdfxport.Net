@@ -850,6 +850,7 @@ namespace MigraDoc.Rendering
         void RenderLine(LineInfo lineInfo)
         {
             _hasTextBoundaryPredecessor = false;
+            _textBoundaryPaintOffset = 0;
             _currentYPosition += lineInfo.GapBefore;
             _currentLineRect = lineInfo.FittingRect;
             var transitions = lineInfo.SegmentTransitions;
@@ -986,6 +987,7 @@ namespace MigraDoc.Rendering
                 {
                     var transition = transitions[segmentIndex];
                     _hasTextBoundaryPredecessor = false;
+                    _textBoundaryPaintOffset = 0;
                     _currentXPosition = transition.Rect.X;
                     _currentLineRect = transition.Rect;
                     segmentIndex++;
@@ -1615,7 +1617,14 @@ namespace MigraDoc.Rendering
         void RenderWord(string word)
         {
             var leading = GetLeadingKerningAfterBlank(word);
-            _currentXPosition += leading != 0 ? leading : GetRenderOnlyTextBoundaryKerning(word);
+            if (leading != 0)
+                _currentXPosition += leading;
+            else
+            {
+                var boundary = GetRenderOnlyTextBoundaryKerning(word);
+                _textBoundaryPaintOffset += boundary;
+                _currentXPosition += boundary;
+            }
             Font font = CurrentDomFont;
             XFont xFont = CurrentFont;
             if (font.Subscript || font.Superscript)
@@ -3043,11 +3052,11 @@ namespace MigraDoc.Rendering
 
         double GetLeadingKerningAfterBlank(string word)
         {
-            // Paint-only boundary shifts can move the pen before the line origin.
-            // Keep layout's coordinate check, but use rendering history while painting.
-            var atLineStart = _phase == Phase.Rendering
-                ? !_hasTextBoundaryPredecessor
-                : _currentXPosition <= StartXPosition + Tolerance;
+            // Preserve the existing eligibility for every advance, including tabs.
+            // Only remove the contribution of this selector's paint-only shifts.
+            var leadingPosition = _phase == Phase.Rendering
+                ? _currentXPosition - _textBoundaryPaintOffset : _currentXPosition;
+            var atLineStart = leadingPosition <= StartXPosition + Tolerance;
             if (word.Length == 0 || atLineStart ||
                 _currentLeaf?.GetPreviousLeaf() is not { } previous || !IsBlank(previous.Current))
                 return 0;
@@ -4279,6 +4288,8 @@ namespace MigraDoc.Rendering
         // Rendering history, unaffected by signed paint-only shifts of the pen.
         // Reset for each line and side-exclusion flow segment; ignored blanks do not set it.
         bool _hasTextBoundaryPredecessor;
+        // Accumulated boundary shifts, excluded from leading-kerning eligibility.
+        XUnitPt _textBoundaryPaintOffset;
 
         ParagraphIterator? _startLeaf;
         ParagraphIterator? _endLeaf;
