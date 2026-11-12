@@ -1623,18 +1623,46 @@ namespace MigraDoc.Rendering
                 if (kerning != 0)
                 {
                     var prefix = word[..^1];
-                    _gfx.DrawString(prefix, xFont, CurrentBrush, _currentXPosition, CurrentBaselinePosition);
-                    _gfx.DrawString(word[^1..], xFont, CurrentBrush,
-                        _currentXPosition + _gfx.MeasureString(prefix, xFont, StringFormat).Width + kerning,
-                        CurrentBaselinePosition);
+                    DrawScaledString(prefix, xFont, _currentXPosition);
+                    DrawScaledString(word[^1..], xFont,
+                        _currentXPosition + _gfx.MeasureString(prefix, xFont, StringFormat).Width *
+                            GetTextHorizontalScale() + kerning);
                 }
                 else
-                    _gfx.DrawString(word, xFont, CurrentBrush, _currentXPosition, CurrentBaselinePosition);
+                    DrawScaledString(word, xFont, _currentXPosition);
             }
             XUnitPt wordWidth = MeasureString(word);
             RenderUnderline(wordWidth, true);
             RealizeHyperlink(wordWidth);
             _currentXPosition += wordWidth;
+        }
+
+        double GetTextHorizontalScale()
+        {
+            var scale = _currentLeaf?.Current is Text text
+                ? _documentRenderer.TextHorizontalScale?.Invoke(text.Tag) : null;
+            return scale is > 0 and < 10 && IsFinite(scale.Value) ? scale.Value : 1;
+        }
+
+        void DrawScaledString(string text, XFont font, XUnitPt x)
+        {
+            var scale = GetTextHorizontalScale();
+            if (scale == 1)
+            {
+                _gfx.DrawString(text, font, CurrentBrush!, x, CurrentBaselinePosition);
+                return;
+            }
+            var state = _gfx.Save();
+            try
+            {
+                _gfx.TranslateTransform(x.Point, 0);
+                _gfx.ScaleTransform(scale, 1);
+                _gfx.DrawString(text, font, CurrentBrush!, 0, CurrentBaselinePosition);
+            }
+            finally
+            {
+                _gfx.Restore(state);
+            }
         }
 
         void StartHyperlink(XUnitPt left, XUnitPt top)
@@ -2845,7 +2873,7 @@ namespace MigraDoc.Rendering
         XUnitPt MeasureString(string word, bool includeTrailingAdvance = true)
         {
             var xFont = CurrentFont;
-            XUnitPt width = _gfx.MeasureString(word, xFont, StringFormat).Width;
+            XUnitPt width = _gfx.MeasureString(word, xFont, StringFormat).Width * GetTextHorizontalScale();
             var font = CurrentDomFont;
 
             if (font.Subscript || font.Superscript)
@@ -3318,7 +3346,7 @@ namespace MigraDoc.Rendering
             _savedWordWidth = 0;
             XUnitPt width;
             var currentFont = CurrentFont;
-            if (_lastFont == currentFont)
+            if (_lastFont == currentFont && _documentRenderer.TextHorizontalScale == null)
             {
                 width = _blankWidth;
             }

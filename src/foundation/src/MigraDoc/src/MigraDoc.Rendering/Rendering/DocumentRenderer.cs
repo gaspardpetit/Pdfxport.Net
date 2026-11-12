@@ -49,6 +49,17 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Func<object?, double?>? TextTrailingAdvance { get; set; }
 
+        /// <summary>
+        /// Selects a horizontal glyph scale for a text leaf by its tag, used during
+        /// fitting and painting. One preserves the natural width. Null, nonfinite
+        /// values and values outside the open interval (0, 10) use one.
+        /// Line height is unchanged. Point-valued kerning and outgoing advances are
+        /// applied after scaling and retain their point values. Must remain stable
+        /// during preparation and painting; prepare again after changing it.
+        /// </summary>
+        public Func<object?, double?>? TextHorizontalScale { get; set; }
+
+
 
         /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank, using
