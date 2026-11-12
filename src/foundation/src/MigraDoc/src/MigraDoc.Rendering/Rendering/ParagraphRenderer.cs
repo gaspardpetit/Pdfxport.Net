@@ -1032,6 +1032,9 @@ namespace MigraDoc.Rendering
 
                 _currentLeaf = _currentLeaf.GetNextLeaf();
             }
+            if (_documentRenderer.EmitJustifiedLineGeometry &&
+                _paragraph.Format.Alignment == ParagraphAlignment.Justify)
+                _gfx.WriteComment($"MD-JustifiedLine last={(_isLastLine && _renderInfo.FormatInfo.IsEnding ? 1 : 0)}");
             _currentYPosition += lineInfo.Vertical.Height;
             _isFirstLine = false;
         }
@@ -1597,6 +1600,10 @@ namespace MigraDoc.Rendering
                 RenderUnderline(wordDistance, false);
                 RealizeHyperlink(wordDistance);
                 _currentXPosition += wordDistance;
+                if (_documentRenderer.EmitJustifiedLineGeometry &&
+                    _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
+                    !(_isLastLine && _renderInfo.FormatInfo.IsEnding))
+                    _gfx.WriteComment("MD-JustifiedGap");
             }
             else
             {

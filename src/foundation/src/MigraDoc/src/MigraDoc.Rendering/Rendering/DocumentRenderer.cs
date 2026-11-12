@@ -71,6 +71,15 @@ namespace MigraDoc.Rendering
         public Func<object?, string, XFont, double[]?>? TextPairAdvances { get; set; }
 
         /// <summary>
+        /// Emits optional PDF comments identifying justified paragraph line ends
+        /// (MD-JustifiedLine last=0/1) and rendered interword gaps on nonfinal lines
+        /// (MD-JustifiedGap). last=1 marks only the final line of the complete paragraph,
+        /// including across page continuations. Contains no coordinates and changes
+        /// no drawing operations. Disabled by default; nonjustified paragraphs emit none.
+        /// </summary>
+        public bool EmitJustifiedLineGeometry { get; set; }
+
+        /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank only
         /// during formatting. Painted leading adjustment still uses the tagged or legacy
         /// selector. Can change wrapping and alignment through the fitted line width.
