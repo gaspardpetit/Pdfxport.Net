@@ -1655,7 +1655,10 @@ namespace MigraDoc.Rendering
         {
             var selected = _currentLeaf?.Current is Text text
                 ? _documentRenderer.TextPaintHorizontalScale?.Invoke(text.Tag, CurrentFont) : null;
-            return selected is > 0 and < 10 && IsFinite(selected.Value) ? selected.Value : layoutScale;
+            // Preview and printing graphics do not have a PDF page. Retain their
+            // existing layout-scale drawing path instead of invoking the PDF-only helper.
+            return _gfx.PdfPage is not null && selected is > 0 and < 10 && IsFinite(selected.Value)
+                ? selected.Value : layoutScale;
         }
 
         void DrawScaledString(string text, XFont font, XUnitPt x, double scale)

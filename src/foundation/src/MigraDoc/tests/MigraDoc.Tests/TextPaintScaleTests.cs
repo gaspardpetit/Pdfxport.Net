@@ -120,6 +120,52 @@ public class TextPaintScaleTests : IDisposable
         selected.FollowingX.Should().BeApproximately(Render(null, word: "fi", remove: true).FollowingX, .001);
     }
 
+    [Theory]
+    [InlineData("fi", false)]
+    [InlineData("fi", true)]
+    public void TrailingKerningOffsetsSingleResolvedGlyph(string word, bool? substitution)
+    {
+        var original = Render(.5, word: word, substitution: substitution);
+        var adjusted = Render(.5, word: word, substitution: substitution, kerning: 2);
+        adjusted.Matrices.Should().HaveCount(1);
+        adjusted.Matrices[0].X.Should().BeApproximately(original.Matrices[0].X + 2, .001);
+        adjusted.FollowingX.Should().BeApproximately(original.FollowingX + 2, .001);
+    }
+
+    [Theory]
+    [InlineData("Q")]
+    [InlineData("fi")]
+    public void PdfDrawingApiOffsetsFinalGlyphIncludingCollapsedRuns(string word)
+    {
+        using var pdf = new PdfSharp.Pdf.PdfDocument();
+        pdf.RenderEvents.PrepareTextEvent += (_, args) => args.Text = args.Text.Replace("fi", "W");
+        var page = pdf.AddPage();
+        using (var gfx = XGraphics.FromPdfPage(page))
+            gfx.DrawStringWithPaintScale(word, new XFont("Arial", 12), XBrushes.Black,
+                20, 40, 1, .5, trailingKerning: 2);
+        var content = PdfFileHelper.GetPageContentStream(pdf, 0);
+        var match = Regex.Match(content, @"(?m)^\.5 0 0 1 ([\d.]+) 0 cm");
+        match.Success.Should().BeTrue();
+        double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture).Should().BeApproximately(22, .001);
+    }
+
+    [Fact]
+    public void NonPdfPageRenderingFallsBackToLayoutScale()
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.AddSection().AddParagraph("Preview and printing remain available.");
+        var renderer = new DocumentRenderer(document);
+        renderer.TextHorizontalScale = _ => 1;
+        var selections = 0;
+        renderer.TextPaintHorizontalScale = (_, _) => { selections++; return .5; };
+        renderer.PrepareDocument();
+        using var gfx = XGraphics.CreateMeasureContext(new XSize(600, 800), XGraphicsUnit.Point, XPageDirection.Downwards);
+        Action render = () => renderer.RenderPage(gfx, 1);
+        render.Should().NotThrow();
+        selections.Should().BeGreaterThan(0);
+    }
+
     static Result Render(double? paint, double layout = 1, double? overrun = null,
         bool suffix = true, double? trailing = null, double? kerning = null, string word = "Bravo", bool? substitution = null, bool remove = false)
     {

@@ -551,7 +551,7 @@ namespace PdfSharp.Drawing.Pdf
                 for (int index = 0; index < codePointsWithGlyphIndices.Length; index++)
                 {
                     var glyph = codePointsWithGlyphIndices[index];
-                    if (index > 0 && index == codePointsWithGlyphIndices.Length - 1)
+                    if (index == codePointsWithGlyphIndices.Length - 1)
                         x += trailingKerning;
                     var state = Gfx.Save();
                     try
