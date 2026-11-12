@@ -602,10 +602,13 @@ namespace MigraDoc.Rendering
                         i++;
                     }
 
+                    var pairAdvances = GetTextPairAdvances(word, CurrentFont);
                     if (decimalPosIndex >= 0)
                         word = word[..decimalPosIndex];
 
                     XUnitPt wordLength = MeasureString(word, includeTrailingAdvance: false);
+                    if (decimalPosIndex >= 0 && pairAdvances != null)
+                        wordLength += pairAdvances.Take(decimalPosIndex).Sum();
                     notFitting = _currentXPosition + wordLength >= _formattingArea.X + _formattingArea.Width + Tolerance;
                     if (!notFitting)
                         return _formattingArea.X + tabStopPosition - wordLength;
@@ -1673,25 +1676,19 @@ namespace MigraDoc.Rendering
                 glyphs.Add((word.Substring(index, length), index + length - 1));
                 index += length;
             }
-            var advances = new double[glyphs.Count - 1];
-            for (var index = 0; index < advances.Length; index++)
-                advances[index] = _gfx.MeasureString(glyphs[index].Text, font, StringFormat).Width * layoutScale +
-                    adjustments[glyphs[index].End] + (index == advances.Length - 1 ? trailingKerning : 0);
             if (_gfx.PdfPage != null)
             {
-                var state = _gfx.Save();
-                try
-                {
-                    _gfx.TranslateTransform(CurrentPaintXPosition.Point, 0);
-                    _gfx.ScaleTransform(paintScale, 1);
-                    _gfx.DrawStringWithGlyphAdvances(word, font, CurrentBrush!, 0, CurrentBaselinePosition.Point,
-                        advances.Select(value => value / paintScale).ToArray());
-                }
-                finally { _gfx.Restore(state); }
+                _gfx.DrawStringWithPairAdjustments(word, font, CurrentBrush!,
+                    CurrentPaintXPosition.Point, CurrentBaselinePosition.Point, layoutScale, paintScale,
+                    glyphs.Take(glyphs.Count - 1).Select(glyph => adjustments[glyph.End]).ToArray(), trailingKerning);
             }
             else
             {
                 // Preview/printing graphics do not support positioned PDF glyphs.
+                var advances = new double[glyphs.Count - 1];
+                for (var index = 0; index < advances.Length; index++)
+                    advances[index] = _gfx.MeasureString(glyphs[index].Text, font, StringFormat).Width * layoutScale +
+                        adjustments[glyphs[index].End] + (index == advances.Length - 1 ? trailingKerning : 0);
                 var x = CurrentPaintXPosition;
                 for (var index = 0; index < glyphs.Count; index++)
                 {

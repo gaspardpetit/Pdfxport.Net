@@ -3512,6 +3512,52 @@ namespace PdfSharp.Drawing
         }
 
         /// <summary>
+        /// Draws PDF text with point adjustments added to the natural advances of
+        /// the resolved whole run. Supply one adjustment per Unicode scalar boundary.
+        /// Text events must preserve the scalar/glyph count. Layout and ink scales
+        /// are independent; adjustments and trailing kerning are not scaled.
+        /// Requires a PDF renderer. Both scales must be finite and in (0, 10).
+        /// </summary>
+        public void DrawStringWithPairAdjustments(string text, XFont font, XBrush brush,
+            double x, double y, double layoutScale, double paintScale,
+            IReadOnlyList<double> adjustments, double trailingKerning = 0)
+        {
+            if (text is null) throw new ArgumentNullException(nameof(text));
+            if (font is null) throw new ArgumentNullException(nameof(font));
+            if (brush is null) throw new ArgumentNullException(nameof(brush));
+            if (adjustments is null) throw new ArgumentNullException(nameof(adjustments));
+            if (!(layoutScale > 0 && layoutScale < 10)) throw new ArgumentOutOfRangeException(nameof(layoutScale));
+            if (!(paintScale > 0 && paintScale < 10)) throw new ArgumentOutOfRangeException(nameof(paintScale));
+            if (double.IsNaN(trailingKerning) || double.IsInfinity(trailingKerning))
+                throw new ArgumentOutOfRangeException(nameof(trailingKerning));
+            int count = 0;
+            for (int index = 0; index < text.Length; index++, count++)
+            {
+                if (char.IsHighSurrogate(text[index]))
+                {
+                    if (++index >= text.Length || !char.IsLowSurrogate(text[index]))
+                        throw new ArgumentException("Text must contain valid UTF-16.", nameof(text));
+                }
+                else if (char.IsLowSurrogate(text[index]))
+                    throw new ArgumentException("Text must contain valid UTF-16.", nameof(text));
+            }
+            if (adjustments.Count != Math.Max(0, count - 1))
+                throw new ArgumentException("Expected one adjustment between Unicode scalars.", nameof(adjustments));
+            var copy = new double[adjustments.Count];
+            for (int index = 0; index < copy.Length; index++)
+            {
+                if (double.IsNaN(adjustments[index]) || double.IsInfinity(adjustments[index]))
+                    throw new ArgumentOutOfRangeException(nameof(adjustments));
+                copy[index] = adjustments[index];
+            }
+            if (_renderer is not PdfSharp.Drawing.Pdf.XGraphicsPdfRenderer renderer)
+                throw new InvalidOperationException("Pair-adjusted drawing requires a PDF renderer.");
+            if (text.Length == 0) return;
+            renderer.DrawStringWithPairAdjustments(text, font, brush, new XRect(x, y, 0, 0),
+                layoutScale, paintScale, copy, trailingKerning);
+        }
+
+        /// <summary>
         /// Draws PDF text at a baseline origin using explicit distances between successive glyph origins.
         /// Advances are in drawing units, before the graphics transform, and may be zero or negative.
         /// Supply one fewer advance than Unicode scalar values; the final glyph retains its natural width.

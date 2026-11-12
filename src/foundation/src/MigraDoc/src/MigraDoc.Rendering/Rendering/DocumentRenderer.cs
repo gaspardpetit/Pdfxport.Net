@@ -64,9 +64,9 @@ namespace MigraDoc.Rendering
         /// are absolute points, independent of horizontal ink/layout scales and script
         /// size; they affect fitting, alignment and painting. They do not add an outgoing
         /// advance after the final glyph. Return stable values during preparation/painting.
-        /// PDF rendering uses explicit glyph placement: text events must retain one glyph
-        /// per Unicode scalar and color glyph layers are unsupported, as with
-        /// XGraphics.DrawStringWithGlyphAdvances. This does not perform text shaping.
+        /// PDF rendering resolves the whole run before computing natural advances;
+        /// text events must retain one glyph per original Unicode scalar.
+        /// This does not perform text shaping.
         /// </summary>
         public Func<object?, string, XFont, double[]?>? TextPairAdvances { get; set; }
 

@@ -144,6 +144,74 @@ public class TextPairAdvanceTests : IDisposable
         selected.Text[3].X.Should().BeApproximately(original.Text[3].X + .998, .003);
     }
 
+    [Theory]
+    [InlineData(false, 1, 1)]
+    [InlineData(false, .5, 2)]
+    [InlineData(false, 2, .5)]
+    [InlineData(true, 1, 1)]
+    [InlineData(true, .5, 2)]
+    [InlineData(true, 2, .5)]
+    public void SubstitutionsUseResolvedNaturalAdvances(bool renderEvent, double layout, double paint)
+    {
+        var values = new[] { 1.0, 2 };
+        var expected = Render(values, word: "WWW", layout: layout, paint: paint);
+        var actual = Render(values, layout: layout, paint: paint, configure: renderer =>
+        {
+            if (!renderEvent)
+                renderer.PdfDocument.RenderEvents.PrepareTextEvent += (_, args) =>
+                {
+                    if (args.Text == "ABC") args.Text = "WWW";
+                };
+            else
+                renderer.PdfDocument.RenderEvents.RenderTextEvent += (_, args) =>
+                {
+                    if (args.CodePointGlyphIndexPairs.Select(pair => pair.CodePoint).SequenceEqual(new[] { 65, 66, 67 }))
+                    {
+                        for (var index = 0; index < 3; index++) args.CodePointGlyphIndexPairs[index].CodePoint = 87;
+                        args.ReevaluateGlyphIndices = true;
+                    }
+                };
+        });
+        actual.Text.Should().HaveCount(expected.Text.Count);
+        for (var index = 0; index < expected.Text.Count; index++)
+            actual.Text[index].X.Should().BeApproximately(expected.Text[index].X, .003);
+    }
+
+    [Theory]
+    [InlineData(1, -2)]
+    [InlineData(1, 2)]
+    [InlineData(.5, -2)]
+    [InlineData(.5, 2)]
+    [InlineData(2, -2)]
+    [InlineData(2, 2)]
+    public void DecimalTabIncludesAdvancesUpToSeparator(double layout, double adjustment)
+    {
+        var document = new Document();
+        document.Culture = CultureInfo.GetCultureInfo("en-US");
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.LeftMargin = section.PageSetup.RightMargin = Unit.FromPoint(20);
+        section.PageSetup.PageWidth = Unit.FromPoint(500);
+        var paragraph = section.AddParagraph();
+        paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(100), TabAlignment.Decimal);
+        paragraph.AddTab();
+        paragraph.AddText("12.34").Tag = "number";
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.TextPairAdvances = (_, text, _) =>
+        {
+            text.Should().Be("12.34");
+            return new[] { adjustment, adjustment / 2, 3.0, 4.0 };
+        };
+        renderer.DocumentRenderer.TextHorizontalScale = _ => layout;
+        renderer.DocumentRenderer.TextPaintHorizontalScale = (_, _) => 1.5;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var origins = ReadOrigins(pdf);
+        origins.Should().HaveCount(5);
+        origins[2].X.Should().BeApproximately(120, .003);
+    }
+
     static bool Wrap(double? adjustment, double overrun)
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);

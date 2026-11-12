@@ -484,10 +484,17 @@ namespace PdfSharp.Drawing.Pdf
             => DrawStringCore(s, font, brush, rect, XStringFormats.Default, null,
                 layoutScale: layoutScale, paintScale: paintScale, trailingKerning: trailingKerning, paintGlyphs: true);
 
+        public void DrawStringWithPairAdjustments(string s, XFont font, XBrush brush,
+            XRect rect, double layoutScale, double paintScale, IReadOnlyList<double> adjustments, double trailingKerning)
+            => DrawStringCore(s, font, brush, rect, XStringFormats.Default, null,
+                layoutScale: layoutScale, paintScale: paintScale, trailingKerning: trailingKerning,
+                paintGlyphs: true, pairAdjustments: adjustments);
+
         void DrawStringCore(string s, XFont font, XBrush brush, XRect rect,
             XStringFormat format, IReadOnlyList<double>? advances,
             CodePointGlyphIndexPair[]? preparedGlyphs = null,
-            double layoutScale = 1, double paintScale = 1, double trailingKerning = 0, bool paintGlyphs = false)
+            double layoutScale = 1, double paintScale = 1, double trailingKerning = 0, bool paintGlyphs = false,
+            IReadOnlyList<double>? pairAdjustments = null)
         {
             // #PDF-UA
             if (Owner.UAManager != null)
@@ -546,6 +553,8 @@ namespace PdfSharp.Drawing.Pdf
 
             if (paintGlyphs)
             {
+                if (pairAdjustments != null && codePointsWithGlyphIndices.Length != pairAdjustments.Count + 1)
+                    throw new NotSupportedException("Pair-adjusted drawing requires one glyph per original Unicode scalar after text events.");
                 // Resolve the complete run once before positioning its final glyphs.
                 // Re-enter with prepared glyphs so substitutions are never applied twice.
                 for (int index = 0; index < codePointsWithGlyphIndices.Length; index++)
@@ -562,6 +571,8 @@ namespace PdfSharp.Drawing.Pdf
                     }
                     finally { Gfx.Restore(state); }
                     x += FontHelper.MeasureString([glyph], font).Width * layoutScale;
+                    if (pairAdjustments != null && index < pairAdjustments.Count)
+                        x += pairAdjustments[index];
                 }
                 return;
             }
