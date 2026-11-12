@@ -599,7 +599,7 @@ namespace MigraDoc.Rendering
                     if (decimalPosIndex >= 0)
                         word = word[..decimalPosIndex];
 
-                    XUnitPt wordLength = MeasureString(word);
+                    XUnitPt wordLength = MeasureString(word, includeTrailingAdvance: false);
                     notFitting = _currentXPosition + wordLength >= _formattingArea.X + _formattingArea.Width + Tolerance;
                     if (!notFitting)
                         return _formattingArea.X + tabStopPosition - wordLength;
@@ -1076,7 +1076,7 @@ namespace MigraDoc.Rendering
                         var font = CurrentFont;
                         var limit = nonterminalLimit(_paragraph, nonterminalText, font);
                         var markWidth = limit is >= 0 && IsFinite(limit.Value)
-                            ? MeasureString(nonterminalText[^1..]) : 0;
+                            ? MeasureString(nonterminalText[^1..], includeTrailingAdvance: false) : 0;
                         _currentLeaf = savedLeaf;
                         if (limit is >= 0 && IsFinite(limit.Value))
                         {
@@ -1105,7 +1105,7 @@ namespace MigraDoc.Rendering
                     var nearEdgeThreshold = _documentRenderer.HangingTerminalLineNearEdgeThreshold?.Invoke(
                         _paragraph, endText, font);
                     var markWidth = threshold is >= 0 && IsFinite(threshold.Value)
-                        ? MeasureString(endText[^1..]) : 0;
+                        ? MeasureString(endText[^1..], includeTrailingAdvance: false) : 0;
                     var renderedAdjustment = threshold is >= 0 && IsFinite(threshold.Value)
                         ? GetRenderOnlyTrailingGlyphKerning(endText, font) : 0;
                     var fitAdjustment = threshold is >= 0 && IsFinite(threshold.Value)
@@ -1462,7 +1462,7 @@ namespace MigraDoc.Rendering
                 default:
                     return;
             }
-            XUnitPt leaderWidth = MeasureString(leaderString);
+            XUnitPt leaderWidth = MeasureString(leaderString, includeTrailingAdvance: false);
             XUnitPt xPosition = _currentXPosition;
             string drawString = "";
 
@@ -2604,7 +2604,7 @@ namespace MigraDoc.Rendering
             var first = original;
             var wordWidth = fragmentWidth;
             var following = original?.GetNextLeaf();
-            var spaceWidth = MeasureString(" ");
+            var spaceWidth = MeasureString(" ", includeTrailingAdvance: false);
             try
             {
                 // Use the same boundaries as the joined-word admission guard.
@@ -2620,7 +2620,7 @@ namespace MigraDoc.Rendering
                         following = leaf.GetNextLeaf();
                         if (following == null || !Joins(following, leaf))
                         {
-                            spaceWidth = MeasureString(" ");
+                            spaceWidth = MeasureString(" ", includeTrailingAdvance: false);
                             break;
                         }
                         leaf = following;
@@ -2790,7 +2790,7 @@ namespace MigraDoc.Rendering
             }
         }
 
-        XUnitPt MeasureString(string word)
+        XUnitPt MeasureString(string word, bool includeTrailingAdvance = true)
         {
             var xFont = CurrentFont;
             XUnitPt width = _gfx.MeasureString(word, xFont, StringFormat).Width;
@@ -2803,7 +2803,9 @@ namespace MigraDoc.Rendering
             if (_phase == Phase.Rendering)
                 width += GetRenderOnlyTrailingGlyphKerning(word, xFont);
 
-            width += Math.Max(GetTextTrailingAdvance(), -width.Point);
+            // Prefix and synthetic measurements do not own a leaf's outgoing advance.
+            if (includeTrailingAdvance && _currentLeaf?.Current is Text text && text.Content == word)
+                width = AddTextTrailingAdvance(width);
 
             if (_phase == Phase.Formatting)
             {
@@ -2815,6 +2817,9 @@ namespace MigraDoc.Rendering
 
             return width;
         }
+
+        XUnitPt AddTextTrailingAdvance(XUnitPt width)
+            => width + Math.Max(GetTextTrailingAdvance(), -width.Point);
 
         double GetTextTrailingAdvance()
         {
@@ -3186,9 +3191,12 @@ namespace MigraDoc.Rendering
             }
             else
             {
-                _blankWidth = width = MeasureString(" ");
+                _blankWidth = width = MeasureString(" ", includeTrailingAdvance: false);
                 _lastFont = currentFont;
             }
+
+            // Cache only the width without the current leaf's tag-dependent advance.
+            width = AddTextTrailingAdvance(width);
 
             if (_currentXPosition + width > fittingRect.X + fittingRect.Width - RightIndent + Tolerance)
             {

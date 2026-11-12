@@ -104,6 +104,116 @@ public class TextTrailingAdvanceTests : IDisposable
         Render(2, ending: "image").NextX.Should().BeApproximately(original.NextX + 2, .001);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void SameFontBlanksUseTheirOwnAdvanceForAlignment(int selectedBlank)
+    {
+        var original = RenderBlanks(null, selectedBlank);
+        var selected = RenderBlanks(2, selectedBlank);
+        selected.FirstX.Should().BeApproximately(original.FirstX - 2, .001);
+        selected.NextX.Should().BeApproximately(original.NextX, .001);
+    }
+
+    [Theory]
+    [InlineData(0, 3, true)]
+    [InlineData(1, 1, false)]
+    public void SameFontBlanksUseTheirOwnAdvanceForWrapping(int selectedBlank, double spare, bool fits)
+    {
+        var selected = RenderBlanks(2, selectedBlank, spare);
+        (Math.Abs(selected.FirstY - selected.NextY) < .001).Should().Be(fits);
+    }
+
+    [Theory]
+    [InlineData("12.34")]
+    [InlineData("1234")]
+    public void DecimalTabDoesNotIncludeOutgoingAdvanceInAnchor(string number)
+    {
+        RenderDecimalTab(2, number).Should().BeApproximately(RenderDecimalTab(null, number), .001);
+    }
+
+    [Fact]
+    public void TaggedMultiwordTextDoesNotLeakAdvanceIntoFollowingBlanks()
+    {
+        Result RenderMultiword(double? advance)
+        {
+            var document = NewDocument(out var section);
+            var paragraph = section.AddParagraph();
+            paragraph.Format.Alignment = ParagraphAlignment.Right;
+            var tag = new object();
+            paragraph.Elements.Add(new Text("Alpha Bravo") { Tag = tag });
+            paragraph.AddText(" Charlie Delta");
+            return Read(document, tag, advance, "Alpha", "Delta");
+        }
+        var original = RenderMultiword(null);
+        var selected = RenderMultiword(2);
+        // Flattening assigns the same tag to Alpha, the blank, and Bravo.
+        selected.FirstX.Should().BeApproximately(original.FirstX - 6, .001);
+        selected.NextX.Should().BeApproximately(original.NextX, .001);
+    }
+
+    static double RenderDecimalTab(double? advance, string number)
+    {
+        var document = NewDocument(out var section);
+        document.Culture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+        var paragraph = section.AddParagraph();
+        paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(100), TabAlignment.Decimal);
+        paragraph.AddTab();
+        var tag = new object();
+        paragraph.Elements.Add(new Text(number) { Tag = tag });
+        var result = Read(document, tag, advance, number);
+        using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+        var prefix = number.Split('.')[0];
+        var decimalX = result.FirstX + gfx.MeasureString(prefix, new XFont("Arial", 12)).Width;
+        decimalX.Should().BeApproximately(120, .001);
+        return result.FirstX;
+    }
+
+    static Result RenderBlanks(double? advance, int selectedBlank, double? spare = null)
+    {
+        var document = NewDocument(out var section);
+        if (spare != null)
+        {
+            using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+            section.PageSetup.PageWidth = Unit.FromPoint(40 + gfx.MeasureString("Alpha Bravo Charlie", new XFont("Arial", 12)).Width + spare.Value);
+        }
+        var paragraph = section.AddParagraph();
+        paragraph.Format.Alignment = spare == null ? ParagraphAlignment.Right : ParagraphAlignment.Left;
+        var tag = new object();
+        paragraph.AddText("Alpha");
+        paragraph.Elements.Add(new Text(" ") { Tag = selectedBlank == 0 ? tag : null });
+        paragraph.AddText("Bravo");
+        paragraph.Elements.Add(new Text(" ") { Tag = selectedBlank == 1 ? tag : null });
+        paragraph.AddText("Charlie");
+        return Read(document, tag, advance, "Alpha", "Charlie");
+    }
+
+    static Document NewDocument(out Section section)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        section = document.AddSection();
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        section.PageSetup.RightMargin = Unit.FromPoint(20);
+        return document;
+    }
+
+    static Result Read(Document document, object tag, double? advance, string firstText, string? nextText = null)
+    {
+        var renderer = new PdfDocumentRenderer { Document = document };
+        if (advance != null)
+            renderer.DocumentRenderer.TextTrailingAdvance = actual => ReferenceEquals(actual, tag) ? advance : null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        var positions = new List<(string Text, double X, double Y)>();
+        while (reader.MoveAndGetNext(true, out var item)) positions.Add((item!.Text, item.X, item.Y));
+        var first = positions.First(item => item.Text == firstText);
+        var next = positions.FirstOrDefault(item => item.Text == nextText);
+        return new Result(first.X, first.Y, next.X, next.Y, PdfFileHelper.GetPageContentStream(pdf, 0));
+    }
+
     static double SpaceWidth()
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
