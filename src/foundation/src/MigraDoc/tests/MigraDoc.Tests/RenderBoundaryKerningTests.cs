@@ -306,6 +306,49 @@ public class RenderBoundaryKerningTests : IDisposable
         return positions.Where(item => Math.Abs(item.Y - secondLine) < .001).ToList();
     }
 
+    [Theory]
+    [InlineData(12)]
+    [InlineData(-12)]
+    public void BoundaryShiftDoesNotChangePostTabJustification(double shift)
+    {
+        var original = RenderTabInteraction(0, ParagraphAlignment.Justify, TabAlignment.Left);
+        var selected = RenderTabInteraction(shift, ParagraphAlignment.Justify, TabAlignment.Left);
+        foreach (var word in new[] { "B", "C", "D" })
+            selected.First(item => item.Text == word).X.Should().BeApproximately(
+                original.First(item => item.Text == word).X + shift, .001, word);
+        selected.First(item => item.Text == "tail").X.Should().BeApproximately(
+            original.First(item => item.Text == "tail").X, .001);
+    }
+
+    static List<(string Text, double X, double Y)> RenderTabInteraction(double shift,
+        ParagraphAlignment alignment, TabAlignment tabAlignment)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.PageWidth = Unit.FromPoint(500);
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        section.PageSetup.RightMargin = Unit.FromPoint(20);
+        var paragraph = section.AddParagraph();
+        paragraph.Format.Alignment = alignment;
+        paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(100), tabAlignment);
+        paragraph.AddText("A");
+        paragraph.AddText("B").Tag = "B";
+        paragraph.AddTab();
+        paragraph.AddText("C D");
+        paragraph.AddLineBreak();
+        paragraph.AddText("tail");
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) => Equals(tag, "B") ? shift : null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        var positions = new List<(string Text, double X, double Y)>();
+        while (reader.MoveAndGetNext(true, out var item)) positions.Add((item!.Text, item.X, item.Y));
+        return positions;
+    }
+
     static Result Render(double? adjustment, string mode = "adjacent", bool wrap = false, double? leading = null,
         double layout = 1, ParagraphAlignment alignment = ParagraphAlignment.Left)
     {
