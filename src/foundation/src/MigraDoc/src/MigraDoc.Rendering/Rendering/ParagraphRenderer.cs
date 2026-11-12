@@ -161,6 +161,10 @@ namespace MigraDoc.Rendering
                 _collapsedSpacesOnLine = lineInfo.CollapsedSpaces ?? [];
 
                 _lastTabPosition = 0;
+                // Field remeasurement formats in the rendering phase. Clear the
+                // previous line's paint state before it can affect measured geometry.
+                _hasTextBoundaryPredecessor = false;
+                _textBoundaryPaintOffset = 0;
                 if (lineInfo.ReMeasureLine)
                     ReMeasureLine(ref lineInfo);
 
@@ -984,6 +988,8 @@ namespace MigraDoc.Rendering
                     transitions[segmentIndex].StartIter?.Current == _currentLeaf.Current)
                 {
                     var transition = transitions[segmentIndex];
+                    _hasTextBoundaryPredecessor = false;
+                    _textBoundaryPaintOffset = 0;
                     _currentXPosition = transition.Rect.X;
                     _currentLineRect = transition.Rect;
                     segmentIndex++;
@@ -1303,13 +1309,13 @@ namespace MigraDoc.Rendering
                 !double.IsNaN(offset) && !double.IsInfinity(offset))
                 top += offset;
             top += contentArea.Height - layoutHeight;
-            RenderByInfos(_currentXPosition + effect.Left, top, [renderInfo]);
+            RenderByInfos(CurrentPaintXPosition + effect.Left, top, [renderInfo]);
             if (_documentRenderer.InlineImageOverlay is { } overlay)
             {
                 var state = _gfx.Save();
                 try
                 {
-                    overlay(image, _gfx, (_currentXPosition + effect.Left).Point, top.Point,
+                    overlay(image, _gfx, (CurrentPaintXPosition + effect.Left).Point, top.Point,
                         contentArea.Width.Point, contentArea.Height.Point);
                 }
                 finally
@@ -1385,7 +1391,7 @@ namespace MigraDoc.Rendering
         XPoint GetDestinationPosition()
         {
             //var margin = XUnitPt.FromCentimeter(0.5);
-            var x = _currentXPosition > _margin ? _currentXPosition - _margin : 0;
+            var x = CurrentPaintXPosition > _margin ? CurrentPaintXPosition - _margin : 0;
             var y = _currentYPosition > _margin ? _currentYPosition - _margin : 0;
             var destinationPosition = new XPoint(x, y);
 
@@ -1433,6 +1439,7 @@ namespace MigraDoc.Rendering
                 return;
             }
             XUnitPt width = GetSpaceWidth(character);
+            _hasTextBoundaryPredecessor |= width > 0;
             RenderUnderline(width, false);
             RealizeHyperlink(width);
             _currentXPosition += width;
@@ -1523,12 +1530,12 @@ namespace MigraDoc.Rendering
                 if (CurrentBrush != null)
                     for (var index = 0; index < count; index++)
                         _gfx.DrawString(leaderString, xFont, CurrentBrush,
-                            first + index * pitch, CurrentBaselinePosition);
+                            first + index * pitch + _textBoundaryPaintOffset, CurrentBaselinePosition);
                 return;
             }
 
             if (CurrentBrush != null)
-                _gfx.DrawString(drawString, xFont, CurrentBrush, _currentXPosition, CurrentBaselinePosition);
+                _gfx.DrawString(drawString, xFont, CurrentBrush, CurrentPaintXPosition, CurrentBaselinePosition);
         }
 
         TabOffset NextTabOffset()
@@ -1583,6 +1590,7 @@ namespace MigraDoc.Rendering
             if (!IgnoreBlank())
             {
                 XUnitPt wordDistance = CurrentWordDistance;
+                _hasTextBoundaryPredecessor |= wordDistance > 0;
                 RenderUnderline(wordDistance, false);
                 RealizeHyperlink(wordDistance);
                 _currentXPosition += wordDistance;
@@ -1610,7 +1618,14 @@ namespace MigraDoc.Rendering
 
         void RenderWord(string word)
         {
-            _currentXPosition += GetLeadingKerningAfterBlank(word);
+            var leading = GetLeadingKerningAfterBlank(word);
+            if (leading != 0)
+                _currentXPosition += leading;
+            else
+            {
+                var boundary = GetRenderOnlyTextBoundaryKerning(word);
+                _textBoundaryPaintOffset += boundary;
+            }
             Font font = CurrentDomFont;
             XFont xFont = CurrentFont;
             if (font.Subscript || font.Superscript)
@@ -1625,23 +1640,24 @@ namespace MigraDoc.Rendering
                 if (paintScale != layoutScale)
                 {
                     _gfx.DrawStringWithPaintScale(word, xFont, CurrentBrush,
-                        _currentXPosition, CurrentBaselinePosition, layoutScale, paintScale, kerning);
+                        CurrentPaintXPosition, CurrentBaselinePosition, layoutScale, paintScale, kerning);
                 }
                 else if (kerning != 0)
                 {
                     var prefix = word[..^1];
-                    DrawScaledString(prefix, xFont, _currentXPosition, paintScale);
+                    DrawScaledString(prefix, xFont, CurrentPaintXPosition, paintScale);
                     DrawScaledString(word[^1..], xFont,
-                        _currentXPosition + _gfx.MeasureString(prefix, xFont, StringFormat).Width *
+                        CurrentPaintXPosition + _gfx.MeasureString(prefix, xFont, StringFormat).Width *
                             layoutScale + kerning, paintScale);
                 }
                 else
-                    DrawScaledString(word, xFont, _currentXPosition, paintScale);
+                    DrawScaledString(word, xFont, CurrentPaintXPosition, paintScale);
             }
             XUnitPt wordWidth = MeasureString(word);
             RenderUnderline(wordWidth, true);
             RealizeHyperlink(wordWidth);
             _currentXPosition += wordWidth;
+            _hasTextBoundaryPredecessor |= word.Length > 0;
         }
 
         double GetTextHorizontalScale()
@@ -1686,9 +1702,8 @@ namespace MigraDoc.Rendering
             _hyperlinkRect = new XRect(left, top, 0, 0);
         }
 
-        void EndHyperlink(Hyperlink hyperlink, XUnitPt right, XUnitPt bottom)
+        void EndHyperlink(Hyperlink hyperlink, XUnitPt bottom)
         {
-            _hyperlinkRect.Width = right - _hyperlinkRect.X;
             _hyperlinkRect.Height = bottom - _hyperlinkRect.Y;
             var page = _gfx.PdfPage;
             if (page != null)
@@ -1748,7 +1763,7 @@ namespace MigraDoc.Rendering
         void RealizeHyperlink(XUnitPt width)
         {
             XUnitPt top = _currentYPosition;
-            XUnitPt left = _currentXPosition;
+            XUnitPt left = CurrentPaintXPosition;
             XUnitPt bottom = top + _currentVerticalInfo.Height;
             XUnitPt right = left + width;
             var hyperlink = GetHyperlink();
@@ -1758,12 +1773,23 @@ namespace MigraDoc.Rendering
             if (hyperlinkChanged)
             {
                 if (_currentHyperlink != null)
-                    EndHyperlink(_currentHyperlink, left, bottom);
+                    EndHyperlink(_currentHyperlink, bottom);
 
                 if (hyperlink != null)
                     StartHyperlink(left, top);
 
                 _currentHyperlink = hyperlink;
+            }
+
+            if (_currentHyperlink != null)
+            {
+                // Accumulate only this hyperlink's painted spans. The next leaf's
+                // offset must not resize this link, and signed shifts within the
+                // link may place a later span before its original start.
+                var spanLeft = Math.Min(_hyperlinkRect.X, left.Point);
+                var spanRight = Math.Max(_hyperlinkRect.Right, right.Point);
+                _hyperlinkRect.X = spanLeft;
+                _hyperlinkRect.Width = spanRight - spanLeft;
             }
 
             if (_currentLeaf is null || _endLeaf is null)
@@ -1772,7 +1798,7 @@ namespace MigraDoc.Rendering
             if (_currentLeaf.Current == _endLeaf.Current)
             {
                 if (_currentHyperlink != null)
-                    EndHyperlink(_currentHyperlink, right, bottom);
+                    EndHyperlink(_currentHyperlink, bottom);
 
                 _currentHyperlink = null;
             }
@@ -3051,6 +3077,43 @@ namespace MigraDoc.Rendering
             return adjustment is double value && IsFinite(value) ? value : 0;
         }
 
+        double GetRenderOnlyTextBoundaryKerning(string word)
+        {
+            if (_phase != Phase.Rendering || word.Length == 0 ||
+                !_hasTextBoundaryPredecessor ||
+                _documentRenderer.RenderOnlyTextBoundaryKerning is not { } callback ||
+                _currentLeaf?.GetPreviousLeaf() is not { } previous ||
+                _currentLeaf.Current is not Text { Tag: { } tag })
+                return 0;
+            var prior = previous.Current;
+            var priorChar = prior switch
+            {
+                Text { Content: { Length: > 0 } text } => text[^1],
+                Character { SymbolName: SymbolName.Blank, Count: > 0 } => ' ',
+                _ => '\0',
+            };
+            if (priorChar == '\0' || char.IsSurrogate(priorChar) || char.IsSurrogate(word[0]))
+                return 0;
+            var font = CurrentFont;
+            var domFont = CurrentDomFont;
+            var saved = _currentLeaf;
+            XFont priorFont;
+            Font priorDomFont;
+            try
+            {
+                _currentLeaf = previous;
+                priorFont = CurrentFont;
+                priorDomFont = CurrentDomFont;
+            }
+            finally { _currentLeaf = saved; }
+            if (priorFont.FontFamily.Name != font.FontFamily.Name ||
+                priorFont.Size != font.Size || priorFont.Style != font.Style ||
+                priorDomFont.Subscript != domFont.Subscript || priorDomFont.Superscript != domFont.Superscript)
+                return 0;
+            var adjustment = callback(_paragraph, prior.Tag, tag, priorChar, word[0], font);
+            return adjustment is { } value && IsFinite(value) ? value : 0;
+        }
+
         XUnitPt GetSpaceWidth(Character character)
         {
             XUnitPt width = character.SymbolName switch
@@ -3073,7 +3136,7 @@ namespace MigraDoc.Rendering
             if (GetListSymbol(out var symbol, out var font))
             {
                 var brush = FontHandler.FontColorToXBrush(_paragraph.Format.Font);
-                _gfx.DrawString(symbol, font, brush, _currentXPosition, CurrentBaselinePosition);
+                _gfx.DrawString(symbol, font, brush, CurrentPaintXPosition, CurrentBaselinePosition);
                 _currentXPosition += _gfx.MeasureString(symbol, font, StringFormat).Width;
                 var tabOffset = NextTabOffset();
                 _currentXPosition += tabOffset.Offset;
@@ -3982,11 +4045,11 @@ namespace MigraDoc.Rendering
             if (penChanged)
             {
                 if (_currentUnderlinePen != null)
-                    EndUnderline(_currentUnderlinePen, _currentXPosition);
+                    EndUnderline(_currentUnderlinePen, _underlineEndPos);
 
                 if (pen != null)
                 {
-                    StartUnderline(_currentXPosition);
+                    StartUnderline(CurrentPaintXPosition);
                     _currentUnderlineOffsetFactor = offsetFactor;
                     _currentUnderlineOffsetPoints = offsetPoints;
                     _currentUnderlineIsDouble = font.Underline == Underline.Double;
@@ -3994,6 +4057,14 @@ namespace MigraDoc.Rendering
                 }
 
                 _currentUnderlinePen = pen;
+            }
+            if (_currentUnderlinePen != null)
+            {
+                // Own this run's painted extent rather than closing it at the
+                // following leaf's potentially shifted origin. Keep both bounds
+                // when a signed adjustment moves later content before the start.
+                _underlineStartPos = Math.Min(_underlineStartPos.Point, CurrentPaintXPosition.Point);
+                _underlineEndPos = Math.Max(_underlineEndPos.Point, (CurrentPaintXPosition + width).Point);
             }
             // A style can change without changing the realized pen width (for example,
             // thick 12pt followed by single 24pt). Remember every leaf's style.
@@ -4003,7 +4074,7 @@ namespace MigraDoc.Rendering
             if (_currentLeaf.Current == _endLeaf.Current)
             {
                 if (_currentUnderlinePen != null)
-                    EndUnderline(_currentUnderlinePen, _currentXPosition + width);
+                    EndUnderline(_currentUnderlinePen, _underlineEndPos);
 
                 _currentUnderlinePen = null;
             }
@@ -4012,6 +4083,7 @@ namespace MigraDoc.Rendering
         void StartUnderline(XUnitPt xPosition)
         {
             _underlineStartPos = xPosition;
+            _underlineEndPos = xPosition;
         }
 
         void EndUnderline(XPen pen, XUnitPt xPosition)
@@ -4084,6 +4156,7 @@ namespace MigraDoc.Rendering
 
         XPen? _currentUnderlinePen;
         XUnitPt _underlineStartPos;
+        XUnitPt _underlineEndPos;
         double _currentUnderlineOffsetFactor;
 
         double? _currentUnderlineOffsetPoints;
@@ -4228,6 +4301,14 @@ namespace MigraDoc.Rendering
         XUnitPt _currentYPosition;
         XUnitPt _currentXPosition;
         ParagraphIterator? _currentLeaf;
+        // Rendering history, unaffected by signed paint-only shifts of the pen.
+        // Reset for each line and side-exclusion flow segment; ignored blanks do not set it.
+        bool _hasTextBoundaryPredecessor;
+        // _currentXPosition always holds the unshifted cursor, including while rendering.
+        // Only drawing origins and hit/decorative bounds use the accumulated paint offset.
+        XUnitPt CurrentPaintXPosition => _currentXPosition + _textBoundaryPaintOffset;
+        XUnitPt _textBoundaryPaintOffset;
+
         ParagraphIterator? _startLeaf;
         ParagraphIterator? _endLeaf;
         bool _reMeasureLine;

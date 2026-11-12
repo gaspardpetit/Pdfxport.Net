@@ -1,0 +1,424 @@
+// MigraDoc - Creating Documents on the Fly
+// See the LICENSE file in the solution root for more information.
+using FluentAssertions;
+using MigraDoc.DocumentObjectModel;
+using MigraDoc.Rendering;
+using PdfSharp.Diagnostics;
+using PdfSharp.Drawing;
+using PdfSharp.Fonts;
+using PdfSharp.Quality;
+using PdfSharp.TestHelper;
+using Xunit;
+
+namespace MigraDoc.Tests;
+
+[Collection("PDFsharp")]
+public class RenderBoundaryKerningTests : IDisposable
+{
+    public RenderBoundaryKerningTests()
+    {
+        PdfSharpCore.ResetAll();
+#if CORE
+        GlobalFontSettings.FontResolver = new UnitTestFontResolver();
+#endif
+    }
+    public void Dispose() => PdfSharpCore.ResetAll();
+
+    [Theory]
+    [InlineData(-2)]
+    [InlineData(3)]
+    public void AdjustmentMovesSelectedLeafAndFollowingText(double adjustment)
+    {
+        var original = Render(null);
+        var selected = Render(adjustment);
+        selected.PrefixX.Should().BeApproximately(original.PrefixX, .001);
+        selected.WordX.Should().BeApproximately(original.WordX + adjustment, .001);
+        selected.FollowingX.Should().BeApproximately(original.FollowingX + adjustment, .001);
+        selected.Calls.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(0)]
+    public void InvalidOrZeroAdjustmentPreservesOutput(double adjustment)
+        => Render(adjustment).Content.Should().Be(Render(null).Content);
+
+    [Theory]
+    [InlineData(-5)]
+    [InlineData(5)]
+    public void PaintAdjustmentCannotChangeLineBreaks(double adjustment)
+    {
+        var original = Render(null, wrap: true);
+        var selected = Render(adjustment, wrap: true);
+        selected.WordY.Should().BeApproximately(original.WordY, .001);
+        selected.WordX.Should().BeApproximately(original.WordX, .001);
+        selected.Calls.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("start")]
+    [InlineData("startspace")]
+    [InlineData("untagged")]
+    [InlineData("size")]
+    [InlineData("family")]
+    [InlineData("bold")]
+    [InlineData("subscript")]
+    [InlineData("superscript")]
+    [InlineData("tab")]
+    [InlineData("linebreak")]
+    [InlineData("surrogate")]
+    public void IneligibleBoundaryDoesNotInvokeSelector(string mode)
+    {
+        var selected = Render(-2, mode: mode);
+        selected.Calls.Should().Be(0);
+        selected.Content.Should().Be(Render(null, mode: mode).Content);
+    }
+
+    [Theory]
+    [InlineData("space")]
+    [InlineData("character")]
+    [InlineData("taggedcharacter")]
+    public void OrdinaryBlankBoundaryCanBeAdjusted(string mode)
+    {
+        var original = Render(null, mode: mode);
+        var selected = Render(-2, mode: mode);
+        selected.WordX.Should().BeApproximately(original.WordX - 2, .001);
+        selected.Calls.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(-2)]
+    public void LeadingAfterBlankAdjustmentTakesPrecedence(double leading)
+    {
+        var selected = Render(-5, mode: "space", leading: leading);
+        var original = Render(null, mode: "space", leading: leading);
+        selected.Content.Should().Be(original.Content);
+        selected.Calls.Should().Be(0);
+    }
+
+    [Fact]
+    public void ZeroLeadingAfterBlankAllowsBoundaryAdjustment()
+    {
+        var original = Render(null, mode: "space", leading: 0);
+        Render(-2, mode: "space", leading: 0).WordX.Should().BeApproximately(original.WordX - 2, .001);
+    }
+
+    [Fact]
+    public void EmptyTextDoesNotBreakVisibleBoundary()
+    {
+        var selected = Render(-2, mode: "empty");
+        selected.Calls.Should().Be(1);
+        selected.Content.Should().Be(Render(-2).Content);
+    }
+
+    [Theory]
+    [InlineData(.5, ParagraphAlignment.Center)]
+    [InlineData(2, ParagraphAlignment.Right)]
+    public void BoundaryAdjustmentRemainsInPointsWithScaledAlignedText(double layout, ParagraphAlignment alignment)
+    {
+        var original = Render(null, layout: layout, alignment: alignment);
+        var selected = Render(2, layout: layout, alignment: alignment);
+        selected.PrefixX.Should().BeApproximately(original.PrefixX, .001);
+        selected.FollowingX.Should().BeApproximately(original.FollowingX + 2, .001);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    public void EarlierNegativeAdjustmentCannotSuppressLaterBoundary(double extra)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        var paragraph = section.AddParagraph();
+        foreach (var text in new[] { "A", "B", "C" }) paragraph.AddText(text).Tag = text;
+        using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+        var shift = -measure.MeasureString("AB", new XFont("Arial", 12)).Width + extra;
+        var calls = new List<object?>();
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) =>
+        {
+            calls.Add(tag);
+            return Equals(tag, "B") ? shift : 2;
+        };
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        calls.Should().Equal("B", "C");
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        while (reader.MoveAndGetNext(true, out var item))
+            if (item!.Text == "C")
+            {
+                item.X.Should().BeApproximately(22 + extra, .001);
+                return;
+            }
+        false.Should().BeTrue("the final text leaf must be drawn");
+    }
+
+    [Theory]
+    [InlineData(true, 2, 0)]
+    [InlineData(true, -2, 0)]
+    [InlineData(false, 2, 0)]
+    [InlineData(false, -2, 0)]
+    [InlineData(true, 2, -3)]
+    [InlineData(true, -2, -3)]
+    [InlineData(false, 2, -3)]
+    [InlineData(false, -2, -3)]
+    public void NegativePaintShiftPreservesLeadingKerningPrecedence(bool tagged, double leading, double extra)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        var paragraph = section.AddParagraph();
+        foreach (var text in new[] { "A", "B", " ", "C" }) paragraph.AddText(text).Tag = text;
+        using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+        var shift = -measure.MeasureString("AB ", new XFont("Arial", 12)).Width + extra;
+        var calls = new List<object?>();
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) =>
+        {
+            calls.Add(tag);
+            return Equals(tag, "B") ? shift : 99;
+        };
+        if (tagged)
+            renderer.DocumentRenderer.LeadingKerningAfterBlankWithTextTag = (_, tag, _, _) => Equals(tag, "C") ? leading : null;
+        else
+            renderer.DocumentRenderer.LeadingKerningAfterBlank = (_, word, _) => word == "C" ? leading : null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        calls.Should().Equal(new object?[] { "B" }, "nonzero leading kerning must take precedence before C");
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        while (reader.MoveAndGetNext(true, out var item))
+            if (item!.Text == "C")
+            {
+                item.X.Should().BeApproximately(20 + extra + leading, .001);
+                return;
+            }
+        false.Should().BeTrue("the final text leaf must be drawn");
+    }
+
+    [Theory]
+    [InlineData(true, false, 2)]
+    [InlineData(true, false, -2)]
+    [InlineData(false, false, 2)]
+    [InlineData(false, false, -2)]
+    [InlineData(true, true, 2)]
+    [InlineData(true, true, -2)]
+    [InlineData(false, true, 2)]
+    [InlineData(false, true, -2)]
+    public void InitialTabPreservesLeadingKerning(bool tagged, bool boundarySelector, double leading)
+    {
+        var original = RenderAfterInitialTab(tagged, boundarySelector, 0);
+        var selected = RenderAfterInitialTab(tagged, boundarySelector, leading);
+        selected.Should().BeApproximately(original + leading, .001);
+    }
+
+    static double RenderAfterInitialTab(bool tagged, bool boundarySelector, double leading)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var paragraph = document.AddSection().AddParagraph();
+        paragraph.AddTab();
+        paragraph.AddText(" ");
+        paragraph.AddText("Bravo").Tag = "Bravo";
+        var renderer = new PdfDocumentRenderer { Document = document };
+        if (tagged)
+            renderer.DocumentRenderer.LeadingKerningAfterBlankWithTextTag = (_, tag, _, _) => Equals(tag, "Bravo") ? leading : null;
+        else
+            renderer.DocumentRenderer.LeadingKerningAfterBlank = (_, word, _) => word == "Bravo" ? leading : null;
+        var calls = 0;
+        if (boundarySelector)
+            renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, _, _, _, _) => { calls++; return 99; };
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        calls.Should().Be(0, "an initial tab and ignored blank do not establish a text boundary");
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        while (reader.MoveAndGetNext(true, out var item))
+            if (item!.Text == "Bravo") return item.X;
+        throw new InvalidOperationException("The word after the initial tab must be drawn.");
+    }
+
+    [Theory]
+    [InlineData(ParagraphAlignment.Right, false, true)]
+    [InlineData(ParagraphAlignment.Center, false, true)]
+    [InlineData(ParagraphAlignment.Left, true, true)]
+    [InlineData(ParagraphAlignment.Right, false, false)]
+    [InlineData(ParagraphAlignment.Center, false, false)]
+    [InlineData(ParagraphAlignment.Left, true, false)]
+    public void EarlierLinePaintShiftCannotChangeFieldLineGeometry(ParagraphAlignment alignment, bool tab, bool tagged)
+    {
+        var original = RenderFieldLine(0, alignment, tab, tagged);
+        var selected = RenderFieldLine(1000, alignment, tab, tagged);
+        selected.Should().HaveCount(original.Count);
+        for (var index = 0; index < selected.Count; index++)
+        {
+            selected[index].Text.Should().Be(original[index].Text);
+            selected[index].X.Should().BeApproximately(original[index].X, .001);
+            selected[index].Y.Should().BeApproximately(original[index].Y, .001);
+        }
+    }
+
+    static List<(string Text, double X, double Y)> RenderFieldLine(double shift, ParagraphAlignment alignment, bool tab, bool tagged)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.PageWidth = Unit.FromPoint(500);
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        section.PageSetup.RightMargin = Unit.FromPoint(20);
+        var paragraph = section.AddParagraph();
+        paragraph.Format.Alignment = alignment;
+        paragraph.AddText("A");
+        paragraph.AddText("B").Tag = "B";
+        paragraph.AddLineBreak();
+        // A long prefix makes leading kerning eligible during remeasurement
+        // even with right/center alignment's existing start-position calculation.
+        var prefix = new string('A', 35);
+        paragraph.AddText(prefix + " ");
+        paragraph.AddText("Bravo").Tag = "Bravo";
+        if (tab)
+        {
+            paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(400), TabAlignment.Right);
+            paragraph.AddTab();
+        }
+        else paragraph.AddText(" ");
+        paragraph.AddPageField();
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) => Equals(tag, "B") ? shift : null;
+        if (tagged)
+            renderer.DocumentRenderer.LeadingKerningAfterBlankWithTextTag = (_, tag, _, _) => Equals(tag, "Bravo") ? 2 : null;
+        else
+            renderer.DocumentRenderer.LeadingKerningAfterBlank = (_, word, _) => word == "Bravo" ? 2 : null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        var positions = new List<(string Text, double X, double Y)>();
+        while (reader.MoveAndGetNext(true, out var item)) positions.Add((item!.Text, item.X, item.Y));
+        var secondLine = positions.First(item => item.Text == prefix).Y;
+        return positions.Where(item => Math.Abs(item.Y - secondLine) < .001).ToList();
+    }
+
+    [Theory]
+    [InlineData(12)]
+    [InlineData(-12)]
+    public void BoundaryShiftDoesNotChangePostTabJustification(double shift)
+    {
+        var original = RenderTabInteraction(0, ParagraphAlignment.Justify, TabAlignment.Left);
+        var selected = RenderTabInteraction(shift, ParagraphAlignment.Justify, TabAlignment.Left);
+        foreach (var word in new[] { "B", "C", "D" })
+            selected.First(item => item.Text == word).X.Should().BeApproximately(
+                original.First(item => item.Text == word).X + shift, .001, word);
+        selected.First(item => item.Text == "tail").X.Should().BeApproximately(
+            original.First(item => item.Text == "tail").X, .001);
+    }
+
+    static List<(string Text, double X, double Y)> RenderTabInteraction(double shift,
+        ParagraphAlignment alignment, TabAlignment tabAlignment)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.PageWidth = Unit.FromPoint(500);
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        section.PageSetup.RightMargin = Unit.FromPoint(20);
+        var paragraph = section.AddParagraph();
+        paragraph.Format.Alignment = alignment;
+        paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(100), tabAlignment);
+        paragraph.AddText("A");
+        paragraph.AddText("B").Tag = "B";
+        paragraph.AddTab();
+        paragraph.AddText("C D");
+        paragraph.AddLineBreak();
+        paragraph.AddText("tail");
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) => Equals(tag, "B") ? shift : null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        var positions = new List<(string Text, double X, double Y)>();
+        while (reader.MoveAndGetNext(true, out var item)) positions.Add((item!.Text, item.X, item.Y));
+        return positions;
+    }
+
+    static Result Render(double? adjustment, string mode = "adjacent", bool wrap = false, double? leading = null,
+        double layout = 1, ParagraphAlignment alignment = ParagraphAlignment.Left)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        section.PageSetup.RightMargin = Unit.FromPoint(20);
+        if (wrap)
+        {
+            using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+            section.PageSetup.PageWidth = Unit.FromPoint(40 + measure.MeasureString("Alpha Bravo", new XFont("Arial", 12)).Width - 1);
+            mode = "space";
+        }
+        var paragraph = section.AddParagraph();
+        paragraph.Format.Alignment = alignment;
+        var priorTag = new object();
+        var currentTag = new object();
+        if (mode is not ("start" or "startspace")) paragraph.AddText("Alpha").Tag = priorTag;
+        switch (mode)
+        {
+            case "startspace": paragraph.AddText(" "); break;
+            case "space": paragraph.AddText(" ").Tag = priorTag; break;
+            case "character": paragraph.AddCharacter(SymbolName.Blank); break;
+            case "taggedcharacter": paragraph.AddCharacter(SymbolName.Blank).Tag = priorTag; break;
+            case "tab": paragraph.AddTab(); break;
+            case "linebreak": paragraph.AddLineBreak(); break;
+            case "empty": paragraph.Elements.Add(new Text("")); break;
+            case "surrogate": paragraph.AddText("\U0001F600"); break;
+        }
+        var run = paragraph.AddFormattedText();
+        switch (mode)
+        {
+            case "size": run.Font.Size = 14; break;
+            case "family": run.Font.Name = "Times New Roman"; break;
+            case "bold": run.Font.Bold = true; break;
+            case "subscript": run.Font.Subscript = true; break;
+            case "superscript": run.Font.Superscript = true; break;
+        }
+        run.AddText("Bravo").Tag = mode == "untagged" ? null : currentTag;
+        paragraph.AddText(" Charlie");
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.TextHorizontalScale = tag => ReferenceEquals(tag, currentTag) ? layout : null;
+        var calls = 0;
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (actualParagraph, previous, current, left, right, font) =>
+        {
+            ReferenceEquals(current, currentTag).Should().BeTrue();
+            actualParagraph.Should().BeSameAs(paragraph);
+            if (mode == "character") previous.Should().BeNull();
+            else previous.Should().BeSameAs(priorTag);
+            left.Should().Be(mode is "space" or "character" or "taggedcharacter" ? ' ' : 'a');
+            right.Should().Be('B');
+            font.Size.Should().Be(12);
+            calls++;
+            return adjustment;
+        };
+        if (leading != null)
+            renderer.DocumentRenderer.LeadingKerningAfterBlankWithTextTag = (_, _, _, _) => leading;
+        renderer.DocumentRenderer.PrepareDocument(renderer.PdfDocument.RenderEvents);
+        calls.Should().Be(0, "paint-only selectors must not run during formatting");
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        var positions = new List<(string Text, double X, double Y)>();
+        while (reader.MoveAndGetNext(true, out var item)) positions.Add((item!.Text, item.X, item.Y));
+        var word = positions.First(item => item.Text == "Bravo");
+        var prefix = positions.FirstOrDefault(item => item.Text == "Alpha");
+        var following = positions.First(item => item.Text == "Charlie");
+        return new Result(prefix.X, word.X, word.Y, following.X, calls, PdfFileHelper.GetPageContentStream(pdf, 0));
+    }
+    record Result(double PrefixX, double WordX, double WordY, double FollowingX, int Calls, string Content);
+}
