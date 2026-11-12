@@ -3043,7 +3043,12 @@ namespace MigraDoc.Rendering
 
         double GetLeadingKerningAfterBlank(string word)
         {
-            if (word.Length == 0 || _currentXPosition <= StartXPosition + Tolerance ||
+            // Paint-only boundary shifts can move the pen before the line origin.
+            // Keep layout's coordinate check, but use rendering history while painting.
+            var atLineStart = _phase == Phase.Rendering
+                ? !_hasTextBoundaryPredecessor
+                : _currentXPosition <= StartXPosition + Tolerance;
+            if (word.Length == 0 || atLineStart ||
                 _currentLeaf?.GetPreviousLeaf() is not { } previous || !IsBlank(previous.Current))
                 return 0;
             var taggedAdjustment = _currentLeaf.Current is Text text

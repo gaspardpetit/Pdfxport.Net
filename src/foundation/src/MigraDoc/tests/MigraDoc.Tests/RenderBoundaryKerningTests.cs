@@ -159,6 +159,50 @@ public class RenderBoundaryKerningTests : IDisposable
         false.Should().BeTrue("the final text leaf must be drawn");
     }
 
+    [Theory]
+    [InlineData(true, 2, 0)]
+    [InlineData(true, -2, 0)]
+    [InlineData(false, 2, 0)]
+    [InlineData(false, -2, 0)]
+    [InlineData(true, 2, -3)]
+    [InlineData(true, -2, -3)]
+    [InlineData(false, 2, -3)]
+    [InlineData(false, -2, -3)]
+    public void NegativePaintShiftPreservesLeadingKerningPrecedence(bool tagged, double leading, double extra)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        var paragraph = section.AddParagraph();
+        foreach (var text in new[] { "A", "B", " ", "C" }) paragraph.AddText(text).Tag = text;
+        using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+        var shift = -measure.MeasureString("AB ", new XFont("Arial", 12)).Width + extra;
+        var calls = new List<object?>();
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) =>
+        {
+            calls.Add(tag);
+            return Equals(tag, "B") ? shift : 99;
+        };
+        if (tagged)
+            renderer.DocumentRenderer.LeadingKerningAfterBlankWithTextTag = (_, tag, _, _) => Equals(tag, "C") ? leading : null;
+        else
+            renderer.DocumentRenderer.LeadingKerningAfterBlank = (_, word, _) => word == "C" ? leading : null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        calls.Should().Equal(new object?[] { "B" }, "nonzero leading kerning must take precedence before C");
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        while (reader.MoveAndGetNext(true, out var item))
+            if (item!.Text == "C")
+            {
+                item.X.Should().BeApproximately(20 + extra + leading, .001);
+                return;
+            }
+        false.Should().BeTrue("the final text leaf must be drawn");
+    }
+
     static Result Render(double? adjustment, string mode = "adjacent", bool wrap = false, double? leading = null,
         double layout = 1, ParagraphAlignment alignment = ParagraphAlignment.Left)
     {
