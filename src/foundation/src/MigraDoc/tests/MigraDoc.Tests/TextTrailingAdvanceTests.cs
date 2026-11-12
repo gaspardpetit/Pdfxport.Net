@@ -262,6 +262,54 @@ public class TextTrailingAdvanceTests : IDisposable
             RenderJustified(0, "Delta").NextY.Should().BeLessThan(first.FirstY);
     }
 
+    [Theory]
+    [InlineData(false, 0, 20, 8, false)]
+    [InlineData(false, 1, 20, 8, false)]
+    [InlineData(true, 0, 20, 8, false)]
+    [InlineData(true, 1, 20, 8, false)]
+    [InlineData(false, 0, 2, 1, true)]
+    [InlineData(true, 1, 2, 1, true)]
+    [InlineData(false, 0, -2, 3, false)]
+    [InlineData(true, 1, -2, 3, false)]
+    [InlineData(false, 0, -2, 1, true)]
+    [InlineData(true, 1, -2, 1, true)]
+    public void ContractionUsesOnlyShrinkableBlankWidth(bool nonterminal, int selectedBlank,
+        double advance, double overrun, bool fits)
+    {
+        var document = NewDocument(out var section);
+        using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+        section.PageSetup.PageWidth = Unit.FromPoint(40 +
+            gfx.MeasureString("Alpha Bravo Charlie", new XFont("Arial", 12)).Width + advance - overrun);
+        var paragraph = section.AddParagraph();
+        paragraph.Format.Alignment = ParagraphAlignment.Justify;
+        var tag = new object();
+        paragraph.AddText("Alpha");
+        paragraph.Elements.Add(new Text(" ") { Tag = selectedBlank == 0 ? tag : null });
+        paragraph.AddText("Bravo");
+        paragraph.Elements.Add(new Text(" ") { Tag = selectedBlank == 1 ? tag : null });
+        paragraph.AddText(nonterminal ? "Charlie Delta" : "Charlie");
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.TextTrailingAdvance = actual => ReferenceEquals(actual, tag) ? advance : null;
+        if (nonterminal)
+            renderer.DocumentRenderer.JustifiedNonterminalSpaceShrinkFactorForParagraph = _ => .1;
+        else
+            renderer.DocumentRenderer.JustifiedSpaceShrinkFactorForParagraph = _ => .1;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        var positions = new List<(string Text, double X, double Y)>();
+        while (reader.MoveAndGetNext(true, out var item)) positions.Add((item!.Text, item.X, item.Y));
+        var first = positions.First(item => item.Text == "Alpha");
+        var last = positions.First(item => item.Text == "Charlie");
+        (Math.Abs(first.Y - last.Y) < .001).Should().Be(fits);
+        if (fits)
+        {
+            var middle = positions.First(item => item.Text == "Bravo");
+            middle.X.Should().BeGreaterThanOrEqualTo(first.X + gfx.MeasureString("Alpha", new XFont("Arial", 12)).Width - .001);
+            last.X.Should().BeGreaterThanOrEqualTo(middle.X + gfx.MeasureString("Bravo", new XFont("Arial", 12)).Width - .001);
+        }
+    }
+
     static double SpaceWidth()
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
