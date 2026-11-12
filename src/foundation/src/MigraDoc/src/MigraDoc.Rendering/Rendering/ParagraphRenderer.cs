@@ -1803,6 +1803,11 @@ namespace MigraDoc.Rendering
 
         void StartHyperlink(XUnitPt left, XUnitPt top)
         {
+            if (_isFirstLine && _renderInfo.FormatInfo.IsStarting &&
+                _documentRenderer.TextLinkLeadingSpaceForParagraph?.Invoke(_paragraph) is double leading &&
+                leading > 0 && !Double.IsInfinity(leading) &&
+                !Double.IsInfinity(top.Point - leading))
+                top -= XUnitPt.FromPoint(leading);
             _hyperlinkRect = new XRect(left, top, 0, 0);
         }
 

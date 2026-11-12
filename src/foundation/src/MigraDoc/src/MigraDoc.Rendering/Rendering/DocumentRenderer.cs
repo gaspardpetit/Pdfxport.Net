@@ -525,6 +525,18 @@ namespace MigraDoc.Rendering
             JustifiedTerminalWordOverrunLimitForParagraph { get; set; }
 
         /// <summary>
+        /// Selects additional leading space, in points, included in text hyperlink
+        /// hit areas on the first line of a paragraph. Can represent caller-owned
+        /// flow space preceding the paragraph. Applies only at the start of the
+        /// complete paragraph, not at page continuations. The selected amount is
+        /// the entire extension; paragraph spacing is not added automatically.
+        /// Null, nonpositive, nonfinite, or overflowing values leave bounds unchanged.
+        /// Changes annotation bounds only; layout and painted text are unchanged.
+        /// Null by default. Invoked only for first-line text links during rendering.
+        /// </summary>
+        public Func<Paragraph, double?>? TextLinkLeadingSpaceForParagraph { get; set; }
+
+        /// <summary>
         /// Optionally caps space contraction for nonfinal words of justified
         /// paragraphs. Uses the same units and validation as
         /// <see cref="JustifiedTerminalWordOverrunLimitForParagraph"/>.
