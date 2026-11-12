@@ -194,6 +194,80 @@ public class BoundaryPaintIsolationTests : IDisposable
         }
     }
 
+    public static IEnumerable<object[]> UnderlineCases()
+    {
+        foreach (var style in new[] { Underline.Single, Underline.Double, Underline.Wavy })
+        foreach (var placement in new[] { "outside", "changed", "inside" })
+        foreach (var shift in new[] { -20.0, -4.0, 4.0, 20.0 })
+            yield return new object[] { style, placement, shift };
+    }
+
+    [Theory]
+    [MemberData(nameof(UnderlineCases))]
+    public void UnderlineBoundsCoverTheirOwnPaintedLeaves(Underline style, string placement, double shift)
+    {
+        List<(double Left, double Right)> Draw(string location, double adjustment)
+        {
+            var document = new Document();
+            document.Styles.Normal.Font.Name = "Arial";
+            document.Styles.Normal.Font.Size = 12;
+            var paragraph = document.AddSection().AddParagraph();
+            var first = paragraph.AddFormattedText();
+            first.Font.Underline = style;
+            first.AddText("A");
+            if (location == "inside")
+                first.AddText("B").Tag = "B";
+            else if (location == "changed")
+            {
+                var second = paragraph.AddFormattedText();
+                second.Font.Underline = style == Underline.Single ? Underline.Double : Underline.Single;
+                second.AddText("B").Tag = "B";
+            }
+            else
+                paragraph.AddText("B").Tag = "B";
+            paragraph.AddText("C");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) => Equals(tag, "B") ? adjustment : null;
+            renderer.RenderDocument();
+            using var pdf = renderer.PdfDocument;
+            var content = PdfFileHelper.GetPageContentStream(pdf, 0);
+            var paths = new List<(double Left, double Right)>();
+            var xs = new List<double>();
+            foreach (var line in content.Split('\n'))
+            {
+                var match = Regex.Match(line.Trim(), @"^(?<points>(?:[-\d.]+ ){1,5}[-\d.]+) [mlc]$");
+                if (match.Success)
+                {
+                    var coordinates = match.Groups["points"].Value.Split(' ');
+                    for (var index = 0; index < coordinates.Length; index += 2)
+                        xs.Add(double.Parse(coordinates[index], CultureInfo.InvariantCulture));
+                }
+                if (line.Trim() == "S" && xs.Count > 0)
+                {
+                    paths.Add((xs.Min(), xs.Max()));
+                    xs.Clear();
+                }
+            }
+            paths.Should().NotBeEmpty();
+            return paths;
+        }
+        var original = Draw(placement, 0);
+        var selected = Draw(placement, shift);
+        selected.Should().HaveCount(original.Count);
+        var firstLeaf = Draw("outside", 0)[0];
+        var firstCount = style == Underline.Double ? 2 : 1;
+        for (var index = 0; index < original.Count; index++)
+        {
+            var expected = original[index];
+            if (placement == "inside")
+                expected = (Math.Min(firstLeaf.Left, firstLeaf.Right + shift), Math.Max(firstLeaf.Right, expected.Right + shift));
+            else if (index >= firstCount)
+                expected = (expected.Left + shift, expected.Right + shift);
+            selected[index].Left.Should().BeApproximately(expected.Left, .002);
+            selected[index].Right.Should().BeApproximately(expected.Right, .002);
+        }
+    }
+
     static Result Render(ParagraphAlignment alignment, TabAlignment tab, double shift)
     {
         var document = new Document();

@@ -4045,7 +4045,7 @@ namespace MigraDoc.Rendering
             if (penChanged)
             {
                 if (_currentUnderlinePen != null)
-                    EndUnderline(_currentUnderlinePen, CurrentPaintXPosition);
+                    EndUnderline(_currentUnderlinePen, _underlineEndPos);
 
                 if (pen != null)
                 {
@@ -4058,6 +4058,14 @@ namespace MigraDoc.Rendering
 
                 _currentUnderlinePen = pen;
             }
+            if (_currentUnderlinePen != null)
+            {
+                // Own this run's painted extent rather than closing it at the
+                // following leaf's potentially shifted origin. Keep both bounds
+                // when a signed adjustment moves later content before the start.
+                _underlineStartPos = Math.Min(_underlineStartPos.Point, CurrentPaintXPosition.Point);
+                _underlineEndPos = Math.Max(_underlineEndPos.Point, (CurrentPaintXPosition + width).Point);
+            }
             // A style can change without changing the realized pen width (for example,
             // thick 12pt followed by single 24pt). Remember every leaf's style.
             _currentUnderlineIsThick = font.Underline == Underline.Thick;
@@ -4066,7 +4074,7 @@ namespace MigraDoc.Rendering
             if (_currentLeaf.Current == _endLeaf.Current)
             {
                 if (_currentUnderlinePen != null)
-                    EndUnderline(_currentUnderlinePen, CurrentPaintXPosition + width);
+                    EndUnderline(_currentUnderlinePen, _underlineEndPos);
 
                 _currentUnderlinePen = null;
             }
@@ -4075,6 +4083,7 @@ namespace MigraDoc.Rendering
         void StartUnderline(XUnitPt xPosition)
         {
             _underlineStartPos = xPosition;
+            _underlineEndPos = xPosition;
         }
 
         void EndUnderline(XPen pen, XUnitPt xPosition)
@@ -4147,6 +4156,7 @@ namespace MigraDoc.Rendering
 
         XPen? _currentUnderlinePen;
         XUnitPt _underlineStartPos;
+        XUnitPt _underlineEndPos;
         double _currentUnderlineOffsetFactor;
 
         double? _currentUnderlineOffsetPoints;
