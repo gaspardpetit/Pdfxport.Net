@@ -394,6 +394,22 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, TabLeader, XFont, (double CharacterSpacing, double LeftInset, double RightInset)?>? TabLeaderLayout { get; set; }
 
         /// <summary>
+        /// Selects a tab leader grid pitch in points in the renderer's drawing
+        /// coordinates (page coordinates for ordinary body paragraphs). The first
+        /// leader starts on or after the current painted pen at a pitch multiple.
+        /// Each leader reserves at least one full pitch and its natural glyph width
+        /// before the following tab text. Pitches smaller than the glyph width
+        /// intentionally overlap adjacent leaders.
+        /// A valid pitch takes precedence over TabLeaderLayout, including when
+        /// no grid cell fits. Null, nonfinite, nonpositive, or numerically
+        /// unrepresentable pitches/counts fall back to TabLeaderLayout and then
+        /// default rendering. Does not change tab stops or text layout.
+        /// Null by default. Invoked only when rendering a supported leader.
+        /// </summary>
+        public Func<Paragraph, TabLeader, XFont, double?>? TabLeaderGridPitch { get; set; }
+
+
+        /// <summary>
         /// Adjusts the next word's leading position after a breakable blank, in points.
         /// The adjustment affects line fitting and painting but never applies at a line start.
         /// Null or a non-finite value leaves the default spacing unchanged.

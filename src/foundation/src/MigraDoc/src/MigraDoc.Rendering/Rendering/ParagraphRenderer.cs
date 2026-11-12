@@ -1519,6 +1519,28 @@ namespace MigraDoc.Rendering
             if (font.Subscript || font.Superscript)
                 xFont = FontHandler.ToSubSuperFont(xFont);
 
+            var gridPitch = _documentRenderer.TabLeaderGridPitch?.Invoke(_paragraph, tabOffset.Leader, xFont);
+            if (gridPitch is double grid && !Double.IsNaN(grid) && !Double.IsInfinity(grid) && grid > 0)
+            {
+                // Use the actual script font and painted pen, independent of text fit scaling.
+                var naturalWidth = _gfx.MeasureString(leaderString, xFont, StringFormat).Width;
+                var start = CurrentPaintXPosition.Point;
+                var end = start + tabOffset.Offset.Point;
+                var first = Math.Ceiling(start / grid) * grid;
+                var cells = first >= end ? 0 : Math.Floor((end - first - Math.Max(grid, naturalWidth)) / grid) + 1;
+                if (naturalWidth > 0 && !Double.IsInfinity(naturalWidth) &&
+                    !Double.IsNaN(cells) && !Double.IsInfinity(cells) &&
+                    cells < Int32.MaxValue && first >= start && !Double.IsInfinity(first) &&
+                    (cells <= 1 || first + grid > first))
+                {
+                    if (CurrentBrush != null)
+                        for (var index = 0; index < Math.Max(0, cells); index++)
+                            _gfx.DrawString(leaderString, xFont, CurrentBrush,
+                                first + index * grid, CurrentBaselinePosition);
+                    return;
+                }
+            }
+
             var layout = _documentRenderer.TabLeaderLayout?.Invoke(_paragraph, tabOffset.Leader, xFont);
             if (layout is { } adjustment &&
                 leaderWidth.Point + adjustment.CharacterSpacing > 0 &&
