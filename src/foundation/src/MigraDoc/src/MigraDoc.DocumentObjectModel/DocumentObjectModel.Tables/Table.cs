@@ -299,6 +299,16 @@ namespace MigraDoc.DocumentObjectModel.Tables
         }
 
         /// <summary>
+        /// Space reserved inside each column pitch between independently bordered cells.
+        /// A zero value retains the usual shared-border table layout.
+        /// </summary>
+        public Unit CellSpacing
+        {
+            get => Values.CellSpacing ?? Unit.Zero;
+            set => Values.CellSpacing = value;
+        }
+
+        /// <summary>
         /// Gets or sets the default left padding for all cells of the table.
         /// </summary>
         public Unit LeftPadding
@@ -393,6 +403,9 @@ namespace MigraDoc.DocumentObjectModel.Tables
             if (!Values.BottomPadding.IsValueNullOrEmpty())
                 serializer.WriteSimpleAttribute("BottomPadding", BottomPadding);
 
+            if (!Values.CellSpacing.IsValueNullOrEmpty())
+                serializer.WriteSimpleAttribute("CellSpacing", CellSpacing);
+
             Values.Borders?.Serialize(serializer, null);
 
             Values.Shading?.Serialize(serializer);
@@ -476,6 +489,9 @@ namespace MigraDoc.DocumentObjectModel.Tables
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public Unit? BottomPadding { get; set; }
+
+            /// <summary>Space between independently bordered cells.</summary>
+            public Unit? CellSpacing { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.

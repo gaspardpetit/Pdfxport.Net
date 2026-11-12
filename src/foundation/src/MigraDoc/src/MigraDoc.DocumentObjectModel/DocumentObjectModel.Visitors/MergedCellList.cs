@@ -205,7 +205,10 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             // For BorderTypes Top, Right, Bottom and Left update the width with the neighbors touching border where required.
             // In case of rounded corners this should not be done.
 
-            var leftNeighbor = GetNeighborLeft(cellIdx);
+            // Spaced cells own their four borders independently.  Conflict
+            // resolution applies only where the cell edges actually meet.
+            var resolveSharedEdges = cell.Table.CellSpacing.Point <= 0;
+            var leftNeighbor = resolveSharedEdges ? GetNeighborLeft(cellIdx) : null;
             if (leftNeighbor != null && leftNeighbor.RoundedCorner != RoundedCorner.TopRight && leftNeighbor.RoundedCorner != RoundedCorner.BottomRight)
             {
                 var nbrBrdrs = leftNeighbor.Values.Borders;
@@ -213,7 +216,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                     borders.SetValue("Left", GetBorderFromBorders(nbrBrdrs, BorderType.Right));
             }
 
-            var rightNeighbor = GetNeighborRight(cellIdx);
+            var rightNeighbor = resolveSharedEdges ? GetNeighborRight(cellIdx) : null;
             if (rightNeighbor != null && rightNeighbor.RoundedCorner != RoundedCorner.TopLeft && rightNeighbor.RoundedCorner != RoundedCorner.BottomLeft)
             {
                 var nbrBrdrs = rightNeighbor.Values.Borders;
@@ -233,7 +236,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             else
                 topRowIndexOverride = null;
 
-            var topNeighbor = GetNeighborTop(cellIdx, topRowIndexOverride);
+            var topNeighbor = resolveSharedEdges ? GetNeighborTop(cellIdx, topRowIndexOverride) : null;
 
             // If not considering heading rows and if the topNeighbor is a heading row, set it to null to ignore it for top border determination.
             // This way the first content row’s top border doesn’t possibly get the bottom border of the original last heading row.
@@ -249,7 +252,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                     borders.SetValue("Top", GetBorderFromBorders(nbrBrdrs, BorderType.Bottom));
             }
 
-            var bottomNeighbor = GetNeighborBottom(cellIdx);
+            var bottomNeighbor = resolveSharedEdges ? GetNeighborBottom(cellIdx) : null;
             if (bottomNeighbor != null && bottomNeighbor.RoundedCorner != RoundedCorner.TopLeft && bottomNeighbor.RoundedCorner != RoundedCorner.TopRight)
             {
                 var nbrBrdrs = bottomNeighbor.Values.Borders;
@@ -332,21 +335,8 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             if (opposingStyle != BorderStyle.Single)
                 return width;
             var style = borders.GetBorder(type)?.Values.Style ?? borders.Values.Style ?? BorderStyle.Single;
-            var multiplier = style switch
-            {
-                BorderStyle.Double => 3,
-                BorderStyle.Triple => 5,
-                BorderStyle.ThinThickSmallGap or BorderStyle.ThickThinSmallGap => 1.75,
-                BorderStyle.ThinThickThinSmallGap => 2.5,
-                BorderStyle.ThinThickMediumGap or BorderStyle.ThickThinMediumGap => 2,
-                BorderStyle.ThinThickThinMediumGap => 3,
-                BorderStyle.ThinThickLargeGap or BorderStyle.ThickThinLargeGap => 2.125,
-                BorderStyle.ThinThickThinLargeGap => 3.5,
-                BorderStyle.DoubleWave => 2.5,
-                BorderStyle.Emboss3D or BorderStyle.Engrave3D => 1.75,
-                _ => 1
-            };
-            return width * multiplier;
+            var descriptor = BorderStyleDescriptor.For(style, width);
+            return width * (descriptor.UseBandAgainstSingle ? descriptor.BandMultiplier : 1);
         }
 
         static Unit GetEffectiveBorderWidth(Borders? borders, BorderType type)

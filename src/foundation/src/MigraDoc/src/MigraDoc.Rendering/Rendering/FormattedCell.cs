@@ -109,6 +109,9 @@ namespace MigraDoc.Rendering
                     width += (Cell.Table.Columns[columnIdx]?.Width ?? NRT.ThrowOnNull<Unit>()).Point;
                 }
                 width -= _bordersRenderer.GetWidth(BorderType.Right);
+                width -= Cell!.Table.CellSpacing.Point * 2;
+                if (Cell!.Table.CellSpacing.Point > 0)
+                    width -= _bordersRenderer.GetWidth(BorderType.Left);
 
                 return width;
             }
