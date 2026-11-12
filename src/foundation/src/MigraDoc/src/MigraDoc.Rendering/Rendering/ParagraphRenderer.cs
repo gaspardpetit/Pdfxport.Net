@@ -161,6 +161,10 @@ namespace MigraDoc.Rendering
                 _collapsedSpacesOnLine = lineInfo.CollapsedSpaces ?? [];
 
                 _lastTabPosition = 0;
+                // Field remeasurement formats in the rendering phase. Clear the
+                // previous line's paint state before it can affect measured geometry.
+                _hasTextBoundaryPredecessor = false;
+                _textBoundaryPaintOffset = 0;
                 if (lineInfo.ReMeasureLine)
                     ReMeasureLine(ref lineInfo);
 
@@ -849,8 +853,6 @@ namespace MigraDoc.Rendering
         /// <param name="lineInfo"></param>
         void RenderLine(LineInfo lineInfo)
         {
-            _hasTextBoundaryPredecessor = false;
-            _textBoundaryPaintOffset = 0;
             _currentYPosition += lineInfo.GapBefore;
             _currentLineRect = lineInfo.FittingRect;
             var transitions = lineInfo.SegmentTransitions;

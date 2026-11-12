@@ -245,6 +245,67 @@ public class RenderBoundaryKerningTests : IDisposable
         throw new InvalidOperationException("The word after the initial tab must be drawn.");
     }
 
+    [Theory]
+    [InlineData(ParagraphAlignment.Right, false, true)]
+    [InlineData(ParagraphAlignment.Center, false, true)]
+    [InlineData(ParagraphAlignment.Left, true, true)]
+    [InlineData(ParagraphAlignment.Right, false, false)]
+    [InlineData(ParagraphAlignment.Center, false, false)]
+    [InlineData(ParagraphAlignment.Left, true, false)]
+    public void EarlierLinePaintShiftCannotChangeFieldLineGeometry(ParagraphAlignment alignment, bool tab, bool tagged)
+    {
+        var original = RenderFieldLine(0, alignment, tab, tagged);
+        var selected = RenderFieldLine(1000, alignment, tab, tagged);
+        selected.Should().HaveCount(original.Count);
+        for (var index = 0; index < selected.Count; index++)
+        {
+            selected[index].Text.Should().Be(original[index].Text);
+            selected[index].X.Should().BeApproximately(original[index].X, .001);
+            selected[index].Y.Should().BeApproximately(original[index].Y, .001);
+        }
+    }
+
+    static List<(string Text, double X, double Y)> RenderFieldLine(double shift, ParagraphAlignment alignment, bool tab, bool tagged)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.PageWidth = Unit.FromPoint(500);
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        section.PageSetup.RightMargin = Unit.FromPoint(20);
+        var paragraph = section.AddParagraph();
+        paragraph.Format.Alignment = alignment;
+        paragraph.AddText("A");
+        paragraph.AddText("B").Tag = "B";
+        paragraph.AddLineBreak();
+        // A long prefix makes leading kerning eligible during remeasurement
+        // even with right/center alignment's existing start-position calculation.
+        var prefix = new string('A', 35);
+        paragraph.AddText(prefix + " ");
+        paragraph.AddText("Bravo").Tag = "Bravo";
+        if (tab)
+        {
+            paragraph.Format.TabStops.AddTabStop(Unit.FromPoint(400), TabAlignment.Right);
+            paragraph.AddTab();
+        }
+        else paragraph.AddText(" ");
+        paragraph.AddPageField();
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) => Equals(tag, "B") ? shift : null;
+        if (tagged)
+            renderer.DocumentRenderer.LeadingKerningAfterBlankWithTextTag = (_, tag, _, _) => Equals(tag, "Bravo") ? 2 : null;
+        else
+            renderer.DocumentRenderer.LeadingKerningAfterBlank = (_, word, _) => word == "Bravo" ? 2 : null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        var positions = new List<(string Text, double X, double Y)>();
+        while (reader.MoveAndGetNext(true, out var item)) positions.Add((item!.Text, item.X, item.Y));
+        var secondLine = positions.First(item => item.Text == prefix).Y;
+        return positions.Where(item => Math.Abs(item.Y - secondLine) < .001).ToList();
+    }
+
     static Result Render(double? adjustment, string mode = "adjacent", bool wrap = false, double? leading = null,
         double layout = 1, ParagraphAlignment alignment = ParagraphAlignment.Left)
     {
