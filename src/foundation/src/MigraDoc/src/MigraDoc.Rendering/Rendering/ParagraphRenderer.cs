@@ -1803,6 +1803,13 @@ namespace MigraDoc.Rendering
 
         void StartHyperlink(XUnitPt left, XUnitPt top)
         {
+            if (_documentRenderer.IncludeParagraphSpacingInTextLinkBounds &&
+                _isFirstLine && _renderInfo.FormatInfo.IsStarting)
+            {
+                var margin = _renderInfo.LayoutInfo.UncollapsedTopMargin.Point;
+                if (margin > 0 && !Double.IsInfinity(margin) && !Double.IsInfinity(top.Point - margin))
+                    top -= XUnitPt.FromPoint(margin);
+            }
             if (_isFirstLine && _renderInfo.FormatInfo.IsStarting &&
                 _documentRenderer.TextLinkLeadingSpaceForParagraph?.Invoke(_paragraph) is double leading &&
                 leading > 0 && !Double.IsInfinity(leading) &&
@@ -1814,6 +1821,22 @@ namespace MigraDoc.Rendering
         void EndHyperlink(Hyperlink hyperlink, XUnitPt bottom)
         {
             _hyperlinkRect.Height = bottom - _hyperlinkRect.Y;
+            if (_documentRenderer.IncludeParagraphSpacingInTextLinkBounds &&
+                _isLastLine && _renderInfo.FormatInfo.IsEnding)
+            {
+                var space = _paragraph.Format.SpaceAfter.Point;
+                if (space > 0 && !Double.IsInfinity(space) &&
+                    !Double.IsInfinity(_hyperlinkRect.Height + space))
+                    _hyperlinkRect.Height += space;
+            }
+            var padding = _documentRenderer.TextLinkHorizontalPadding;
+            if (padding > 0 && !Double.IsInfinity(padding) &&
+                !Double.IsInfinity(_hyperlinkRect.X - padding) &&
+                !Double.IsInfinity(_hyperlinkRect.Width + 2 * padding))
+            {
+                _hyperlinkRect.X -= padding;
+                _hyperlinkRect.Width += 2 * padding;
+            }
             var page = _gfx.PdfPage;
             if (page != null)
             {

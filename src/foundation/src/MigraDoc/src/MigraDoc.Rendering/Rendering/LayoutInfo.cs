@@ -40,6 +40,12 @@ namespace MigraDoc.Rendering
         internal virtual XUnitPt MarginTop { get; set; }
 
         /// <summary>
+        /// Portion of paragraph top spacing remaining after collapse with the
+        /// preceding element's bottom margin, retained for annotation geometry.
+        /// </summary>
+        internal XUnitPt UncollapsedTopMargin { get; set; }
+
+        /// <summary>
         /// The space that shall be kept free right to the element’s content.
         /// </summary>
         internal XUnitPt MarginRight { get; set; }
