@@ -29,6 +29,19 @@ namespace MigraDoc.Rendering
     public class DocumentRenderer(Document document)
     {
         /// <summary>
+        /// Selects a point adjustment before a tagged text leaf during painting only.
+        /// Receives the paragraph, previous/current tags, boundary characters and base font.
+        /// Requires an adjacent nonempty text leaf or ordinary blank character, matching
+        /// font family, size, style and script mode, and a non-surrogate boundary.
+        /// Line starts are excluded. A nonzero leading-after-blank adjustment takes precedence.
+        /// Null and nonfinite values are ignored. The adjustment moves the remaining text
+        /// on the line without changing fitting or alignment widths; ink may exceed those widths.
+        /// The selector must remain stable during rendering.
+        /// </summary>
+        public Func<Paragraph, object?, object?, char, char, XFont, double?>?
+            RenderOnlyTextBoundaryKerning { get; set; }
+
+        /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank only
         /// during formatting. Painted leading adjustment still uses the tagged or legacy
         /// selector. Can change wrapping and alignment through the fitted line width.

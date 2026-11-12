@@ -1610,7 +1610,8 @@ namespace MigraDoc.Rendering
 
         void RenderWord(string word)
         {
-            _currentXPosition += GetLeadingKerningAfterBlank(word);
+            var leading = GetLeadingKerningAfterBlank(word);
+            _currentXPosition += leading != 0 ? leading : GetRenderOnlyTextBoundaryKerning(word);
             Font font = CurrentDomFont;
             XFont xFont = CurrentFont;
             if (font.Subscript || font.Superscript)
@@ -3049,6 +3050,43 @@ namespace MigraDoc.Rendering
                     : null) ??
                 _documentRenderer.LeadingKerningAfterBlank?.Invoke(_paragraph, word, CurrentFont);
             return adjustment is double value && IsFinite(value) ? value : 0;
+        }
+
+        double GetRenderOnlyTextBoundaryKerning(string word)
+        {
+            if (_phase != Phase.Rendering || word.Length == 0 ||
+                _currentXPosition <= StartXPosition + Tolerance ||
+                _documentRenderer.RenderOnlyTextBoundaryKerning is not { } callback ||
+                _currentLeaf?.GetPreviousLeaf() is not { } previous ||
+                _currentLeaf.Current is not Text { Tag: { } tag })
+                return 0;
+            var prior = previous.Current;
+            var priorChar = prior switch
+            {
+                Text { Content: { Length: > 0 } text } => text[^1],
+                Character { SymbolName: SymbolName.Blank, Count: > 0 } => ' ',
+                _ => '\0',
+            };
+            if (priorChar == '\0' || char.IsSurrogate(priorChar) || char.IsSurrogate(word[0]))
+                return 0;
+            var font = CurrentFont;
+            var domFont = CurrentDomFont;
+            var saved = _currentLeaf;
+            XFont priorFont;
+            Font priorDomFont;
+            try
+            {
+                _currentLeaf = previous;
+                priorFont = CurrentFont;
+                priorDomFont = CurrentDomFont;
+            }
+            finally { _currentLeaf = saved; }
+            if (priorFont.FontFamily.Name != font.FontFamily.Name ||
+                priorFont.Size != font.Size || priorFont.Style != font.Style ||
+                priorDomFont.Subscript != domFont.Subscript || priorDomFont.Superscript != domFont.Superscript)
+                return 0;
+            var adjustment = callback(_paragraph, (prior as Text)?.Tag, tag, priorChar, word[0], font);
+            return adjustment is { } value && IsFinite(value) ? value : 0;
         }
 
         XUnitPt GetSpaceWidth(Character character)
