@@ -602,10 +602,13 @@ namespace MigraDoc.Rendering
                         i++;
                     }
 
+                    var pairAdvances = GetTextPairAdvances(word, CurrentFont);
                     if (decimalPosIndex >= 0)
                         word = word[..decimalPosIndex];
 
                     XUnitPt wordLength = MeasureString(word, includeTrailingAdvance: false);
+                    if (decimalPosIndex >= 0 && pairAdvances != null)
+                        wordLength += pairAdvances.Take(decimalPosIndex).Sum();
                     notFitting = _currentXPosition + wordLength >= _formattingArea.X + _formattingArea.Width + Tolerance;
                     if (!notFitting)
                         return _formattingArea.X + tabStopPosition - wordLength;
@@ -1637,7 +1640,10 @@ namespace MigraDoc.Rendering
                     GetRenderOnlyTrailingGlyphKerning(word, CurrentFont);
                 var layoutScale = GetTextHorizontalScale();
                 var paintScale = GetTextPaintHorizontalScale(layoutScale);
-                if (paintScale != layoutScale)
+                var pairAdvances = GetTextPairAdvances(word, CurrentFont);
+                if (pairAdvances != null)
+                    DrawPairAdjustedString(word, xFont, pairAdvances, layoutScale, paintScale, kerning);
+                else if (paintScale != layoutScale)
                 {
                     _gfx.DrawStringWithPaintScale(word, xFont, CurrentBrush,
                         CurrentPaintXPosition, CurrentBaselinePosition, layoutScale, paintScale, kerning);
@@ -1658,6 +1664,62 @@ namespace MigraDoc.Rendering
             RealizeHyperlink(wordWidth);
             _currentXPosition += wordWidth;
             _hasTextBoundaryPredecessor |= word.Length > 0;
+        }
+
+        void DrawPairAdjustedString(string word, XFont font, double[] adjustments,
+            double layoutScale, double paintScale, double trailingKerning)
+        {
+            var glyphs = new List<(string Text, int End)>();
+            for (var index = 0; index < word.Length;)
+            {
+                var length = char.IsHighSurrogate(word[index]) ? 2 : 1;
+                glyphs.Add((word.Substring(index, length), index + length - 1));
+                index += length;
+            }
+            if (_gfx.PdfPage != null)
+            {
+                _gfx.DrawStringWithPairAdjustments(word, font, CurrentBrush!,
+                    CurrentPaintXPosition.Point, CurrentBaselinePosition.Point, layoutScale, paintScale,
+                    glyphs.Take(glyphs.Count - 1).Select(glyph => adjustments[glyph.End]).ToArray(), trailingKerning);
+            }
+            else
+            {
+                // Preview/printing graphics do not support positioned PDF glyphs.
+                var advances = new double[glyphs.Count - 1];
+                for (var index = 0; index < advances.Length; index++)
+                    advances[index] = _gfx.MeasureString(glyphs[index].Text, font, StringFormat).Width * layoutScale +
+                        adjustments[glyphs[index].End] + (index == advances.Length - 1 ? trailingKerning : 0);
+                var x = CurrentPaintXPosition;
+                for (var index = 0; index < glyphs.Count; index++)
+                {
+                    DrawScaledString(glyphs[index].Text, font, x, paintScale);
+                    if (index < advances.Length) x += advances[index];
+                }
+            }
+        }
+
+        double[]? GetTextPairAdvances(string word, XFont font)
+        {
+            if (word.Length < 2 || _currentLeaf?.Current is not Text text || text.Content != word ||
+                _documentRenderer.TextPairAdvances?.Invoke(text.Tag, word, font) is not { } selected ||
+                selected.Length != word.Length - 1 || selected.Any(value => !IsFinite(value)))
+                return null;
+            var copy = (double[])selected.Clone();
+            for (var index = 0; index < word.Length; index++)
+            {
+                if (char.IsHighSurrogate(word[index]))
+                {
+                    if (index + 1 >= word.Length || !char.IsLowSurrogate(word[index + 1])) return null;
+                    copy[index++] = 0;
+                }
+                else if (char.IsLowSurrogate(word[index])) return null;
+            }
+            var sum = copy.Sum();
+            var naturalWidth = _gfx.MeasureString(word, font, StringFormat).Width * GetTextHorizontalScale();
+            var domFont = CurrentDomFont;
+            if (domFont.Subscript || domFont.Superscript)
+                naturalWidth *= FontHandler.GetSubSuperScaling(font);
+            return IsFinite(sum) && naturalWidth + sum >= 0 && copy.Any(value => value != 0) ? copy : null;
         }
 
         double GetTextHorizontalScale()
@@ -2921,6 +2983,8 @@ namespace MigraDoc.Rendering
             if (font.Subscript || font.Superscript)
                 width *= FontHandler.GetSubSuperScaling(xFont);
 
+            if (GetTextPairAdvances(word, xFont) is { } pairAdvances)
+                width += pairAdvances.Sum();
             width += GetTrailingGlyphKerning(word, xFont);
             if (_phase == Phase.Rendering)
                 width += GetRenderOnlyTrailingGlyphKerning(word, xFont);

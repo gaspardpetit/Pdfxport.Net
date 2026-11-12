@@ -57,6 +57,20 @@ namespace MigraDoc.Rendering
             FitOnlyTextBoundaryKerning { get; set; }
 
         /// <summary>
+        /// Additional point advances between characters within a text leaf.
+        /// Return one entry per UTF-16 boundary (text.Length - 1). The boundary inside
+        /// a surrogate pair is ignored. Null, wrong-length, nonfinite, or selections
+        /// producing a negative total leaf width retain natural advances. Adjustments
+        /// are absolute points, independent of horizontal ink/layout scales and script
+        /// size; they affect fitting, alignment and painting. They do not add an outgoing
+        /// advance after the final glyph. Return stable values during preparation/painting.
+        /// PDF rendering resolves the whole run before computing natural advances;
+        /// text events must retain one glyph per original Unicode scalar.
+        /// This does not perform text shaping.
+        /// </summary>
+        public Func<object?, string, XFont, double[]?>? TextPairAdvances { get; set; }
+
+        /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank only
         /// during formatting. Painted leading adjustment still uses the tagged or legacy
         /// selector. Can change wrapping and alignment through the fitted line width.
