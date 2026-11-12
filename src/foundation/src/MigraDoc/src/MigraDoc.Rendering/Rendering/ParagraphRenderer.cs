@@ -949,11 +949,16 @@ namespace MigraDoc.Rendering
 
             // Selected blank advances are fixed boundary spacing, not stretchable
             // justification space. Reserve them independently for each flow interval.
-            var blankAdvances = _paragraph.Format.Alignment == ParagraphAlignment.Justify &&
-                _documentRenderer.TextTrailingAdvance != null
-                ? GetJustifiedBlankAdvances(lineInfo) : null;
-            if (blankAdvances != null)
+            double[]? blankAdvances = null;
+            List<double>[]? blankSelections = null;
+            _currentLineBlankAdvances = null;
+            if (_paragraph.Format.Alignment == ParagraphAlignment.Justify &&
+                _documentRenderer.TextTrailingAdvance != null)
+            {
+                blankAdvances = GetJustifiedBlankAdvances(lineInfo, out blankSelections);
                 _currentLineWordsWidth += blankAdvances[0];
+                _currentLineBlankAdvances = blankSelections[0];
+            }
 
             _tabIdx = 0;
             var segmentIndex = 0;
@@ -993,8 +998,11 @@ namespace MigraDoc.Rendering
                             transition.ClippedWidthBefore;
                     if (renderWidthAdjustments != null)
                         _currentLineWordsWidth += renderWidthAdjustments[segmentIndex];
-                    if (blankAdvances != null)
+                    if (blankAdvances != null && blankSelections != null)
+                    {
                         _currentLineWordsWidth += blankAdvances[segmentIndex];
+                        _currentLineBlankAdvances = blankSelections[segmentIndex];
+                    }
                     _currentLineBlankCount = (segmentIndex < transitions.Count
                         ? transitions[segmentIndex].BlanksBefore : lineInfo.BlankCount) -
                         transition.BlanksBefore;
@@ -1167,8 +1175,8 @@ namespace MigraDoc.Rendering
                     {
                         if (_documentRenderer.TextTrailingAdvance != null && MeasureString(" ") <= 0)
                             return 0;
-                        return (width - _currentLineWordsWidth) / _currentLineBlankCount +
-                            GetBlankTrailingAdvance();
+                        return GetJustifiedBlankDistance(
+                            (width - _currentLineWordsWidth) / _currentLineBlankCount);
                     }
                 }
                 return MeasureString(" ");
@@ -2862,10 +2870,13 @@ namespace MigraDoc.Rendering
             return width;
         }
 
-        double[] GetJustifiedBlankAdvances(LineInfo lineInfo)
+        double[] GetJustifiedBlankAdvances(LineInfo lineInfo, out List<double>[] selections)
         {
             var transitions = lineInfo.SegmentTransitions;
             var advances = new double[(transitions?.Count ?? 0) + 1];
+            selections = new List<double>[advances.Length];
+            for (var index = 0; index < selections.Length; index++)
+                selections[index] = [];
             var segment = 0;
             var afterLastTab = lineInfo.LastTab == null;
             var savedLeaf = _currentLeaf;
@@ -2886,7 +2897,11 @@ namespace MigraDoc.Rendering
                         var selected = AddTextTrailingAdvance(natural);
                         // A collapsed blank was not included in the fitted blank count.
                         if (selected > 0)
-                            advances[segment] += (selected - natural).Point;
+                        {
+                            var adjustment = (selected - natural).Point;
+                            advances[segment] += adjustment;
+                            selections[segment].Add(adjustment);
+                        }
                     }
                     if (leaf.Current == lineInfo.EndIter?.Current)
                         break;
@@ -2896,7 +2911,34 @@ namespace MigraDoc.Rendering
             {
                 _currentLeaf = savedLeaf;
             }
+            foreach (var selection in selections)
+                selection.Sort();
             return advances;
+        }
+
+        IReadOnlyList<double>? _currentLineBlankAdvances;
+
+        double GetJustifiedBlankDistance(double baseWidth)
+        {
+            var adjustment = GetBlankTrailingAdvance();
+            if (_currentLineBlankAdvances is not { Count: > 0 } advances)
+                return baseWidth + adjustment;
+            var count = advances.Count;
+            var remainingAdvance = advances.Sum();
+            var available = Math.Max(0, baseWidth * count + remainingAdvance);
+            // Equal spacing may be smaller than a mixed-font blank's natural
+            // width. Freeze any reversed gap at zero and redistribute its deficit
+            // across the remaining gaps, preserving the interval's total width.
+            foreach (var advance in advances)
+            {
+                if (baseWidth + advance >= 0)
+                    break;
+                remainingAdvance -= advance;
+                if (--count == 0)
+                    return 0;
+                baseWidth = (available - remainingAdvance) / count;
+            }
+            return Math.Max(0, baseWidth + adjustment);
         }
 
         double GetBlankTrailingAdvance()

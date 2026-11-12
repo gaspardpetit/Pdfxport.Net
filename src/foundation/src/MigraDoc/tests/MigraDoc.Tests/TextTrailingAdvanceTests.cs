@@ -310,6 +310,49 @@ public class TextTrailingAdvanceTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MixedFontJustificationDoesNotReverseBlankAdvance(bool wideFirst)
+    {
+        var document = NewDocument(out var section);
+        using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+        var font = new XFont("Arial", 12);
+        var wide = gfx.MeasureString(" ", new XFont("Arial", 72)).Width;
+        var narrow = gfx.MeasureString(" ", new XFont("Arial", 8)).Width;
+        var words = gfx.MeasureString("AlphaBravoCharlie", font).Width;
+        // The selected wide blank has one point left after its negative advance.
+        section.PageSetup.PageWidth = Unit.FromPoint(40 + words + 1 + narrow + 1);
+        var paragraph = section.AddParagraph();
+        paragraph.Format.Alignment = ParagraphAlignment.Justify;
+        var tag = new object();
+        paragraph.AddText("Alpha");
+        var firstBlank = paragraph.AddFormattedText("");
+        firstBlank.Font.Size = wideFirst ? 72 : 8;
+        firstBlank.Elements.Add(new Text(" ") { Tag = wideFirst ? tag : null });
+        paragraph.AddText("Bravo");
+        var secondBlank = paragraph.AddFormattedText("");
+        secondBlank.Font.Size = wideFirst ? 8 : 72;
+        secondBlank.Elements.Add(new Text(" ") { Tag = wideFirst ? null : tag });
+        paragraph.AddText("Charlie Delta");
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.TextTrailingAdvance = actual => ReferenceEquals(actual, tag) ? 1 - wide : null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        var positions = new List<(string Text, double X, double Y)>();
+        while (reader.MoveAndGetNext(true, out var item)) positions.Add((item!.Text, item.X, item.Y));
+        var first = positions.First(item => item.Text == "Alpha");
+        var middle = positions.First(item => item.Text == "Bravo");
+        var last = positions.First(item => item.Text == "Charlie");
+        middle.Y.Should().BeApproximately(first.Y, .001);
+        last.Y.Should().BeApproximately(first.Y, .001);
+        middle.X.Should().BeGreaterThanOrEqualTo(first.X + gfx.MeasureString("Alpha", font).Width - .001);
+        last.X.Should().BeGreaterThanOrEqualTo(middle.X + gfx.MeasureString("Bravo", font).Width - .001);
+        (last.X + gfx.MeasureString("Charlie", font).Width).Should().BeApproximately(20 + words + narrow + 2, .001);
+        positions.First(item => item.Text == "Delta").Y.Should().BeLessThan(last.Y);
+    }
+
     static double SpaceWidth()
     {
         using var gfx = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
