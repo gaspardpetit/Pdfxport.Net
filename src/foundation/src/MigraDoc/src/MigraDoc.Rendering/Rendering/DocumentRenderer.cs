@@ -80,6 +80,19 @@ namespace MigraDoc.Rendering
         public bool EmitJustifiedLineGeometry { get; set; }
 
         /// <summary>
+        /// Selects source kerning threshold metadata, in points, for a painted text
+        /// leaf by its Tag. Emits PDF comments MD-Kern &lt;value&gt; (or MD-Kern None)
+        /// and MD-Kern End around that leaf's text drawing. Zero denotes disabled
+        /// source kerning; null, negative, and nonfinite values emit None.
+        /// Values use invariant round-trip formatting. This is metadata only:
+        /// no kerning is applied and layout and drawing operations are unchanged.
+        /// Fields, generated hyphens, and ordinary blanks are not tagged.
+        /// Null by default, which emits no comments. Used only during rendering.
+        /// </summary>
+        public Func<object?, double?>? TextKerningMinimumSizePoints { get; set; }
+
+
+        /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank only
         /// during formatting. Painted leading adjustment still uses the tagged or legacy
         /// selector. Can change wrapping and alignment through the fitted line width.

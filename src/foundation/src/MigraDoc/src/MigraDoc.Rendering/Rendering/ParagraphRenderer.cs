@@ -1643,6 +1643,17 @@ namespace MigraDoc.Rendering
 
             if (CurrentBrush != null)
             {
+                var thresholdSelector = _documentRenderer.TextKerningMinimumSizePoints;
+                var taggedText = _currentLeaf?.Current as Text;
+                var emitKerningMetadata = thresholdSelector != null && taggedText?.Content == word;
+                if (emitKerningMetadata)
+                {
+                    var threshold = thresholdSelector!(taggedText!.Tag);
+                    _gfx.WriteComment(threshold is double value && !Double.IsNaN(value) &&
+                        !Double.IsInfinity(value) && value >= 0
+                            ? "MD-Kern " + value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+                            : "MD-Kern None");
+                }
                 var kerning = GetTrailingGlyphKerning(word, CurrentFont) +
                     GetRenderOnlyTrailingGlyphKerning(word, CurrentFont);
                 var layoutScale = GetTextHorizontalScale();
@@ -1665,6 +1676,8 @@ namespace MigraDoc.Rendering
                 }
                 else
                     DrawScaledString(word, xFont, CurrentPaintXPosition, paintScale);
+                if (emitKerningMetadata)
+                    _gfx.WriteComment("MD-Kern End");
             }
             XUnitPt wordWidth = MeasureString(word);
             RenderUnderline(wordWidth, true);
