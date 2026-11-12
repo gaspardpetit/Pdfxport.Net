@@ -2377,7 +2377,7 @@ namespace MigraDoc.Rendering
         FormatResult FormatWord(string word, Rectangle fittingRect)
         {
             XUnitPt wordWidth = MeasureString(word);
-            XUnitPt width = wordWidth + GetLeadingKerningAfterBlank(word);
+            XUnitPt width = GetFittingWordWidth(word, wordWidth);
             if (_phase == Phase.Formatting && word.Contains('\u00a0') &&
                 _paragraph.Format.MoveOversizedNoBreakGroupToNextLine &&
                 _currentXPosition > StartXPosition + Tolerance &&
@@ -2392,7 +2392,7 @@ namespace MigraDoc.Rendering
                            !IsBlankOrSoftHyphen(text) && !text.Content.Contains(' '))
                     {
                         _currentLeaf = next;
-                        groupWidth += MeasureString(text.Content);
+                        groupWidth += GetFittingWordWidth(text.Content, MeasureString(text.Content));
                         next = next.GetNextLeaf();
                     }
                 }
@@ -2420,7 +2420,7 @@ namespace MigraDoc.Rendering
                                !IsBlankOrSoftHyphen(text) && !text.Content.Contains(' '))
                         {
                             _currentLeaf = next;
-                            sequenceWidth += MeasureString(text.Content);
+                            sequenceWidth += GetFittingWordWidth(text.Content, MeasureString(text.Content));
                             if (hasNonbreakingSpace && !text.Content.EndsWith("\u00a0", StringComparison.Ordinal))
                                 break;
                             hasNonbreakingSpace = text.Content.Contains('\u00a0');
@@ -2458,7 +2458,7 @@ namespace MigraDoc.Rendering
                         {
                             joined = true;
                             _currentLeaf = next;
-                            joinedWidth += MeasureString(text.Content);
+                            joinedWidth += GetFittingWordWidth(text.Content, MeasureString(text.Content));
                             lastText = text.Content;
                             next = next.GetNextLeaf();
                         }
@@ -2510,7 +2510,7 @@ namespace MigraDoc.Rendering
                 try
                 {
                     _currentLeaf = nextLeaf;
-                    nextWidth = MeasureString(nextText);
+                    nextWidth = GetFittingWordWidth(nextText, MeasureString(nextText));
                     if (_currentXPosition + width + nextWidth > right)
                     {
                         allowance = GetLineEndOverhang(nextText, CurrentFont);
@@ -3077,11 +3077,21 @@ namespace MigraDoc.Rendering
             return adjustment is double value && IsFinite(value) ? value : 0;
         }
 
-        double GetRenderOnlyTextBoundaryKerning(string word)
+        XUnitPt GetFittingWordWidth(string word, XUnitPt measuredWidth)
         {
-            if (_phase != Phase.Rendering || word.Length == 0 ||
-                !_hasTextBoundaryPredecessor ||
-                _documentRenderer.RenderOnlyTextBoundaryKerning is not { } callback ||
+            var boundary = _phase == Phase.Formatting && _currentXPosition > StartXPosition + Tolerance
+                ? GetTextBoundaryKerning(word, _documentRenderer.FitOnlyTextBoundaryKerning) : 0;
+            return Math.Max(0, measuredWidth.Point + boundary) + GetLeadingKerningAfterBlank(word);
+        }
+
+        double GetRenderOnlyTextBoundaryKerning(string word)
+            => _phase == Phase.Rendering && _hasTextBoundaryPredecessor
+                ? GetTextBoundaryKerning(word, _documentRenderer.RenderOnlyTextBoundaryKerning) : 0;
+
+        double GetTextBoundaryKerning(string word,
+            Func<Paragraph, object?, object?, char, char, XFont, double?>? callback)
+        {
+            if (word.Length == 0 || callback is null ||
                 _currentLeaf?.GetPreviousLeaf() is not { } previous ||
                 _currentLeaf.Current is not Text { Tag: { } tag })
                 return 0;

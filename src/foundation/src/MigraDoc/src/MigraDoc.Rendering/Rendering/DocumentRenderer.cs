@@ -42,6 +42,21 @@ namespace MigraDoc.Rendering
             RenderOnlyTextBoundaryKerning { get; set; }
 
         /// <summary>
+        /// Selects an additional boundary adjustment in points for line fitting only.
+        /// Receives the paragraph, preceding/current tags, boundary characters and base font.
+        /// Requires a tagged current Text leaf after text or an ordinary blank, with
+        /// matching font family, size, style and script mode. Line starts, unsupported
+        /// elements and surrogate boundaries are excluded. Null/nonfinite results are
+        /// ignored. The adjusted leaf width is clamped at zero, then existing leading
+        /// kerning is added independently. Rendering and field remeasurement do not
+        /// invoke this selector; it never directly shifts painted content. Changed line
+        /// breaks and measured alignment/justification widths can affect placement.
+        /// May be invoked repeatedly during probing; return stable values while preparing.
+        /// </summary>
+        public Func<Paragraph, object?, object?, char, char, XFont, double?>?
+            FitOnlyTextBoundaryKerning { get; set; }
+
+        /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank only
         /// during formatting. Painted leading adjustment still uses the tagged or legacy
         /// selector. Can change wrapping and alignment through the fitted line width.
