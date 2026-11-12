@@ -59,6 +59,7 @@ public class RenderBoundaryKerningTests : IDisposable
 
     [Theory]
     [InlineData("start")]
+    [InlineData("startspace")]
     [InlineData("untagged")]
     [InlineData("size")]
     [InlineData("family")]
@@ -124,6 +125,40 @@ public class RenderBoundaryKerningTests : IDisposable
         selected.FollowingX.Should().BeApproximately(original.FollowingX + 2, .001);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    public void EarlierNegativeAdjustmentCannotSuppressLaterBoundary(double extra)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 12;
+        var section = document.AddSection();
+        section.PageSetup.LeftMargin = Unit.FromPoint(20);
+        var paragraph = section.AddParagraph();
+        foreach (var text in new[] { "A", "B", "C" }) paragraph.AddText(text).Tag = text;
+        using var measure = XGraphics.CreateMeasureContext(new XSize(300, 300), XGraphicsUnit.Point, XPageDirection.Downwards);
+        var shift = -measure.MeasureString("AB", new XFont("Arial", 12)).Width + extra;
+        var calls = new List<object?>();
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.RenderOnlyTextBoundaryKerning = (_, _, tag, _, _, _) =>
+        {
+            calls.Add(tag);
+            return Equals(tag, "B") ? shift : 2;
+        };
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        calls.Should().Equal("B", "C");
+        var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+        while (reader.MoveAndGetNext(true, out var item))
+            if (item!.Text == "C")
+            {
+                item.X.Should().BeApproximately(22 + extra, .001);
+                return;
+            }
+        false.Should().BeTrue("the final text leaf must be drawn");
+    }
+
     static Result Render(double? adjustment, string mode = "adjacent", bool wrap = false, double? leading = null,
         double layout = 1, ParagraphAlignment alignment = ParagraphAlignment.Left)
     {
@@ -143,9 +178,10 @@ public class RenderBoundaryKerningTests : IDisposable
         paragraph.Format.Alignment = alignment;
         var priorTag = new object();
         var currentTag = new object();
-        if (mode != "start") paragraph.AddText("Alpha").Tag = priorTag;
+        if (mode is not ("start" or "startspace")) paragraph.AddText("Alpha").Tag = priorTag;
         switch (mode)
         {
+            case "startspace": paragraph.AddText(" "); break;
             case "space": paragraph.AddText(" ").Tag = priorTag; break;
             case "character": paragraph.AddCharacter(SymbolName.Blank); break;
             case "tab": paragraph.AddTab(); break;

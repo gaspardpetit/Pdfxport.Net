@@ -849,6 +849,7 @@ namespace MigraDoc.Rendering
         /// <param name="lineInfo"></param>
         void RenderLine(LineInfo lineInfo)
         {
+            _hasTextBoundaryPredecessor = false;
             _currentYPosition += lineInfo.GapBefore;
             _currentLineRect = lineInfo.FittingRect;
             var transitions = lineInfo.SegmentTransitions;
@@ -984,6 +985,7 @@ namespace MigraDoc.Rendering
                     transitions[segmentIndex].StartIter?.Current == _currentLeaf.Current)
                 {
                     var transition = transitions[segmentIndex];
+                    _hasTextBoundaryPredecessor = false;
                     _currentXPosition = transition.Rect.X;
                     _currentLineRect = transition.Rect;
                     segmentIndex++;
@@ -1433,6 +1435,7 @@ namespace MigraDoc.Rendering
                 return;
             }
             XUnitPt width = GetSpaceWidth(character);
+            _hasTextBoundaryPredecessor |= width > 0;
             RenderUnderline(width, false);
             RealizeHyperlink(width);
             _currentXPosition += width;
@@ -1583,6 +1586,7 @@ namespace MigraDoc.Rendering
             if (!IgnoreBlank())
             {
                 XUnitPt wordDistance = CurrentWordDistance;
+                _hasTextBoundaryPredecessor |= wordDistance > 0;
                 RenderUnderline(wordDistance, false);
                 RealizeHyperlink(wordDistance);
                 _currentXPosition += wordDistance;
@@ -1643,6 +1647,7 @@ namespace MigraDoc.Rendering
             RenderUnderline(wordWidth, true);
             RealizeHyperlink(wordWidth);
             _currentXPosition += wordWidth;
+            _hasTextBoundaryPredecessor |= word.Length > 0;
         }
 
         double GetTextHorizontalScale()
@@ -3055,7 +3060,7 @@ namespace MigraDoc.Rendering
         double GetRenderOnlyTextBoundaryKerning(string word)
         {
             if (_phase != Phase.Rendering || word.Length == 0 ||
-                _currentXPosition <= StartXPosition + Tolerance ||
+                !_hasTextBoundaryPredecessor ||
                 _documentRenderer.RenderOnlyTextBoundaryKerning is not { } callback ||
                 _currentLeaf?.GetPreviousLeaf() is not { } previous ||
                 _currentLeaf.Current is not Text { Tag: { } tag })
@@ -4266,6 +4271,10 @@ namespace MigraDoc.Rendering
         XUnitPt _currentYPosition;
         XUnitPt _currentXPosition;
         ParagraphIterator? _currentLeaf;
+        // Rendering history, unaffected by signed paint-only shifts of the pen.
+        // Reset for each line and side-exclusion flow segment; ignored blanks do not set it.
+        bool _hasTextBoundaryPredecessor;
+
         ParagraphIterator? _startLeaf;
         ParagraphIterator? _endLeaf;
         bool _reMeasureLine;
