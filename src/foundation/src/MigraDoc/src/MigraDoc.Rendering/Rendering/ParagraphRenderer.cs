@@ -1620,16 +1620,23 @@ namespace MigraDoc.Rendering
             {
                 var kerning = GetTrailingGlyphKerning(word, CurrentFont) +
                     GetRenderOnlyTrailingGlyphKerning(word, CurrentFont);
-                if (kerning != 0)
+                var layoutScale = GetTextHorizontalScale();
+                var paintScale = GetTextPaintHorizontalScale(layoutScale);
+                if (paintScale != layoutScale)
+                {
+                    _gfx.DrawStringWithPaintScale(word, xFont, CurrentBrush,
+                        _currentXPosition, CurrentBaselinePosition, layoutScale, paintScale, kerning);
+                }
+                else if (kerning != 0)
                 {
                     var prefix = word[..^1];
-                    DrawScaledString(prefix, xFont, _currentXPosition);
+                    DrawScaledString(prefix, xFont, _currentXPosition, paintScale);
                     DrawScaledString(word[^1..], xFont,
                         _currentXPosition + _gfx.MeasureString(prefix, xFont, StringFormat).Width *
-                            GetTextHorizontalScale() + kerning);
+                            layoutScale + kerning, paintScale);
                 }
                 else
-                    DrawScaledString(word, xFont, _currentXPosition);
+                    DrawScaledString(word, xFont, _currentXPosition, paintScale);
             }
             XUnitPt wordWidth = MeasureString(word);
             RenderUnderline(wordWidth, true);
@@ -1644,9 +1651,18 @@ namespace MigraDoc.Rendering
             return scale is > 0 and < 10 && IsFinite(scale.Value) ? scale.Value : 1;
         }
 
-        void DrawScaledString(string text, XFont font, XUnitPt x)
+        double GetTextPaintHorizontalScale(double layoutScale)
         {
-            var scale = GetTextHorizontalScale();
+            var selected = _currentLeaf?.Current is Text text
+                ? _documentRenderer.TextPaintHorizontalScale?.Invoke(text.Tag, CurrentFont) : null;
+            // Preview and printing graphics do not have a PDF page. Retain their
+            // existing layout-scale drawing path instead of invoking the PDF-only helper.
+            return _gfx.PdfPage is not null && selected is > 0 and < 10 && IsFinite(selected.Value)
+                ? selected.Value : layoutScale;
+        }
+
+        void DrawScaledString(string text, XFont font, XUnitPt x, double scale)
+        {
             if (scale == 1)
             {
                 _gfx.DrawString(text, font, CurrentBrush!, x, CurrentBaselinePosition);

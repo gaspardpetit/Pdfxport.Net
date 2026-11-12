@@ -1,4 +1,4 @@
-// PDFsharp - A .NET library for processing PDF
+﻿// PDFsharp - A .NET library for processing PDF
 // See the LICENSE file in the solution root for more information.
 
 #define ITALIC_SIMULATION
@@ -479,8 +479,15 @@ namespace PdfSharp.Drawing.Pdf
             XRect rect, XStringFormat format, IReadOnlyList<double> advances)
             => DrawStringCore(s, font, brush, rect, format, advances);
 
+        public void DrawStringWithPaintScale(string s, XFont font, XBrush brush,
+            XRect rect, double layoutScale, double paintScale, double trailingKerning)
+            => DrawStringCore(s, font, brush, rect, XStringFormats.Default, null,
+                layoutScale: layoutScale, paintScale: paintScale, trailingKerning: trailingKerning, paintGlyphs: true);
+
         void DrawStringCore(string s, XFont font, XBrush brush, XRect rect,
-            XStringFormat format, IReadOnlyList<double>? advances)
+            XStringFormat format, IReadOnlyList<double>? advances,
+            CodePointGlyphIndexPair[]? preparedGlyphs = null,
+            double layoutScale = 1, double paintScale = 1, double trailingKerning = 0, bool paintGlyphs = false)
         {
             // #PDF-UA
             if (Owner.UAManager != null)
@@ -500,30 +507,63 @@ namespace PdfSharp.Drawing.Pdf
             //bool strikeout = (font.Style & XFontStyleEx.Strikeout) != 0;
             //bool underline = (font.Style & XFontStyleEx.Underline) != 0;
 
-            // Invoke PrepareTextEvent.
-            var args2 = new PrepareTextEventArgs(Owner, font, s);
-            Owner.RenderEvents.OnPrepareTextEvent(this, args2);
-            s = args2.Text;
-
-            //var otDescriptor = font.OpenTypeDescriptor;
-            //var ids = otDescriptor.GlyphIndicesFromCodepoints(codePoints);
-            //var codeRun = new CharacterCodeRun(ids);
-            var codePoints = font.IsSymbolFont
-                ? UnicodeHelper.SymbolCodePointsFromString(s, font.OpenTypeDescriptor)
-                : UnicodeHelper.Utf32FromString(s /*, font.AnsiEncoding*/);
             var glyphTypeface = font.GlyphTypeface;
             var otDescriptor = font.OpenTypeDescriptor;
-            var codePointsWithGlyphIndices = otDescriptor.GlyphIndicesFromCodePoints(codePoints);
-
-            // Invoke RenderTextEvent.
-            var args = new RenderTextEventArgs(Owner, font, codePointsWithGlyphIndices);
-
-            Owner.RenderEvents.OnRenderTextEvent(this, args);
-            codePointsWithGlyphIndices = args.CodePointGlyphIndexPairs;
-            if (args.ReevaluateGlyphIndices)
+            int[] codePoints;
+            CodePointGlyphIndexPair[] codePointsWithGlyphIndices;
+            if (preparedGlyphs is null)
             {
-                codePoints = args.CodePointGlyphIndexPairs.Select(pair => pair.CodePoint).ToArray();
+                // Invoke PrepareTextEvent.
+                var args2 = new PrepareTextEventArgs(Owner, font, s);
+                Owner.RenderEvents.OnPrepareTextEvent(this, args2);
+                s = args2.Text;
+
+                //var otDescriptor = font.OpenTypeDescriptor;
+                //var ids = otDescriptor.GlyphIndicesFromCodepoints(codePoints);
+                //var codeRun = new CharacterCodeRun(ids);
+                codePoints = font.IsSymbolFont
+                    ? UnicodeHelper.SymbolCodePointsFromString(s, font.OpenTypeDescriptor)
+                    : UnicodeHelper.Utf32FromString(s /*, font.AnsiEncoding*/);
                 codePointsWithGlyphIndices = otDescriptor.GlyphIndicesFromCodePoints(codePoints);
+
+                // Invoke RenderTextEvent.
+                var args = new RenderTextEventArgs(Owner, font, codePointsWithGlyphIndices);
+
+                Owner.RenderEvents.OnRenderTextEvent(this, args);
+                codePointsWithGlyphIndices = args.CodePointGlyphIndexPairs;
+                if (args.ReevaluateGlyphIndices)
+                {
+                    codePoints = args.CodePointGlyphIndexPairs.Select(pair => pair.CodePoint).ToArray();
+                    codePointsWithGlyphIndices = otDescriptor.GlyphIndicesFromCodePoints(codePoints);
+                }
+
+            }
+            else
+            {
+                codePointsWithGlyphIndices = preparedGlyphs;
+                codePoints = preparedGlyphs.Select(pair => pair.CodePoint).ToArray();
+            }
+
+            if (paintGlyphs)
+            {
+                // Resolve the complete run once before positioning its final glyphs.
+                // Re-enter with prepared glyphs so substitutions are never applied twice.
+                for (int index = 0; index < codePointsWithGlyphIndices.Length; index++)
+                {
+                    var glyph = codePointsWithGlyphIndices[index];
+                    if (index == codePointsWithGlyphIndices.Length - 1)
+                        x += trailingKerning;
+                    var state = Gfx.Save();
+                    try
+                    {
+                        Gfx.TranslateTransform(x, 0);
+                        Gfx.ScaleTransform(paintScale, 1);
+                        DrawStringCore(s, font, brush, new XRect(0, y, 0, 0), format, null, [glyph]);
+                    }
+                    finally { Gfx.Restore(state); }
+                    x += FontHelper.MeasureString([glyph], font).Width * layoutScale;
+                }
+                return;
             }
 
             // Decide text encoding.
@@ -548,6 +588,15 @@ namespace PdfSharp.Drawing.Pdf
                     fontType = font.FontTypeFromUnicodeFlag;
                     isAnsi = fontType == FontType.TrueTypeWinAnsi;
                 }
+            }
+
+            // Honor glyph-index-only replacements even when their code points are ANSI.
+            if (isAnsi && preparedGlyphs is not null && preparedGlyphs.Any(pair =>
+                pair.CodePoint > char.MaxValue ||
+                pair.GlyphIndex != otDescriptor.BmpCodepointToGlyphIndex((char)pair.CodePoint)))
+            {
+                isAnsi = false;
+                fontType = FontType.Type0Unicode;
             }
 
             string? positionedText = null;

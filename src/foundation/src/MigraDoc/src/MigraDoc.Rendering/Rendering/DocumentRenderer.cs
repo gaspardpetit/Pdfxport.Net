@@ -59,6 +59,19 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Func<object?, double?>? TextHorizontalScale { get; set; }
 
+        /// <summary>
+        /// Selects a paint-only horizontal glyph scale by text tag and resolved base
+        /// font. Glyph origins, text advances, line fitting and decoration/link bounds
+        /// continue to use TextHorizontalScale. Ink may extend beyond those bounds.
+        /// This is an absolute scale, not a multiplier on TextHorizontalScale.
+        /// Null, nonfinite values and values outside (0, 10) use the layout scale.
+        /// Graphics targets without a PDF page (including preview and printing) use the layout scale.
+        /// When the scales differ, resolved glyphs are painted separately using
+        /// their layout origins. The selector must remain stable during rendering.
+        /// </summary>
+        public Func<object?, XFont, double?>? TextPaintHorizontalScale { get; set; }
+
+
 
 
         /// <summary>
