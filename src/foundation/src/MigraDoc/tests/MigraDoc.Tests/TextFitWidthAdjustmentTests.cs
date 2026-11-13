@@ -198,6 +198,32 @@ public class TextFitWidthAdjustmentTests : IDisposable
             .Should().BeApproximately(140, .001);
     }
 
+    [Theory]
+    [InlineData(ParagraphAlignment.Right, false, false)]
+    [InlineData(ParagraphAlignment.Center, false, false)]
+    [InlineData(ParagraphAlignment.Justify, false, false)]
+    [InlineData(ParagraphAlignment.Right, true, false)]
+    [InlineData(ParagraphAlignment.Center, true, false)]
+    [InlineData(ParagraphAlignment.Justify, true, false)]
+    [InlineData(ParagraphAlignment.Right, false, true)]
+    [InlineData(ParagraphAlignment.Center, false, true)]
+    [InlineData(ParagraphAlignment.Justify, false, true)]
+    [InlineData(ParagraphAlignment.Right, true, true)]
+    [InlineData(ParagraphAlignment.Center, true, true)]
+    [InlineData(ParagraphAlignment.Justify, true, true)]
+    public void RemeasurementUsesStoredSoftHyphenVisibility(
+        ParagraphAlignment alignment, bool terminal, bool adjusted)
+    {
+        var width = Width(terminal ? "1 Alpha Bra-" : "1 Alpha Bravo") + 1;
+        Func<object?, string, XFont, double?>? adjust = adjusted ? (_, _, _) => -.2 : null;
+        var field = Render(width, pageField: true, softHyphen: true,
+            suffix: " Delta", alignment: alignment, adjust: adjust);
+        var literal = Render(width, pageField: false, softHyphen: true,
+            suffix: " Delta", alignment: alignment, adjust: adjust);
+        field.Any(w => w.Text == "-").Should().Be(terminal);
+        field.Should().Equal(literal);
+    }
+
     [Fact]
     public void DefaultIsDisabled() =>
         new DocumentRenderer(new Document()).TextFitWidthAdjustment.Should().BeNull();

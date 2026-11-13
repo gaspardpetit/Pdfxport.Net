@@ -3742,6 +3742,19 @@ namespace MigraDoc.Rendering
             if (_currentLeaf is null || _startLeaf is null)
                 NRT.ThrowOnNull();
 
+            if (_phase == Phase.Rendering)
+            {
+                // A stored line decides whether the discretionary hyphen is visible.
+                // Do not probe the next word: it may belong to the following line.
+                if (ReferenceEquals(_currentLeaf.Current, _endLeaf?.Current) && !IgnoreHorizontalGrowth)
+                {
+                    var visibleHyphenWidth = MeasureString("-");
+                    _currentWordsWidth += visibleHyphenWidth;
+                    _currentLineWidth += visibleHyphenWidth;
+                }
+                return FormatResult.Continue;
+            }
+
             if (_currentLeaf.Current == _startLeaf.Current)
                 return FormatResult.Continue;
 
