@@ -26,20 +26,25 @@ public class FlowAnchorPaginationTests : IDisposable
     [Theory]
     [InlineData(RelativeVertical.Page)]
     [InlineData(RelativeVertical.Margin)]
+    [InlineData(RelativeVertical.Paragraph)]
     public void FirstBreakUsesRemainingFlowIncludingPreviousAfterSpace(RelativeVertical reference)
     {
         var result = Render(true, reference: reference);
         result.PageLines.Should().Equal(Enumerable.Repeat(1, 14).Concat(Enumerable.Repeat(2, 16)));
-        result.FirstFrameY.Should().BeApproximately(reference == RelativeVertical.Page ? 80 : 100, 0.001);
+        result.FirstFrameY.Should().BeApproximately(reference == RelativeVertical.Page ? 80 : reference == RelativeVertical.Margin ? 100 : 140, 0.001);
         result.ContinuationFrameY.Should().BeApproximately(reference == RelativeVertical.Page ? 0 : 20, 0.001);
         result.Pages.Should().Be(2);
     }
 
-    [Fact]
-    public void VisualTopDoesNotChangeOptedInBreaks()
+    [Theory]
+    [InlineData(RelativeVertical.Page, false)]
+    [InlineData(RelativeVertical.Margin, false)]
+    [InlineData(RelativeVertical.Paragraph, false)]
+    [InlineData(RelativeVertical.Paragraph, true)]
+    public void VisualTopDoesNotChangeOptedInBreaks(RelativeVertical reference, bool previousTop)
     {
-        var low = Render(true, top: 80);
-        var high = Render(true, top: 20);
+        var low = Render(true, top: 80, reference: reference, previousTop: previousTop);
+        var high = Render(true, top: 20, reference: reference, previousTop: previousTop);
         low.PageLines.Should().Equal(high.PageLines);
         (low.FirstFrameY - high.FirstFrameY).Should().BeApproximately(60, 0.001);
         low.ContinuationFrameY.Should().Be(high.ContinuationFrameY);
@@ -73,6 +78,27 @@ public class FlowAnchorPaginationTests : IDisposable
     public void NonpaginatedFramesIgnoreTheOption()
         => Render(true, paginate: false).Should().BeEquivalentTo(Render(false, paginate: false));
 
+    [Fact]
+    public void PreviousParagraphTopPlacementDoesNotReplaceTheFlowCapacity()
+    {
+        var result = Render(true, reference: RelativeVertical.Paragraph, previousTop: true);
+        result.PageLines.Count(page => page == 1).Should().Be(14);
+        result.FirstFrameY.Should().BeApproximately(100, 0.001);
+    }
+
+    [Theory]
+    [InlineData(RelativeVertical.Page, false)]
+    [InlineData(RelativeVertical.Margin, false)]
+    [InlineData(RelativeVertical.Paragraph, false)]
+    [InlineData(RelativeVertical.Paragraph, true)]
+    public void KeepProbePreservesTheFlowCapacityAndPlacement(RelativeVertical reference, bool previousTop)
+    {
+        var ordinary = Render(true, reference: reference, previousTop: previousTop);
+        var kept = Render(true, reference: reference, previousTop: previousTop, keep: true);
+        kept.Should().BeEquivalentTo(ordinary);
+        kept.PageLines.Count(page => page == 1).Should().Be(14);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(false)]
@@ -93,7 +119,7 @@ public class FlowAnchorPaginationTests : IDisposable
 
     record Result(List<int> PageLines, double FirstFrameY, double? ContinuationFrameY, int Pages);
     static Result Render(bool enabled, RelativeVertical reference = RelativeVertical.Margin,
-        double top = 80, double lead = 40, double after = 20, int lines = 30, bool paginate = true)
+        double top = 80, double lead = 40, double after = 20, int lines = 30, bool paginate = true, bool previousTop = false, bool keep = false)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -108,11 +134,13 @@ public class FlowAnchorPaginationTests : IDisposable
         var previous = section.AddParagraph("Before");
         previous.Format.LineSpacing = Unit.FromPoint(lead);
         previous.Format.SpaceAfter = Unit.FromPoint(after);
+        previous.Format.KeepWithNext = keep;
         var frame = section.AddTextFrame();
         frame.Width = Unit.FromPoint(180);
         frame.RelativeVertical = reference;
         frame.Top = Unit.FromPoint(top);
         frame.WrapFormat.Style = WrapStyle.TopBottom;
+        frame.WrapFormat.PositionFromPreviousParagraphTop = previousTop;
         frame.PaginateContent = paginate;
         frame.PaginateFromFlowAnchor = enabled;
         frame.MarginTop = frame.MarginBottom = Unit.FromPoint(0);

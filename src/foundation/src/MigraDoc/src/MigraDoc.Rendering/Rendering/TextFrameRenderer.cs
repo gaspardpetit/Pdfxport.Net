@@ -28,6 +28,9 @@ namespace MigraDoc.Rendering
             _textFrame = (TextFrame)renderInfo.DocumentObject;
         }
 
+        // Set by the formatter before any visual anchor adjustment.
+        internal XUnitPt? FlowAnchorHeight { get; set; }
+
         internal override void Format(Area area, FormatInfo? previousFormatInfo)
         {
             var paginate = _textFrame.PaginateContent;
@@ -41,7 +44,7 @@ namespace MigraDoc.Rendering
                 if (paginate)
                 {
                     firstHeight = XUnitPt.FromPoint(Math.Max(1, _textFrame.PaginateFromFlowAnchor
-                        ? area.Height.Point
+                        ? (FlowAnchorHeight ?? area.Height).Point
                         : MaxElementHeight.Point - _textFrame.Top.Position.Point));
                     continuationHeight = MaxElementHeight;
                 }
