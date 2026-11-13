@@ -435,9 +435,11 @@ namespace MigraDoc.Rendering
             else
                 targetY = (float_)(innerRect.Y + cell.Row.TopPadding.Point);
 
-            formattedCell.SetRenderedContentOrigin(_documentRenderer.CurrentRenderPage > 0
+            var contentTransform = _gfx.Transform;
+            contentTransform.TranslatePrepend(targetX.Point, targetY.Point);
+            formattedCell.SetRenderedContentTransform(_documentRenderer.CurrentRenderPage > 0
                     ? _documentRenderer.CurrentRenderPage : _fieldInfos?.PhysicalPageNr ?? 0,
-                new XPoint(targetX.Point, targetY.Point));
+                contentTransform);
             RenderByInfos(targetX, targetY, renderInfos);
         }
 
