@@ -633,6 +633,14 @@ namespace MigraDoc.Rendering
             AdditionalTopBottomWrapBands { get; set; }
 
         /// <summary>
+        /// When true, restarts positive collapsed paragraph spacing after any
+        /// top-and-bottom exclusion band it intersects. Applies to following
+        /// body paragraphs, including keep-with-next lookahead. Side wrapping
+        /// and spacing at a fresh page are unchanged. False by default.
+        /// </summary>
+        public bool RestartParagraphSpacingAfterTopBottomBands { get; set; }
+
+        /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.
         /// </summary>

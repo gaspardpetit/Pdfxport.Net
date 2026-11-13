@@ -149,6 +149,24 @@ namespace MigraDoc.Rendering
             return null;
         }
 
+        internal XUnitPt RestartSpacingAfterTopBottomBands(XUnitPt start, XUnitPt spacing)
+        {
+            var origin = start;
+            // Each advance passes at least one endpoint. Recheck the complete
+            // spacing interval so disjoint bands and input order give the same result.
+            while (true)
+            {
+                var next = origin;
+                foreach (var exclusion in _exclusions)
+                    if (exclusion.Style == WrapStyle.TopBottom &&
+                        origin < exclusion.Bottom && exclusion.Top < origin + spacing)
+                        next = Math.Max(next, exclusion.Bottom);
+                if (next == origin)
+                    return origin - start + spacing;
+                origin = next;
+            }
+        }
+
         internal override Area Unite(Area area)
             => new SideExclusionArea(_area.Unite(area), _exclusions);
 
