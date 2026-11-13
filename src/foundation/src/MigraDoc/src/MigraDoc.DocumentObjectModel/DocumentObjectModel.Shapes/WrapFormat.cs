@@ -72,6 +72,19 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Positions a paragraph-relative shape from the preceding paragraph's top,
+        /// before its uncollapsed before-spacing, plus this shape's Top offset.
+        /// Consecutive opted-in nonflowing shapes share that paragraph as their origin.
+        /// Only paragraphs in the current layout area can supply an origin; otherwise
+        /// ordinary placement applies. False by default.
+        /// </summary>
+        public bool PositionFromPreviousParagraphTop
+        {
+            get => Values.PositionFromPreviousParagraphTop ?? false;
+            set => Values.PositionFromPreviousParagraphTop = value;
+        }
+
+        /// <summary>
         /// Gets or sets the distance between the top side of the shape with the adjacent text.
         /// </summary>
         public Unit DistanceTop
@@ -126,6 +139,9 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             if (Values.ConsumePreviousParagraphSpacing is not null)
                 serializer.WriteSimpleAttribute("ConsumePreviousParagraphSpacing",
                     ConsumePreviousParagraphSpacing);
+            if (Values.PositionFromPreviousParagraphTop is not null)
+                serializer.WriteSimpleAttribute("PositionFromPreviousParagraphTop",
+                    PositionFromPreviousParagraphTop);
             //if (Values.DistanceTop is not null)
             if (!Values.DistanceTop.IsValueNullOrEmpty())
                 serializer.WriteSimpleAttribute("DistanceTop", DistanceTop);
@@ -177,6 +193,9 @@ namespace MigraDoc.DocumentObjectModel.Shapes
 
             /// <summary>Gets or sets whether a positioned shape clears pending preceding spacing.</summary>
             public bool? ConsumePreviousParagraphSpacing { get; set; }
+
+            /// <summary>Gets or sets whether placement starts at the preceding paragraph's top.</summary>
+            public bool? PositionFromPreviousParagraphTop { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
