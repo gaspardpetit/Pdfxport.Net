@@ -126,6 +126,7 @@ namespace MigraDoc.Rendering
                         if (anchorIndex >= 0 && renderInfos[anchorIndex].DocumentObject is Paragraph)
                             distance = GetParagraphAnchorPosition(shape, renderInfos[anchorIndex].LayoutInfo) - area.Y;
                     }
+                    distance = GetParagraphSpacingDistance(docObj, area, distance);
                     formatArea = area.Lower(distance);
                     // A nonflowing shape may paint above the body cursor. Keep
                     // following flow at the paragraph end instead of rewinding it.
@@ -399,6 +400,15 @@ namespace MigraDoc.Rendering
             return MarginMax(previousMarginBottom, layoutInfo.MarginTop);
         }
 
+        XUnitPt GetParagraphSpacingDistance(DocumentObject element, Area area, XUnitPt distance)
+        {
+            if (_documentRenderer.RestartParagraphSpacingAfterTopBottomBands &&
+                _areaProvider is FormattedDocument && element is Paragraph &&
+                area is SideExclusionArea exclusions && distance > 0)
+                return exclusions.RestartSpacingAfterTopBottomBands(area.Y, distance);
+            return distance;
+        }
+
         static XUnitPt GetParagraphAnchorPosition(Shape shape, LayoutInfo paragraphLayout)
             => paragraphLayout.ContentArea.Y - paragraphLayout.UncollapsedTopMargin + shape.Top.Position.Point;
 
@@ -439,6 +449,7 @@ namespace MigraDoc.Rendering
                 elementDistance = useParagraphOrigin
                     ? GetParagraphAnchorPosition((Shape)obj, previousInfo.LayoutInfo) - area.Y
                     : GetElementDistance(obj, initialLayoutInfo, elementDistance);
+                elementDistance = GetParagraphSpacingDistance(obj, area, elementDistance);
                 area = area.Lower(elementDistance);
 
                 // Nonflowing anchors can paint beyond the body boundary without
