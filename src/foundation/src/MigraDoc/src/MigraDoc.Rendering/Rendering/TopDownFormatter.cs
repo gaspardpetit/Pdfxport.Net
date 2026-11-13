@@ -74,6 +74,7 @@ namespace MigraDoc.Rendering
                     }
                 }
 
+                var flowAnchorHeight = area.Height - prevBottomMargin;
                 var renderer = Renderer.Create(gfx, _documentRenderer, docObj, _areaProvider.AreaFieldInfos);
                 if (renderer != null) // "Slightly hacked" for legends: see below.
                     renderer.MaxElementHeight = maxHeight;
@@ -135,6 +136,7 @@ namespace MigraDoc.Rendering
                     else
                         area = formatArea;
                 }
+                SetFlowAnchorHeight(renderer, flowAnchorHeight);
                 renderer.Format(formatArea, prevFormatInfo);
                 renderer.RenderInfo.LayoutInfo.UncollapsedTopMargin = uncollapsedTopMargin;
                 _areaProvider.PositionHorizontally(renderer.RenderInfo.LayoutInfo);
@@ -159,6 +161,7 @@ namespace MigraDoc.Rendering
                         prevRenderInfo.RemoveEnding(combinedHeight <= area.Height + Renderer.Tolerance);
                         renderer = Renderer.Create(gfx, _documentRenderer, docObj, _areaProvider.AreaFieldInfos);
                         renderer!.MaxElementHeight = maxHeight;
+                        SetFlowAnchorHeight(renderer, flowAnchorHeight);
                         renderer.Format(area, prevRenderInfo.FormatInfo);
                     }
                     else if (NeedsEndingOnNextArea(idx, renderer, area, isFirstOnPage))
@@ -212,6 +215,7 @@ namespace MigraDoc.Rendering
 
                         renderer = Renderer.Create(gfx, _documentRenderer, docObj, _areaProvider.AreaFieldInfos);
                         renderer!.MaxElementHeight = maxHeight;
+                        SetFlowAnchorHeight(renderer, flowAnchorHeight);
                         renderer.Format(area, prevFormatInfo);
                         prevFormatInfo = null;
 
@@ -398,6 +402,12 @@ namespace MigraDoc.Rendering
         static XUnitPt GetParagraphAnchorPosition(Shape shape, LayoutInfo paragraphLayout)
             => paragraphLayout.ContentArea.Y - paragraphLayout.UncollapsedTopMargin + shape.Top.Position.Point;
 
+        static void SetFlowAnchorHeight(Renderer renderer, XUnitPt height)
+        {
+            if (renderer is TextFrameRenderer frameRenderer)
+                frameRenderer.FlowAnchorHeight = height;
+        }
+
         bool NextElementsDoNotFit(int idx, Area remainingArea, XUnitPt previousMarginBottom, RenderInfo previousInfo)
         {
             XUnitPt elementDistance = previousMarginBottom;
@@ -410,6 +420,7 @@ namespace MigraDoc.Rendering
 
                 var obj = _elements[index];
                 var currRenderer = Renderer.Create(_gfx!, _documentRenderer, obj, _areaProvider.AreaFieldInfos);
+                SetFlowAnchorHeight(currRenderer!, area.Height - elementDistance);
                 var initialLayoutInfo = currRenderer!.InitialLayoutInfo;
                 // Positioned shapes end this keep-with-next probe. If they consume
                 // preceding spacing, do not reject the pair using that spacing

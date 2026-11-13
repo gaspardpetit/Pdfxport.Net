@@ -211,6 +211,19 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Chooses the first content break from the remaining body-flow height,
+        /// including preceding paragraph after-space, rather than from this frame's
+        /// visual Top offset. Requires PaginateContent. Visual placement is unchanged;
+        /// content can paint beyond the body bottom. Continuations use full body height.
+        /// False by default.
+        /// </summary>
+        public bool PaginateFromFlowAnchor
+        {
+            get => Values.PaginateFromFlowAnchor ?? false;
+            set => Values.PaginateFromFlowAnchor = value;
+        }
+
+        /// <summary>
         /// Gets or sets whether content is vertically centered within the frame's fixed height.
         /// </summary>
         public bool CenterContentVertically
@@ -273,6 +286,8 @@ namespace MigraDoc.DocumentObjectModel.Shapes
                 serializer.WriteSimpleAttribute("ClipContent", ClipContent);
             if (Values.PaginateContent is not null)
                 serializer.WriteSimpleAttribute("PaginateContent", PaginateContent);
+            if (Values.PaginateFromFlowAnchor is not null)
+                serializer.WriteSimpleAttribute("PaginateFromFlowAnchor", PaginateFromFlowAnchor);
             if (Values.CenterContentVertically is not null)
                 serializer.WriteSimpleAttribute("CenterContentVertically", CenterContentVertically);
             serializer.EndAttributes(pos);
@@ -351,6 +366,9 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             /// Gets or sets whether frame content can continue on later pages.
             /// </summary>
             public bool? PaginateContent { get; set; }
+
+            /// <summary>Gets or sets whether pagination starts from remaining flow height.</summary>
+            public bool? PaginateFromFlowAnchor { get; set; }
 
             /// <summary>
             /// Gets or sets whether frame content is vertically centered.
