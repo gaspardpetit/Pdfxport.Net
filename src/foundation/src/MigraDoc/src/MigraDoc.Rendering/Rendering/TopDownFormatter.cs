@@ -135,6 +135,13 @@ namespace MigraDoc.Rendering
                     else
                         area = formatArea;
                 }
+                // Positioned frames retain their visual anchor, but their first
+                // content break can follow body flow after preceding after-space.
+                if (prevFormatInfo == null &&
+                    docObj is TextFrame { PaginateContent: true, PaginateFromFlowAnchor: true } &&
+                    renderer.InitialLayoutInfo.VerticalReference != VerticalReference.PreviousElement &&
+                    prevBottomMargin > 0)
+                    formatArea = formatArea.Lower(prevBottomMargin);
                 renderer.Format(formatArea, prevFormatInfo);
                 renderer.RenderInfo.LayoutInfo.UncollapsedTopMargin = uncollapsedTopMargin;
                 _areaProvider.PositionHorizontally(renderer.RenderInfo.LayoutInfo);

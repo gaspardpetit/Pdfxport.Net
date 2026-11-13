@@ -40,7 +40,9 @@ namespace MigraDoc.Rendering
                 XUnitPt? continuationHeight = null;
                 if (paginate)
                 {
-                    firstHeight = XUnitPt.FromPoint(Math.Max(1, MaxElementHeight.Point - _textFrame.Top.Position.Point));
+                    firstHeight = XUnitPt.FromPoint(Math.Max(1, _textFrame.PaginateFromFlowAnchor
+                        ? area.Height.Point
+                        : MaxElementHeight.Point - _textFrame.Top.Position.Point));
                     continuationHeight = MaxElementHeight;
                 }
                 formattedTextFrame = new FormattedTextFrame(_textFrame, _documentRenderer, _fieldInfos,
