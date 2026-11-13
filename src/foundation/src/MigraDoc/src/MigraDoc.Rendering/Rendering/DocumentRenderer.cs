@@ -537,6 +537,18 @@ namespace MigraDoc.Rendering
             JustifiedTerminalWordOverrunLimitForParagraph { get; set; }
 
         /// <summary>
+        /// Optionally adjusts a nonblank text leaf's width, in points, for line
+        /// fitting only. Receives the paragraph, text tag, fragment and effective font.
+        /// The signed adjustment accumulates within a line's fitting interval;
+        /// tabs and side-exclusion transitions establish a new interval.
+        /// Measured widths, painting and justification retain their normal advances.
+        /// Null, nonfinite results, or results producing a nonpositive/nonfinite
+        /// width are ignored. Must remain stable during preparation; may be called
+        /// repeatedly during lookahead and probing. Null by default.
+        /// </summary>
+        public Func<Paragraph, object?, string, XFont, double?>? TextFitWidthAdjustment { get; set; }
+
+        /// <summary>
         /// Optionally caps justified-space contraction by a fraction of the complete
         /// candidate word's layout advance plus its immediately preceding ordinary
         /// text blank's advance (including that blank's formatting and spacing).
