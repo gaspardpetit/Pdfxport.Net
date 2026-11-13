@@ -2861,17 +2861,50 @@ namespace MigraDoc.Rendering
             return Math.Min(allowance.Point, minimum * count);
         }
 
+        ParagraphIterator? CurrentContractionIntervalStart => _currentSegmentTransitions.Count > 0
+            ? _currentSegmentTransitions[^1].StartIter : _startLeaf;
+
+        int CountEligibleContractionBlanks()
+        {
+            var original = _currentLeaf;
+            var start = CurrentContractionIntervalStart;
+            if (ReferenceEquals(original?.Current, start?.Current))
+                return 0;
+            var count = 0;
+            try
+            {
+                for (var leaf = original?.GetPreviousLeaf(); leaf != null; leaf = leaf.GetPreviousLeaf())
+                {
+                    if (IsTab(leaf.Current))
+                        break;
+                    _currentLeaf = leaf;
+                    if (IsBlank(leaf.Current) && !IgnoreBlank() && MeasureString(" ") > 0)
+                        count++;
+                    if (ReferenceEquals(leaf.Current, start?.Current))
+                        break;
+                }
+            }
+            finally
+            {
+                _currentLeaf = original;
+            }
+            return count;
+        }
+
         XUnitPt CapWordContraction(XUnitPt allowance, XUnitPt fragmentWidth)
         {
             if (allowance <= 0 ||
                 (_documentRenderer.JustifiedTerminalWordOverrunLimitForParagraph == null &&
-                 _documentRenderer.JustifiedNonterminalWordOverrunLimitForParagraph == null))
+                 _documentRenderer.JustifiedNonterminalWordOverrunLimitForParagraph == null &&
+                 _documentRenderer.JustifiedWordAndSpaceOverrunFractionForParagraph == null &&
+                 _documentRenderer.JustifiedWordAndSpaceOverrunFractionForLine == null))
                 return allowance;
 
             var original = _currentLeaf;
             var first = original;
             var wordWidth = fragmentWidth;
             var following = original?.GetNextLeaf();
+            var adjacentSpaceWidth = XUnitPt.Zero;
             var spaceWidth = MeasureString(" ", includeTrailingAdvance: false);
             try
             {
@@ -2894,10 +2927,40 @@ namespace MigraDoc.Rendering
                         leaf = following;
                     }
                 }
+                if ((_documentRenderer.JustifiedWordAndSpaceOverrunFractionForParagraph != null ||
+                     _documentRenderer.JustifiedWordAndSpaceOverrunFractionForLine != null) &&
+                    !ReferenceEquals(first?.Current, CurrentContractionIntervalStart?.Current))
+                {
+                    for (var preceding = first?.GetPreviousLeaf(); preceding != null;
+                         preceding = preceding.GetPreviousLeaf())
+                    {
+                        if (preceding.Current is BookmarkField || preceding.Current is Text { Content: "" })
+                            continue;
+                        if (!IsBlank(preceding.Current))
+                            break;
+                        _currentLeaf = preceding;
+                        if (!IgnoreBlank())
+                        {
+                            adjacentSpaceWidth = MeasureString(" ");
+                            break;
+                        }
+                        if (ReferenceEquals(preceding.Current, CurrentContractionIntervalStart?.Current))
+                            break;
+                    }
+                }
             }
             finally
             {
                 _currentLeaf = original;
+            }
+            var fraction = _documentRenderer.JustifiedWordAndSpaceOverrunFractionForLine?
+                .Invoke(_paragraph, CountEligibleContractionBlanks()) ??
+                _documentRenderer.JustifiedWordAndSpaceOverrunFractionForParagraph?.Invoke(_paragraph);
+            if (fraction is > 0 and < 1)
+            {
+                var wordAndSpaceCap = (wordWidth.Point + adjacentSpaceWidth.Point) * fraction.Value;
+                if (IsFinite(wordAndSpaceCap) && wordAndSpaceCap >= 0)
+                    return Math.Min(allowance, XUnitPt.FromPoint(wordAndSpaceCap));
             }
             var limit = SkipContractionPolicyLeaves(following) == null
                 ? _documentRenderer.JustifiedTerminalWordOverrunLimitForParagraph?.Invoke(_paragraph)
