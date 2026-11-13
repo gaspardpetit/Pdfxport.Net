@@ -138,9 +138,11 @@ namespace MigraDoc.Rendering
 
         internal XUnitPt? GetNextFreeY(XUnitPt yPosition, XUnitPt height)
         {
+            // A candidate may intersect a later band when the intervening gap
+            // is too short. Search all subsequent endpoints in order, not just
+            // the endpoints of exclusions intersecting the original line.
             foreach (var bottom in _exclusions
-                .Where(exclusion => yPosition < exclusion.Bottom &&
-                    yPosition + height > exclusion.Top)
+                .Where(exclusion => yPosition < exclusion.Bottom)
                 .Select(exclusion => exclusion.Bottom).Distinct().OrderBy(value => value))
                 if (GetIntervals(bottom, height).Any(interval => interval.Width > 0))
                     return bottom;

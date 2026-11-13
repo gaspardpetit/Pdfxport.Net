@@ -108,6 +108,53 @@ public class AdditionalTopBottomWrapBandsTests : IDisposable
         Render(new[] { (500.0, 10.0) }).Lines.Should().Equal(Render(null, reference: true).Lines);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ShortGapBeforeAdditionalBandDoesNotForceANewPage(bool frame)
+    {
+        // Ordinary band: Y=20..30. Additional band: Y=35..45.
+        // The 5-point gap cannot hold a 10-point line, but Y=45 can.
+        var result = Render(new[] { (15.0, 10.0) }, frame: frame, lineCount: 4);
+        result.Pages.Should().Be(1);
+        result.Lines.Should().OnlyContain(line => line.Page == 0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SearchTraversesAChainOfShortGapsInEitherOrder(bool reverse)
+    {
+        var bands = new[] { (15.0, 10.0), (30.0, 10.0), (45.0, 10.0) };
+        if (reverse) Array.Reverse(bands);
+        var result = Render(bands, lineCount: 4);
+        result.Pages.Should().Be(1);
+        result.Lines.Should().OnlyContain(line => line.Page == 0);
+    }
+
+    [Fact]
+    public void ShortGapMatchesOneContinuousExclusionEndingAtTheSamePosition()
+    {
+        Render(new[] { (15.0, 10.0) }, lineCount: 4).Lines
+            .Should().Equal(Render(null, shapeHeight: 25, lineCount: 4).Lines);
+    }
+
+    [Fact]
+    public void GapThatFitsALineUsesTheEarlierPosition()
+    {
+        var result = Render(new[] { (20.0, 10.0) }, lineCount: 4);
+        result.Lines[0].Should().Be(Render(null, lineCount: 4).Lines[0]);
+        result.Pages.Should().Be(1);
+    }
+
+    [Fact]
+    public void BlockingBandsThatReachThePageBottomStillRequireANewPage()
+    {
+        var result = Render(new[] { (15.0, 260.0) }, lineCount: 4);
+        result.Pages.Should().Be(2);
+        result.Lines.Should().OnlyContain(line => line.Page == 1);
+    }
+
     [Fact]
     public void DisabledByDefault() =>
         new DocumentRenderer(new Document()).AdditionalTopBottomWrapBands.Should().BeNull();
@@ -116,7 +163,7 @@ public class AdditionalTopBottomWrapBandsTests : IDisposable
     record Result(List<Line> Lines, int Pages, int Calls);
     static Result Render(IReadOnlyList<(double Top, double Height)>? bands, bool reference = false,
         bool frame = false, double shapeTop = 0, double distance = 0,
-        WrapStyle style = WrapStyle.TopBottom, bool exclude = true)
+        WrapStyle style = WrapStyle.TopBottom, bool exclude = true, int lineCount = 36, double shapeHeight = 10)
     {
         var doc = new Document();
         doc.Styles.Normal.Font.Name = "Arial";
@@ -141,13 +188,13 @@ public class AdditionalTopBottomWrapBandsTests : IDisposable
             shape.WrapFormat.DistanceTop = shape.WrapFormat.DistanceBottom = Unit.FromPoint(clearance);
             return shape;
         }
-        var original = AddShape(shapeTop, 10, frame, distance);
+        var original = AddShape(shapeTop, shapeHeight, frame, distance);
         if (reference && bands != null)
             foreach (var (top, height) in bands) AddShape(shapeTop + distance + top, height, false, 0);
         var paragraph = section.AddParagraph();
         paragraph.Format.LineSpacingRule = LineSpacingRule.Exactly;
         paragraph.Format.LineSpacing = Unit.FromPoint(10);
-        for (var index = 0; index < 36; index++)
+        for (var index = 0; index < lineCount; index++)
         {
             if (index > 0) paragraph.AddLineBreak();
             paragraph.AddText($"Line{index:D2}");
@@ -171,7 +218,7 @@ public class AdditionalTopBottomWrapBandsTests : IDisposable
                 if (text!.Text.StartsWith("Line", StringComparison.Ordinal))
                     lines.Add(new Line(page, text.Text, text.X, pdf.Pages[page].Height.Point - text.Y));
         }
-        lines.Count.Should().Be(36);
+        lines.Count.Should().Be(lineCount);
         return new Result(lines, pdf.PageCount, calls);
     }
 }
