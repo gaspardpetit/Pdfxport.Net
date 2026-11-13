@@ -155,6 +155,49 @@ public class TextFitWidthAdjustmentTests : IDisposable
         ordinary.Single(w => w.Text == "Alpha").X.Should().BeGreaterThan(100);
     }
 
+    [Theory]
+    [InlineData(ParagraphAlignment.Right, false)]
+    [InlineData(ParagraphAlignment.Right, true)]
+    [InlineData(ParagraphAlignment.Center, false)]
+    [InlineData(ParagraphAlignment.Center, true)]
+    [InlineData(ParagraphAlignment.Justify, false)]
+    [InlineData(ParagraphAlignment.Justify, true)]
+    public void FieldRemeasurementKeepsFullMeasuredLineWidths(ParagraphAlignment alignment, bool nonfinal)
+    {
+        var width = Width("1 Alpha Bravo") - 1;
+        var suffix = nonfinal ? " Delta" : "";
+        var literal = Render(width, pageField: false, suffix: suffix, alignment: alignment,
+            adjust: (_, _, _) => -1);
+        var field = Render(width, pageField: true, suffix: suffix, alignment: alignment,
+            adjust: (_, _, _) => -1);
+        SameLine(field, "Alpha", "Bravo").Should().BeTrue();
+        field.Should().Equal(literal);
+    }
+
+    [Theory]
+    [InlineData(ParagraphAlignment.Right)]
+    [InlineData(ParagraphAlignment.Center)]
+    [InlineData(ParagraphAlignment.Justify)]
+    public void FieldRemeasurementIncludesBlanksAfterNaturallyOverflowingWords(ParagraphAlignment alignment)
+    {
+        var width = Width("1 Alpha Bravo") - 1;
+        double? Adjust(object? tag, string text, XFont font) =>
+            text == "Bravo" ? -Width("Bravo") + 1 : -1;
+        Render(width, pageField: true, suffix: " Echo", alignment: alignment, adjust: Adjust)
+            .Should().Equal(Render(width, pageField: false, suffix: " Echo", alignment: alignment, adjust: Adjust));
+    }
+
+    [Fact]
+    public void RemeasuredTabProbeStopsAtTheStoredLineEnd()
+    {
+        var result = Render(120, pageField: true, tab: TabAlignment.Right,
+            suffix: " Delta", adjust: (_, _, _) => -1);
+        SameLine(result, "Alpha", "Bravo").Should().BeTrue();
+        SameLine(result, "Bravo", "Delta").Should().BeFalse();
+        (result.Single(w => w.Text == "Bravo").X + Width("Bravo"))
+            .Should().BeApproximately(140, .001);
+    }
+
     [Fact]
     public void DefaultIsDisabled() =>
         new DocumentRenderer(new Document()).TextFitWidthAdjustment.Should().BeNull();
@@ -172,7 +215,7 @@ public class TextFitWidthAdjustmentTests : IDisposable
     static List<Word> Render(double bodyWidth,
         Func<object?, string, XFont, double?>? adjust = null, bool split = false, string suffix = "",
         ParagraphAlignment alignment = ParagraphAlignment.Left, bool prefixBreak = false, bool prefixWrap = false,
-        TabAlignment? tab = null, bool softHyphen = false, bool wrap = false)
+        TabAlignment? tab = null, bool softHyphen = false, bool wrap = false, bool? pageField = null)
     {
         var doc = new Document();
         doc.Styles.Normal.Font.Name = "Arial";
@@ -205,12 +248,18 @@ public class TextFitWidthAdjustmentTests : IDisposable
             }
             else paragraph.AddText(" ");
         }
+        if (pageField.HasValue)
+        {
+            if (pageField.Value) paragraph.AddPageField();
+            else paragraph.AddText("1");
+            paragraph.AddText(" ");
+        }
         paragraph.AddText("Alpha").Tag = "Alpha";
         paragraph.AddText(" ");
         if (split || softHyphen)
         {
             paragraph.AddFormattedText("").AddText("Bra").Tag = "Bra";
-            if (softHyphen) paragraph.AddText("­");
+            if (softHyphen) paragraph.AddText("\u00AD");
             paragraph.AddFormattedText("").AddText("vo").Tag = "vo";
         }
         else paragraph.AddText("Bravo").Tag = "Bravo";

@@ -696,6 +696,9 @@ namespace MigraDoc.Rendering
                     break;
 
                 wordAppeared = wordAppeared || IsWordLikeElement(_currentLeaf.Current);
+                // Remeasure only the stored line, including when probing a tab.
+                if (_phase == Phase.Rendering && ReferenceEquals(_currentLeaf.Current, _endLeaf?.Current))
+                    break;
                 _currentLeaf = _currentLeaf.GetNextLeaf();
             }
             return _currentLeaf != null && !IsLineBreak(_currentLeaf.Current) &&
@@ -2847,7 +2850,10 @@ namespace MigraDoc.Rendering
                 : 0;
             shrinkAllowance = LimitBlankContraction(shrinkAllowance);
             shrinkAllowance = CapWordContraction(shrinkAllowance, width);
-            if (overrun > 0)
+            // Rendering remeasures stored lines after fields become known.
+            // Their break decisions are already established: every stored leaf
+            // must contribute its full measured advance, even if it overflows.
+            if (_phase == Phase.Formatting && overrun > 0)
             {
                 if (!TryMoveToSecondary(candidateFitWidth) && overrun > shrinkAllowance + overhangAllowance)
                     return FormatResult.NewLine;
@@ -3693,7 +3699,8 @@ namespace MigraDoc.Rendering
             var naturalBlankWidth = width;
             width = AddTextTrailingAdvance(width);
 
-            if (CurrentFitXPosition + width > fittingRect.X + fittingRect.Width - RightIndent + Tolerance)
+            if (_phase == Phase.Formatting &&
+                CurrentFitXPosition + width > fittingRect.X + fittingRect.Width - RightIndent + Tolerance)
             {
                 if (TryMoveToSecondary(0))
                     return FormatResult.Continue;
