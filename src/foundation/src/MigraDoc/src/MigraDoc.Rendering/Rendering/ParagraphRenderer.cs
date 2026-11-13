@@ -1618,6 +1618,7 @@ namespace MigraDoc.Rendering
             if (!IgnoreBlank())
             {
                 XUnitPt wordDistance = CurrentWordDistance;
+                RenderExactLineShading(wordDistance);
                 _hasTextBoundaryPredecessor |= wordDistance > 0;
                 RenderUnderline(wordDistance, false);
                 RealizeHyperlink(wordDistance);
@@ -1663,6 +1664,8 @@ namespace MigraDoc.Rendering
             if (font.Subscript || font.Superscript)
                 xFont = FontHandler.ToSubSuperFont(xFont);
 
+            XUnitPt wordWidth = MeasureString(word);
+            RenderExactLineShading(wordWidth, word);
             if (CurrentBrush != null)
             {
                 var thresholdSelector = _documentRenderer.TextKerningMinimumSizePoints;
@@ -1701,11 +1704,24 @@ namespace MigraDoc.Rendering
                 if (emitKerningMetadata)
                     _gfx.WriteComment("MD-Kern End");
             }
-            XUnitPt wordWidth = MeasureString(word);
             RenderUnderline(wordWidth, true);
             RealizeHyperlink(wordWidth);
             _currentXPosition += wordWidth;
             _hasTextBoundaryPredecessor |= word.Length > 0;
+        }
+
+        void RenderExactLineShading(XUnitPt width, string? renderedWord = null)
+        {
+            if (_paragraph.Format.LineSpacingRule != LineSpacingRule.Exactly ||
+                _currentLeaf?.Current is not Text text ||
+                renderedWord != null && renderedWord != text.Content ||
+                width <= 0 || !IsFinite(width.Point) ||
+                _currentVerticalInfo.Height <= 0 || !IsFinite(_currentVerticalInfo.Height.Point) ||
+                !IsFinite(CurrentPaintXPosition.Point) || !IsFinite(_currentYPosition.Point) ||
+                _documentRenderer.ExactLineRunShading?.Invoke(text.Tag) is not { IsEmpty: false } color)
+                return;
+            _gfx.DrawRectangle(new XSolidBrush(color), CurrentPaintXPosition.Point,
+                _currentYPosition.Point, width.Point, _currentVerticalInfo.Height.Point);
         }
 
         void DrawPairAdjustedString(string word, XFont font, double[] adjustments,

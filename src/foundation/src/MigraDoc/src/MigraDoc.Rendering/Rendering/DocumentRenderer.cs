@@ -91,6 +91,18 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Func<object?, double?>? TextKerningMinimumSizePoints { get; set; }
 
+        /// <summary>
+        /// Selects a background color by text-leaf Tag in exact-spaced paragraphs.
+        /// Paints a rectangle immediately before each selected text leaf, in normal
+        /// content order, using its layout advance and the accepted line-box height.
+        /// Includes rendered ordinary text blanks. Does not cover glyph overhang
+        /// beyond that advance. Fields and generated hyphens are not selected.
+        /// Null or an empty color paints nothing. Disabled by default. Invoked only
+        /// during rendering; changes neither line fitting nor text positions.
+        /// </summary>
+        public Func<object?, XColor?>? ExactLineRunShading { get; set; }
+
+
 
         /// <summary>
         /// Selects a leading adjustment in points after an ordinary text blank only
