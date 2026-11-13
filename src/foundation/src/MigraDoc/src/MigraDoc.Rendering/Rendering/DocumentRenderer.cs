@@ -620,6 +620,19 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, Character, bool>? CollapsibleSpaceBeforeWrap { get; set; }
 
         /// <summary>
+        /// Optionally adds vertical exclusion bands for a TopBottom-wrapped shape
+        /// whose ExcludeFollowingText is true. Each (Top, Height) is in points
+        /// relative to the shape's laid-out content top; these exact bands do not
+        /// receive additional wrap distances. The shape's ordinary exclusion remains.
+        /// Gaps between bands remain available for following text. Negative offsets
+        /// are allowed. Nonfinite offsets/heights, nonpositive heights and invalid
+        /// resulting endpoints are ignored. Null or an empty list adds nothing.
+        /// Must remain stable during preparation. Null by default.
+        /// </summary>
+        public Func<Shape, IReadOnlyList<(double Top, double Height)>?>?
+            AdditionalTopBottomWrapBands { get; set; }
+
+        /// <summary>
         /// Prepares this instance for rendering.
         /// Commit renderEvents to allow RenderTextEvent calls.
         /// </summary>
