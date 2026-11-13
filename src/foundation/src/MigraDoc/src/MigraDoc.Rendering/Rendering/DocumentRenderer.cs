@@ -537,6 +537,29 @@ namespace MigraDoc.Rendering
             JustifiedTerminalWordOverrunLimitForParagraph { get; set; }
 
         /// <summary>
+        /// Optionally caps justified-space contraction by a fraction of the complete
+        /// candidate word's layout advance plus its immediately preceding ordinary
+        /// text blank's advance (including that blank's formatting and spacing).
+        /// A continuation after a hyphen has no preceding blank contribution.
+        /// Finite fractions greater than zero and less than one replace the legacy
+        /// word-overrun cap; null or invalid results retain it. Does not enable
+        /// contraction: configure the terminal/nonterminal shrink factor separately.
+        /// Must remain stable during preparation. Null by default.
+        /// </summary>
+        public Func<Paragraph, double?>? JustifiedWordAndSpaceOverrunFractionForParagraph { get; set; }
+
+        /// <summary>
+        /// Selects the word-and-space contraction fraction using the current interval's
+        /// eligible ordinary-blank count, including a pending preceding blank.
+        /// Tabs and wrap-segment transitions start a fresh interval; ignored
+        /// leading/duplicate blanks and zero-width blanks are excluded.
+        /// Null falls back to JustifiedWordAndSpaceOverrunFractionForParagraph;
+        /// invalid results retain the legacy cap. Uses that selector's units and
+        /// validation. Must remain stable during preparation. Null by default.
+        /// </summary>
+        public Func<Paragraph, int, double?>? JustifiedWordAndSpaceOverrunFractionForLine { get; set; }
+
+        /// <summary>
         /// Selects additional leading space, in points, included in text hyperlink
         /// hit areas on the first line of a paragraph. Can represent caller-owned
         /// flow space preceding the paragraph. Applies only at the start of the
