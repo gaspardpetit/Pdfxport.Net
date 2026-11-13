@@ -112,6 +112,37 @@ public class ParagraphTopAnchorTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false, WrapStyle.None, 90)]
+    [InlineData(true, WrapStyle.None, 90)]
+    [InlineData(false, WrapStyle.BothSides, 90)]
+    [InlineData(true, WrapStyle.BothSides, 90)]
+    [InlineData(false, WrapStyle.None, 110)]
+    [InlineData(true, WrapStyle.None, 110)]
+    [InlineData(false, WrapStyle.BothSides, 110)]
+    [InlineData(true, WrapStyle.BothSides, 110)]
+    public void NonflowingShapesAtOrBelowBodyBottomDoNotMoveTheirKeepParagraph(
+        bool frame, WrapStyle style, double top)
+    {
+        var ordinary = Prepare(true, frame, top: top, pageHeight: 140, style: style);
+        var kept = Prepare(true, frame, top: top, pageHeight: 140, style: style, keep: true);
+        kept.Should().Be(ordinary);
+        kept.Anchor.Page.Should().Be(1);
+        kept.Shape.Should().Be(new Position(1, 30 + top));
+        kept.Following.Should().Be(new Position(1, 57));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FlowingShapeBelowBodyBottomStillRequiresAnotherPage(bool frame)
+    {
+        var result = Prepare(true, frame, leadHeight: 60, top: 40, pageHeight: 140, flowing: true, keep: true);
+        result.Anchor.Page.Should().Be(2);
+        result.Shape.Should().Be(new Position(2, 60));
+        result.Following.Should().Be(new Position(2, 90));
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData(false)]
     [InlineData(true)]
@@ -135,7 +166,7 @@ public class ParagraphTopAnchorTests : IDisposable
         double top = 0, bool second = false, RelativeVertical reference = RelativeVertical.Paragraph,
         bool noAnchor = false, double leadHeight = 10, double anchorHeight = 20, double after = 7,
         bool keep = false, bool flowing = false, double pageHeight = 300,
-        bool intervening = false, bool areaBreak = false, bool chain = false)
+        bool intervening = false, bool areaBreak = false, bool chain = false, WrapStyle style = WrapStyle.None)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -175,7 +206,7 @@ public class ParagraphTopAnchorTests : IDisposable
             shape.Width = shape.Height = Unit.FromPoint(30);
             shape.Top = Unit.FromPoint(offset);
             shape.RelativeVertical = reference;
-            shape.WrapFormat.Style = flowing ? WrapStyle.TopBottom : WrapStyle.None;
+            shape.WrapFormat.Style = flowing ? WrapStyle.TopBottom : style;
             shape.WrapFormat.PositionFromPreviousParagraphTop = enabled;
             return shape;
         }

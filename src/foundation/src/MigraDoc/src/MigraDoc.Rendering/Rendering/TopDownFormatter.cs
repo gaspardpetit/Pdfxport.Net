@@ -422,14 +422,17 @@ namespace MigraDoc.Rendering
                 XUnitPt uncollapsedTopMargin = obj is Paragraph
                     ? Math.Max(0, MarginMax(elementDistance, initialLayoutInfo.MarginTop) - elementDistance)
                     : 0;
-                elementDistance = obj is Shape { RelativeVertical: RelativeVertical.Paragraph,
-                        WrapFormat.PositionFromPreviousParagraphTop: true } shape &&
-                    previousInfo.DocumentObject is Paragraph
-                    ? GetParagraphAnchorPosition(shape, previousInfo.LayoutInfo) - area.Y
+                var useParagraphOrigin = obj is Shape { RelativeVertical: RelativeVertical.Paragraph,
+                        WrapFormat.PositionFromPreviousParagraphTop: true } &&
+                    previousInfo.DocumentObject is Paragraph;
+                elementDistance = useParagraphOrigin
+                    ? GetParagraphAnchorPosition((Shape)obj, previousInfo.LayoutInfo) - area.Y
                     : GetElementDistance(obj, initialLayoutInfo, elementDistance);
                 area = area.Lower(elementDistance);
 
-                if (area.Height <= 0)
+                // Nonflowing anchors can paint beyond the body boundary without
+                // consuming body height, just as in actual shape formatting.
+                if (area.Height <= 0 && !(useParagraphOrigin && initialLayoutInfo.Floating == Floating.None))
                     return true;
 
                 currRenderer.Format(area, null);
