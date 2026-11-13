@@ -251,13 +251,32 @@ namespace MigraDoc.Rendering
             var lineFitHeight = _documentRenderer.WrapLineFitHeight is { } fitCallback
                 ? new Func<double, double, double?>((height, fontHeight) =>
                     fitCallback(shape, height, fontHeight)) : null;
-            return area is SideExclusionArea exclusions
+            var result = area is SideExclusionArea exclusions
                 ? exclusions.Add(left, top, right, bottom, wrap.Style, contour,
                     wrap.DistanceLeft.Point, wrap.DistanceRight.Point, bandHeight,
                     lineFontBandHeight, lineFitHeight)
                 : new SideExclusionArea(area, left, top, right, bottom, wrap.Style,
                     contour, wrap.DistanceLeft.Point, wrap.DistanceRight.Point, bandHeight,
                     lineFontBandHeight, lineFitHeight);
+            if (wrap.Style == WrapStyle.TopBottom &&
+                _documentRenderer.AdditionalTopBottomWrapBands?.Invoke(shape) is { } bands)
+            {
+                foreach (var (offset, height) in bands)
+                {
+                    if (double.IsNaN(offset) || double.IsInfinity(offset) ||
+                        double.IsNaN(height) || double.IsInfinity(height) || height <= 0)
+                        continue;
+                    var bandTop = content.Y.Point + offset;
+                    var bandBottom = bandTop + height;
+                    if (double.IsNaN(bandTop) || double.IsInfinity(bandTop) ||
+                        double.IsNaN(bandBottom) || double.IsInfinity(bandBottom) ||
+                        bandBottom <= bandTop)
+                        continue;
+                    result = result.Add(left, XUnitPt.FromPoint(bandTop),
+                        right, XUnitPt.FromPoint(bandBottom), WrapStyle.TopBottom);
+                }
+            }
+            return result;
         }
 
         /// <summary>
