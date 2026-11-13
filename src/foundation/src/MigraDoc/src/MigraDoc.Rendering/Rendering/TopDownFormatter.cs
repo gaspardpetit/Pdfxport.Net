@@ -95,6 +95,7 @@ namespace MigraDoc.Rendering
                     continue;
                 }
                 ///////////////////////////////////////////
+                Area formatArea = area;
                 XUnitPt uncollapsedTopMargin = 0;
                 if (prevFormatInfo == null)
                 {
@@ -111,9 +112,30 @@ namespace MigraDoc.Rendering
                         initialLayoutInfo.Floating != Floating.None)
                         distance = GetElementDistance(docObj, initialLayoutInfo, distance);
 
-                    area = area.Lower(distance);
+                    var anchorIndex = renderInfos.Count - 1;
+                    if (docObj is Shape { RelativeVertical: RelativeVertical.Paragraph,
+                            WrapFormat.PositionFromPreviousParagraphTop: true } shape)
+                    {
+                        while (anchorIndex >= 0 &&
+                               renderInfos[anchorIndex].DocumentObject is Shape
+                               { RelativeVertical: RelativeVertical.Paragraph,
+                                   WrapFormat.PositionFromPreviousParagraphTop: true } &&
+                               renderInfos[anchorIndex].LayoutInfo.Floating == Floating.None)
+                            anchorIndex--;
+                        if (anchorIndex >= 0 && renderInfos[anchorIndex].DocumentObject is Paragraph)
+                            distance = GetParagraphAnchorPosition(shape, renderInfos[anchorIndex].LayoutInfo) - area.Y;
+                    }
+                    formatArea = area.Lower(distance);
+                    // A nonflowing shape may paint above the body cursor. Keep
+                    // following flow at the paragraph end instead of rewinding it.
+                    if (docObj is Shape { RelativeVertical: RelativeVertical.Paragraph,
+                            WrapFormat.PositionFromPreviousParagraphTop: true } &&
+                        initialLayoutInfo.Floating == Floating.None)
+                        area = area.Lower(prevBottomMargin);
+                    else
+                        area = formatArea;
                 }
-                renderer.Format(area, prevFormatInfo);
+                renderer.Format(formatArea, prevFormatInfo);
                 renderer.RenderInfo.LayoutInfo.UncollapsedTopMargin = uncollapsedTopMargin;
                 _areaProvider.PositionHorizontally(renderer.RenderInfo.LayoutInfo);
                 // Page- and margin-positioned shapes do not establish body flow.
@@ -328,7 +350,7 @@ namespace MigraDoc.Rendering
             if (layoutInfo.KeepTogether && layoutInfo.KeepWithNext)
             {
                 var area = remainingArea.Lower(layoutInfo.ContentArea.Height);
-                return NextElementsDoNotFit(idx, area, layoutInfo.MarginBottom);
+                return NextElementsDoNotFit(idx, area, layoutInfo.MarginBottom, renderer.RenderInfo);
             }
             return false;
         }
@@ -373,7 +395,10 @@ namespace MigraDoc.Rendering
             return MarginMax(previousMarginBottom, layoutInfo.MarginTop);
         }
 
-        bool NextElementsDoNotFit(int idx, Area remainingArea, XUnitPt previousMarginBottom)
+        static XUnitPt GetParagraphAnchorPosition(Shape shape, LayoutInfo paragraphLayout)
+            => paragraphLayout.ContentArea.Y - paragraphLayout.UncollapsedTopMargin + shape.Top.Position.Point;
+
+        bool NextElementsDoNotFit(int idx, Area remainingArea, XUnitPt previousMarginBottom, RenderInfo previousInfo)
         {
             XUnitPt elementDistance = previousMarginBottom;
             Area area = remainingArea;
@@ -394,15 +419,26 @@ namespace MigraDoc.Rendering
                     initialLayoutInfo.Floating == Floating.None)
                     return false;
 
-                elementDistance = GetElementDistance(obj, initialLayoutInfo, elementDistance);
+                XUnitPt uncollapsedTopMargin = obj is Paragraph
+                    ? Math.Max(0, MarginMax(elementDistance, initialLayoutInfo.MarginTop) - elementDistance)
+                    : 0;
+                var useParagraphOrigin = obj is Shape { RelativeVertical: RelativeVertical.Paragraph,
+                        WrapFormat.PositionFromPreviousParagraphTop: true } &&
+                    previousInfo.DocumentObject is Paragraph;
+                elementDistance = useParagraphOrigin
+                    ? GetParagraphAnchorPosition((Shape)obj, previousInfo.LayoutInfo) - area.Y
+                    : GetElementDistance(obj, initialLayoutInfo, elementDistance);
                 area = area.Lower(elementDistance);
 
-                if (area.Height <= 0)
+                // Nonflowing anchors can paint beyond the body boundary without
+                // consuming body height, just as in actual shape formatting.
+                if (area.Height <= 0 && !(useParagraphOrigin && initialLayoutInfo.Floating == Floating.None))
                     return true;
 
                 currRenderer.Format(area, null);
                 var currFormatInfo = currRenderer.RenderInfo.FormatInfo;
                 var currLayoutInfo = currRenderer.RenderInfo.LayoutInfo;
+                currLayoutInfo.UncollapsedTopMargin = uncollapsedTopMargin;
 
                 if (currLayoutInfo.VerticalReference != VerticalReference.PreviousElement)
                     return false;
@@ -420,6 +456,7 @@ namespace MigraDoc.Rendering
                 if (area.Height <= 0)
                     return true;
 
+                previousInfo = currRenderer.RenderInfo;
                 elementDistance = currLayoutInfo.MarginBottom;
             }
             return false;
@@ -438,7 +475,7 @@ namespace MigraDoc.Rendering
             if (layoutInfo.KeepWithNext)
             {
                 remainingArea = remainingArea.Lower(layoutInfo.ContentArea.Height);
-                return NextElementsDoNotFit(idx, remainingArea, layoutInfo.MarginBottom);
+                return NextElementsDoNotFit(idx, remainingArea, layoutInfo.MarginBottom, renderer.RenderInfo);
             }
 
             return false;
