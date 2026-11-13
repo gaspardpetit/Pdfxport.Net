@@ -687,16 +687,13 @@ namespace MigraDoc.Rendering
             while (_currentLeaf != null && !IsLineBreak(_currentLeaf.Current) && !IsTab(_currentLeaf.Current))
             {
                 FormatResult result = FormatElement(_currentLeaf.Current);
-                if (result == FormatResult.Ignore)
-                {
-                    _currentLeaf = _currentLeaf.GetNextLeaf();
-                    continue;
-                }
-                if (result != FormatResult.Continue)
+                if (result != FormatResult.Continue && result != FormatResult.Ignore)
                     break;
 
-                wordAppeared = wordAppeared || IsWordLikeElement(_currentLeaf.Current);
-                // Remeasure only the stored line, including when probing a tab.
+                wordAppeared = wordAppeared ||
+                    (result == FormatResult.Continue && IsWordLikeElement(_currentLeaf.Current));
+                // Ignored leaves (such as a trailing blank) still delimit a stored line.
+                // Test membership before advancing, regardless of the formatting result.
                 if (_phase == Phase.Rendering && ReferenceEquals(_currentLeaf.Current, _endLeaf?.Current))
                     break;
                 _currentLeaf = _currentLeaf.GetNextLeaf();

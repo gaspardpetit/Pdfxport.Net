@@ -224,6 +224,24 @@ public class TextFitWidthAdjustmentTests : IDisposable
         field.Should().Equal(literal);
     }
 
+    [Theory]
+    [InlineData(TabAlignment.Right, false)]
+    [InlineData(TabAlignment.Right, true)]
+    [InlineData(TabAlignment.Center, false)]
+    [InlineData(TabAlignment.Center, true)]
+    public void TabRemeasurementStopsAtIgnoredTrailingBlank(TabAlignment tab, bool adjusted)
+    {
+        var textWidth = Width("1 Alpha Bravo");
+        var rightEdge = 120 + (tab == TabAlignment.Center ? textWidth / 2 : 0);
+        var result = Render(rightEdge + Width(" ") * 1.5, pageField: true, tab: tab,
+            suffix: " Delta", prefixScale: tab == TabAlignment.Center ? 2 : 1,
+            adjust: adjusted ? (_, _, _) => -.2 : null);
+        SameLine(result, "Alpha", "Bravo").Should().BeTrue();
+        SameLine(result, "Bravo", "Delta").Should().BeFalse();
+        (result.Single(w => w.Text == "Bravo").X + Width("Bravo"))
+            .Should().BeApproximately(20 + rightEdge, .001);
+    }
+
     [Fact]
     public void DefaultIsDisabled() =>
         new DocumentRenderer(new Document()).TextFitWidthAdjustment.Should().BeNull();
@@ -241,7 +259,7 @@ public class TextFitWidthAdjustmentTests : IDisposable
     static List<Word> Render(double bodyWidth,
         Func<object?, string, XFont, double?>? adjust = null, bool split = false, string suffix = "",
         ParagraphAlignment alignment = ParagraphAlignment.Left, bool prefixBreak = false, bool prefixWrap = false,
-        TabAlignment? tab = null, bool softHyphen = false, bool wrap = false, bool? pageField = null)
+        TabAlignment? tab = null, bool softHyphen = false, bool wrap = false, bool? pageField = null, double prefixScale = 1)
     {
         var doc = new Document();
         doc.Styles.Normal.Font.Name = "Arial";
@@ -291,9 +309,9 @@ public class TextFitWidthAdjustmentTests : IDisposable
         else paragraph.AddText("Bravo").Tag = "Bravo";
         if (suffix.Length > 0) paragraph.AddText(suffix);
         var renderer = new PdfDocumentRenderer { Document = doc };
-        if (prefixWrap)
+        if (prefixWrap || prefixScale != 1)
             renderer.DocumentRenderer.TextHorizontalScale = tag => Equals(tag, "Prefix")
-                ? (bodyWidth - Width(" ") / 2) / Width("Prefix") : null;
+                ? prefixWrap ? (bodyWidth - Width(" ") / 2) / Width("Prefix") : prefixScale : null;
         if (adjust != null)
             renderer.DocumentRenderer.TextFitWidthAdjustment = (source, tag, text, font) =>
             {
