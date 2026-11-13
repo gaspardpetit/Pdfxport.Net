@@ -2,6 +2,7 @@
 // See the LICENSE file in the solution root for more information.
 
 using MigraDoc.DocumentObjectModel;
+using MigraDoc.DocumentObjectModel.Shapes;
 using PdfSharp.Drawing;
 
 namespace MigraDoc.Rendering
@@ -44,6 +45,28 @@ namespace MigraDoc.Rendering
             XUnitPt top = firstLayoutInfo.ContentArea.Y - firstLayoutInfo.MarginTop;
             XUnitPt bottom = lastLayoutInfo.ContentArea.Y + lastLayoutInfo.ContentArea.Height;
             bottom += lastLayoutInfo.MarginBottom;
+
+            // A backward-positioned nonflowing anchor is not the end of body
+            // content. Preserve its paragraph's bottom and every shape extent
+            // in a consecutive anchor chain, even when the final shape is shorter.
+            XUnitPt? paragraphBottom = null;
+            foreach (var renderInfo in renderInfos)
+            {
+                var layout = renderInfo.LayoutInfo;
+                if (renderInfo.DocumentObject is Paragraph)
+                    paragraphBottom = layout.ContentArea.Y + layout.ContentArea.Height + layout.MarginBottom;
+                else if (renderInfo.DocumentObject is Shape { RelativeVertical: RelativeVertical.Paragraph,
+                             WrapFormat.PositionFromPreviousParagraphTop: true } && layout.Floating == Floating.None)
+                {
+                    if (paragraphBottom is { } bodyBottom)
+                    {
+                        bottom = Math.Max(bottom, bodyBottom);
+                        bottom = Math.Max(bottom, layout.ContentArea.Y + layout.ContentArea.Height + layout.MarginBottom);
+                    }
+                }
+                else
+                    paragraphBottom = null;
+            }
             return bottom - top;
         }
     }

@@ -143,6 +143,87 @@ public class ParagraphTopAnchorTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ShortFinalAnchorDoesNotShrinkItsContainer(bool frame, bool table)
+    {
+        var baseline = MeasureContainer(frame, table, addShape: false);
+        var anchored = MeasureContainer(frame, table);
+        anchored.Height.Should().BeApproximately(baseline.Height, 0.001);
+        anchored.FollowingY.Should().BeApproximately(baseline.FollowingY, 0.001);
+        anchored.Height.Should().BeGreaterThanOrEqualTo(100);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ShortFinalAnchorPreservesAnEarlierTallAnchorsExtent(bool frame, bool table)
+    {
+        var tall = MeasureContainer(frame, table, height: 140);
+        var chain = MeasureContainer(frame, table, height: 140, second: true);
+        chain.Height.Should().BeApproximately(tall.Height, 0.001);
+        chain.FollowingY.Should().BeApproximately(tall.FollowingY, 0.001);
+        chain.Height.Should().BeGreaterThanOrEqualTo(140);
+    }
+
+    record ContainerGeometry(double Height, double FollowingY);
+    static ContainerGeometry MeasureContainer(bool frame, bool table, bool addShape = true,
+        double height = 10, bool second = false)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        document.Styles.Normal.Font.Size = 8;
+        var section = document.AddSection();
+        DocumentObject container;
+        DocumentElements elements;
+        if (table)
+        {
+            var grid = section.AddTable();
+            grid.AddColumn(Unit.FromPoint(200));
+            elements = grid.AddRow().Cells[0].Elements;
+            grid.AddRow().Cells[0].AddParagraph("Second row");
+            container = grid;
+        }
+        else
+        {
+            var outer = section.AddTextFrame();
+            outer.Width = Unit.FromPoint(200);
+            outer.MarginTop = outer.MarginBottom = Unit.FromPoint(0);
+            outer.RelativeVertical = RelativeVertical.Paragraph;
+            outer.WrapFormat.Style = WrapStyle.BothSides;
+            elements = outer.Elements;
+            container = outer;
+        }
+        var paragraph = elements.AddParagraph("Tall paragraph");
+        paragraph.Format.LineSpacingRule = LineSpacingRule.Exactly;
+        paragraph.Format.LineSpacing = Unit.FromPoint(100);
+        paragraph.Format.SpaceAfter = Unit.FromPoint(7);
+        void AddShape(double shapeHeight, double top)
+        {
+            Shape shape = frame ? elements.AddTextFrame() : elements.AddImage(
+                "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+            shape.Width = Unit.FromPoint(30);
+            shape.Height = Unit.FromPoint(shapeHeight);
+            shape.Top = Unit.FromPoint(top);
+            shape.RelativeVertical = RelativeVertical.Paragraph;
+            shape.WrapFormat.Style = WrapStyle.None;
+            shape.WrapFormat.PositionFromPreviousParagraphTop = true;
+        }
+        if (addShape) AddShape(height, 0);
+        if (second) AddShape(10, 5);
+        var following = section.AddParagraph("Following container");
+        var renderer = new DocumentRenderer(document);
+        renderer.PrepareDocument();
+        var infos = renderer.GetRenderInfoFromPage(1)!;
+        return new ContainerGeometry(infos.Single(info => info.DocumentObject == container).LayoutInfo.ContentArea.Height.Point,
+            infos.Single(info => info.DocumentObject == following).LayoutInfo.ContentArea.Y.Point);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData(false)]
     [InlineData(true)]
