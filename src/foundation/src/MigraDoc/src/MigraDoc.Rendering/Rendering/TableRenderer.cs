@@ -435,6 +435,9 @@ namespace MigraDoc.Rendering
             else
                 targetY = (float_)(innerRect.Y + cell.Row.TopPadding.Point);
 
+            formattedCell.SetRenderedContentOrigin(_documentRenderer.CurrentRenderPage > 0
+                    ? _documentRenderer.CurrentRenderPage : _fieldInfos?.PhysicalPageNr ?? 0,
+                new XPoint(targetX.Point, targetY.Point));
             RenderByInfos(targetX, targetY, renderInfos);
         }
 

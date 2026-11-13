@@ -28,6 +28,26 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Cell Cell { get; }
 
+        /// <summary>
+        /// Gets the most recent rendering origin of this cell's nested content
+        /// on a one-based physical page, in points from the page's top-left.
+        /// Add this origin to nested render-info coordinates to obtain page
+        /// coordinates. Repeated headers have a separate origin for each page.
+        /// Returns null until the cell is rendered on that page, including for
+        /// nonpositive page numbers. Preparation alone does not populate origins.
+        /// </summary>
+        public XPoint? GetRenderedContentOrigin(int physicalPageNumber) =>
+            _renderedContentOrigins.TryGetValue(physicalPageNumber, out var origin)
+                ? origin : null;
+
+        internal void SetRenderedContentOrigin(int physicalPageNumber, XPoint origin)
+        {
+            if (physicalPageNumber > 0)
+                _renderedContentOrigins[physicalPageNumber] = origin;
+        }
+
+        readonly Dictionary<int, XPoint> _renderedContentOrigins = new();
+
         Area? IAreaProvider.GetNextArea()
         {
             if (_isFirstArea)
