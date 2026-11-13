@@ -109,7 +109,11 @@ namespace MigraDoc.Rendering
                             MarginMax(prevBottomMargin, initialLayoutInfo.MarginTop) - prevBottomMargin);
                     if (initialLayoutInfo.VerticalReference == VerticalReference.PreviousElement &&
                         initialLayoutInfo.Floating != Floating.None)
-                        distance = MarginMax(initialLayoutInfo.MarginTop, distance);
+                        distance = docObj is Shape { RelativeVertical: RelativeVertical.Paragraph } shape &&
+                                   shape.WrapFormat.PositionAfterPreviousParagraphSpacing &&
+                                   initialLayoutInfo.Floating == Floating.TopBottom
+                            ? distance + initialLayoutInfo.MarginTop
+                            : MarginMax(initialLayoutInfo.MarginTop, distance);
 
                     area = area.Lower(distance);
                 }

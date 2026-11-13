@@ -49,6 +49,17 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Adds the preceding paragraph's bottom spacing to this shape's top margin,
+        /// instead of collapsing them to their maximum. Applies only to paragraph-relative
+        /// shapes that participate in top-and-bottom flow. False by default.
+        /// </summary>
+        public bool PositionAfterPreviousParagraphSpacing
+        {
+            get => Values.PositionAfterPreviousParagraphSpacing ?? false;
+            set => Values.PositionAfterPreviousParagraphSpacing = value;
+        }
+
+        /// <summary>
         /// Gets or sets the distance between the top side of the shape with the adjacent text.
         /// </summary>
         public Unit DistanceTop
@@ -97,6 +108,9 @@ namespace MigraDoc.DocumentObjectModel.Shapes
                 serializer.WriteSimpleAttribute("Style", Style);
             if (Values.ExcludeFollowingText is not null)
                 serializer.WriteSimpleAttribute("ExcludeFollowingText", ExcludeFollowingText);
+            if (Values.PositionAfterPreviousParagraphSpacing is not null)
+                serializer.WriteSimpleAttribute("PositionAfterPreviousParagraphSpacing",
+                    PositionAfterPreviousParagraphSpacing);
             //if (Values.DistanceTop is not null)
             if (!Values.DistanceTop.IsValueNullOrEmpty())
                 serializer.WriteSimpleAttribute("DistanceTop", DistanceTop);
@@ -142,6 +156,9 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             /// Gets or sets whether a TopBottom shape excludes following text.
             /// </summary>
             public bool? ExcludeFollowingText { get; set; }
+
+            /// <summary>Gets or sets whether paragraph-relative placement adds preceding spacing.</summary>
+            public bool? PositionAfterPreviousParagraphSpacing { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
