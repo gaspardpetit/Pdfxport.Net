@@ -90,9 +90,32 @@ public class ConsumeParagraphSpacingTests : IDisposable
         restored.WrapFormat.Values.ConsumePreviousParagraphSpacing.Should().Be(enabled);
     }
 
-    record Geometry(double PreviousY, double ShapeY, int ShapePage, double FollowingY, int FollowingPage);
+    [Theory]
+    [InlineData(false, RelativeVertical.Page, true)]
+    [InlineData(true, RelativeVertical.Page, true)]
+    [InlineData(false, RelativeVertical.Margin, true)]
+    [InlineData(true, RelativeVertical.Margin, true)]
+    [InlineData(false, RelativeVertical.Page, false)]
+    [InlineData(true, RelativeVertical.Page, false)]
+    [InlineData(false, RelativeVertical.Margin, false)]
+    [InlineData(true, RelativeVertical.Margin, false)]
+    public void KeepWithNextDoesNotProbeConsumedSpacing(bool frame, RelativeVertical anchor, bool keep)
+    {
+        // Only 50 points remain after Before, but its 90-point after-space is
+        // consumed by the positioned shape. Before and After fit on page one.
+        var baseline = Prepare(false, frame, anchor, 90, 0, pageHeight: 140, filler: true, keep: keep);
+        var consumed = Prepare(true, frame, anchor, 90, 0, pageHeight: 140, filler: true, keep: keep);
+        baseline.PreviousPage.Should().Be(keep ? 2 : 1);
+        consumed.PreviousPage.Should().Be(1);
+        consumed.ShapePage.Should().Be(1);
+        consumed.FollowingPage.Should().Be(1);
+        consumed.PreviousY.Should().BeApproximately(60, 0.001);
+        consumed.FollowingY.Should().BeApproximately(70, 0.001);
+    }
+
+    record Geometry(double PreviousY, double ShapeY, int ShapePage, double FollowingY, int FollowingPage, int PreviousPage);
     static Geometry Prepare(bool enabled, bool frame, RelativeVertical anchor, double after, double before,
-        bool flowing = false, double pageHeight = 300, bool secondShape = false)
+        bool flowing = false, double pageHeight = 300, bool secondShape = false, bool filler = false, bool keep = false)
     {
         var doc = new Document();
         doc.Styles.Normal.Font.Name = "Arial";
@@ -102,7 +125,13 @@ public class ConsumeParagraphSpacingTests : IDisposable
         var section = doc.AddSection();
         section.PageSetup.PageHeight = Unit.FromPoint(pageHeight);
         section.PageSetup.TopMargin = section.PageSetup.BottomMargin = Unit.FromPoint(20);
+        if (filler)
+        {
+            var lead = section.AddParagraph("Filler");
+            lead.Format.LineSpacing = Unit.FromPoint(40);
+        }
         var previous = section.AddParagraph("Before");
+        previous.Format.KeepWithNext = keep;
         previous.Format.SpaceAfter = Unit.FromPoint(after);
         Shape shape = frame ? section.AddTextFrame() : section.AddImage(
             "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
@@ -129,6 +158,6 @@ public class ConsumeParagraphSpacingTests : IDisposable
         var followingInfo = pages.Single(item => item.Info.DocumentObject == following);
         return new Geometry(previousInfo.Info.LayoutInfo.ContentArea.Y.Point,
             shapeInfo.Info.LayoutInfo.ContentArea.Y.Point, shapeInfo.Page,
-            followingInfo.Info.LayoutInfo.ContentArea.Y.Point, followingInfo.Page);
+            followingInfo.Info.LayoutInfo.ContentArea.Y.Point, followingInfo.Page, previousInfo.Page);
     }
 }
