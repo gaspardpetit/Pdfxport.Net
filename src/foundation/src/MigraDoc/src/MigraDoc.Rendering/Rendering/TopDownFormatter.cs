@@ -168,7 +168,8 @@ namespace MigraDoc.Rendering
                                 area = area.Lower(renderer.RenderInfo.LayoutInfo.ContentArea.Height);
                         }
                         else if (renderer.RenderInfo.LayoutInfo.VerticalReference == VerticalReference.PreviousElement ||
-                                 renderer.RenderInfo.LayoutInfo.Floating != Floating.None)
+                                 renderer.RenderInfo.LayoutInfo.Floating != Floating.None ||
+                                 docObj is Shape { WrapFormat.ConsumePreviousParagraphSpacing: true })
                             prevBottomMargin = 0;
 
                         prevFormatInfo = null;
@@ -384,7 +385,16 @@ namespace MigraDoc.Rendering
 
                 var obj = _elements[index];
                 var currRenderer = Renderer.Create(_gfx!, _documentRenderer, obj, _areaProvider.AreaFieldInfos);
-                elementDistance = GetElementDistance(obj, currRenderer!.InitialLayoutInfo, elementDistance);
+                var initialLayoutInfo = currRenderer!.InitialLayoutInfo;
+                // Positioned shapes end this keep-with-next probe. If they consume
+                // preceding spacing, do not reject the pair using that spacing
+                // before reaching the nonflowing shape boundary.
+                if (obj is Shape { WrapFormat.ConsumePreviousParagraphSpacing: true } &&
+                    initialLayoutInfo.VerticalReference != VerticalReference.PreviousElement &&
+                    initialLayoutInfo.Floating == Floating.None)
+                    return false;
+
+                elementDistance = GetElementDistance(obj, initialLayoutInfo, elementDistance);
                 area = area.Lower(elementDistance);
 
                 if (area.Height <= 0)
