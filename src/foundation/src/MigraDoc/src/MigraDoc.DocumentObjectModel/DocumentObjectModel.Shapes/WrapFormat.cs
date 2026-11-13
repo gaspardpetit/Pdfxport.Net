@@ -60,6 +60,18 @@ namespace MigraDoc.DocumentObjectModel.Shapes
         }
 
         /// <summary>
+        /// Clears pending bottom spacing from the preceding flow element after this
+        /// positioned shape is laid out, so it is not reused for the following element.
+        /// Does not change the shape's position or the trailing spacing of a flowing
+        /// shape. False by default.
+        /// </summary>
+        public bool ConsumePreviousParagraphSpacing
+        {
+            get => Values.ConsumePreviousParagraphSpacing ?? false;
+            set => Values.ConsumePreviousParagraphSpacing = value;
+        }
+
+        /// <summary>
         /// Gets or sets the distance between the top side of the shape with the adjacent text.
         /// </summary>
         public Unit DistanceTop
@@ -111,6 +123,9 @@ namespace MigraDoc.DocumentObjectModel.Shapes
             if (Values.PositionAfterPreviousParagraphSpacing is not null)
                 serializer.WriteSimpleAttribute("PositionAfterPreviousParagraphSpacing",
                     PositionAfterPreviousParagraphSpacing);
+            if (Values.ConsumePreviousParagraphSpacing is not null)
+                serializer.WriteSimpleAttribute("ConsumePreviousParagraphSpacing",
+                    ConsumePreviousParagraphSpacing);
             //if (Values.DistanceTop is not null)
             if (!Values.DistanceTop.IsValueNullOrEmpty())
                 serializer.WriteSimpleAttribute("DistanceTop", DistanceTop);
@@ -159,6 +174,9 @@ namespace MigraDoc.DocumentObjectModel.Shapes
 
             /// <summary>Gets or sets whether paragraph-relative placement adds preceding spacing.</summary>
             public bool? PositionAfterPreviousParagraphSpacing { get; set; }
+
+            /// <summary>Gets or sets whether a positioned shape clears pending preceding spacing.</summary>
+            public bool? ConsumePreviousParagraphSpacing { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.

@@ -168,7 +168,8 @@ namespace MigraDoc.Rendering
                                 area = area.Lower(renderer.RenderInfo.LayoutInfo.ContentArea.Height);
                         }
                         else if (renderer.RenderInfo.LayoutInfo.VerticalReference == VerticalReference.PreviousElement ||
-                                 renderer.RenderInfo.LayoutInfo.Floating != Floating.None)
+                                 renderer.RenderInfo.LayoutInfo.Floating != Floating.None ||
+                                 docObj is Shape { WrapFormat.ConsumePreviousParagraphSpacing: true })
                             prevBottomMargin = 0;
 
                         prevFormatInfo = null;
