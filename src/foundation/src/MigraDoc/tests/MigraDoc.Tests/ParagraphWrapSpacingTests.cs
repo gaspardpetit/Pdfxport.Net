@@ -80,9 +80,27 @@ public class ParagraphWrapSpacingTests : IDisposable
         additive.ShapeY.Should().BeApproximately(50, 0.001);
     }
 
-    record Geometry(double PreviousBottom, double ShapeY, double FollowingY, int ShapePage);
+    [Theory]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    public void KeepWithNextUsesTheSameShapeSpacingAsActualPlacement(bool frame, bool enabled, bool keep)
+    {
+        // 60 points remain after Before. Collapsed spacing + shape requires 50;
+        // additive spacing + shape requires 70. The pair fits on a fresh page.
+        var result = Prepare(enabled, frame, 20, 20, pageHeight: 160, filler: true, keep: keep);
+        result.ShapePage.Should().Be(enabled ? 2 : 1);
+        result.PreviousPage.Should().Be(enabled && keep ? 2 : 1);
+        if (enabled && keep)
+            result.ShapeY.Should().BeApproximately(result.PreviousBottom + 40, 0.001);
+    }
+
+    record Geometry(double PreviousBottom, double ShapeY, double FollowingY, int ShapePage, int PreviousPage);
     static Geometry Prepare(bool enabled, bool frame, double after, double distance,
-        RelativeVertical relative = RelativeVertical.Paragraph, WrapStyle style = WrapStyle.TopBottom, double pageHeight = 300)
+        RelativeVertical relative = RelativeVertical.Paragraph, WrapStyle style = WrapStyle.TopBottom, double pageHeight = 300, bool filler = false, bool keep = false)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -90,7 +108,19 @@ public class ParagraphWrapSpacingTests : IDisposable
         var section = document.AddSection();
         section.PageSetup.PageHeight = Unit.FromPoint(pageHeight);
         section.PageSetup.TopMargin = section.PageSetup.BottomMargin = Unit.FromPoint(20);
+        if (filler)
+        {
+            var lead = section.AddParagraph("Filler");
+            lead.Format.LineSpacingRule = LineSpacingRule.Exactly;
+            lead.Format.LineSpacing = Unit.FromPoint(50);
+        }
         var previous = section.AddParagraph("Before");
+        previous.Format.KeepWithNext = keep;
+        if (filler)
+        {
+            previous.Format.LineSpacingRule = LineSpacingRule.Exactly;
+            previous.Format.LineSpacing = Unit.FromPoint(10);
+        }
         previous.Format.SpaceAfter = Unit.FromPoint(after);
         Shape shape = frame ? section.AddTextFrame() : section.AddImage(
             "base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
@@ -109,6 +139,7 @@ public class ParagraphWrapSpacingTests : IDisposable
         return new Geometry(beforeArea.Y.Point + beforeArea.Height.Point,
             infos.Single(info => info.DocumentObject == shape).LayoutInfo.ContentArea.Y.Point,
             infos.Single(info => info.DocumentObject == following).LayoutInfo.ContentArea.Y.Point,
-            pages.Single(item => item.Info.DocumentObject == shape).Page);
+            pages.Single(item => item.Info.DocumentObject == shape).Page,
+            pages.Single(item => item.Info.DocumentObject == previous).Page);
     }
 }

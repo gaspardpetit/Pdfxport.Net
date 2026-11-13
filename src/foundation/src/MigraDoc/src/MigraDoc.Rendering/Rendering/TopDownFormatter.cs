@@ -109,11 +109,7 @@ namespace MigraDoc.Rendering
                             MarginMax(prevBottomMargin, initialLayoutInfo.MarginTop) - prevBottomMargin);
                     if (initialLayoutInfo.VerticalReference == VerticalReference.PreviousElement &&
                         initialLayoutInfo.Floating != Floating.None)
-                        distance = docObj is Shape { RelativeVertical: RelativeVertical.Paragraph } shape &&
-                                   shape.WrapFormat.PositionAfterPreviousParagraphSpacing &&
-                                   initialLayoutInfo.Floating == Floating.TopBottom
-                            ? distance + initialLayoutInfo.MarginTop
-                            : MarginMax(initialLayoutInfo.MarginTop, distance);
+                        distance = GetElementDistance(docObj, initialLayoutInfo, distance);
 
                     area = area.Lower(distance);
                 }
@@ -364,6 +360,18 @@ namespace MigraDoc.Rendering
         /// </summary>
         internal static readonly int MaxCombineElements = 10;
 
+        // Keep actual placement and keep-with-next lookahead on the same spacing policy.
+        XUnitPt GetElementDistance(DocumentObject element, LayoutInfo layoutInfo, XUnitPt previousMarginBottom)
+        {
+            if (element is Shape { RelativeVertical: RelativeVertical.Paragraph } shape &&
+                shape.WrapFormat.PositionAfterPreviousParagraphSpacing &&
+                layoutInfo.VerticalReference == VerticalReference.PreviousElement &&
+                layoutInfo.Floating == Floating.TopBottom)
+                return previousMarginBottom + layoutInfo.MarginTop;
+
+            return MarginMax(previousMarginBottom, layoutInfo.MarginTop);
+        }
+
         bool NextElementsDoNotFit(int idx, Area remainingArea, XUnitPt previousMarginBottom)
         {
             XUnitPt elementDistance = previousMarginBottom;
@@ -376,7 +384,7 @@ namespace MigraDoc.Rendering
 
                 var obj = _elements[index];
                 var currRenderer = Renderer.Create(_gfx!, _documentRenderer, obj, _areaProvider.AreaFieldInfos);
-                elementDistance = MarginMax(elementDistance, currRenderer!.InitialLayoutInfo.MarginTop);
+                elementDistance = GetElementDistance(obj, currRenderer!.InitialLayoutInfo, elementDistance);
                 area = area.Lower(elementDistance);
 
                 if (area.Height <= 0)
