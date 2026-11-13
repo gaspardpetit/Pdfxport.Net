@@ -2875,13 +2875,14 @@ namespace MigraDoc.Rendering
             {
                 for (var leaf = original?.GetPreviousLeaf(); leaf != null; leaf = leaf.GetPreviousLeaf())
                 {
-                    if (IsTab(leaf.Current))
+                    // Iterators created by walking backwards are not reference-equal to
+                    // _startLeaf. Compare the underlying leaf before considering a
+                    // blank that wrapped and is ignored at the start of this interval.
+                    if (ReferenceEquals(leaf.Current, start?.Current) || IsTab(leaf.Current))
                         break;
                     _currentLeaf = leaf;
                     if (IsBlank(leaf.Current) && !IgnoreBlank() && MeasureString(" ") > 0)
                         count++;
-                    if (ReferenceEquals(leaf.Current, start?.Current))
-                        break;
                 }
             }
             finally
@@ -2934,6 +2935,8 @@ namespace MigraDoc.Rendering
                     for (var preceding = first?.GetPreviousLeaf(); preceding != null;
                          preceding = preceding.GetPreviousLeaf())
                     {
+                        if (ReferenceEquals(preceding.Current, CurrentContractionIntervalStart?.Current))
+                            break;
                         if (preceding.Current is BookmarkField || preceding.Current is Text { Content: "" })
                             continue;
                         if (!IsBlank(preceding.Current))
@@ -2944,8 +2947,6 @@ namespace MigraDoc.Rendering
                             adjacentSpaceWidth = MeasureString(" ");
                             break;
                         }
-                        if (ReferenceEquals(preceding.Current, CurrentContractionIntervalStart?.Current))
-                            break;
                     }
                 }
             }

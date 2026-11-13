@@ -93,6 +93,20 @@ public class WordSpaceContractionCapTests : IDisposable
             line: count => count == 1 ? .031 : .0001)).Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BlankThatStartsWrappedLineDoesNotIncreaseCount(bool final)
+    {
+        var counts = new List<int>();
+        var result = Render(null, wrappedPrefix: true, final: final,
+            line: count => { counts.Add(count); return count == 1 ? .031 : .0001; });
+        SameLine(result).Should().BeTrue();
+        counts.Should().Contain(1).And.NotContain(2);
+        result.Words.Single(w => w.Text == "Prefix").Y.Should().BeGreaterThan(
+            result.Words.Single(w => w.Text == "Alpha").Y);
+    }
+
     [Fact]
     public void TabStartsAFreshContractionInterval()
     {
@@ -145,7 +159,7 @@ public class WordSpaceContractionCapTests : IDisposable
     }
     static Result Render(double? fraction, bool split = false, bool mixedFont = false, bool final = false,
         double? legacy = null, Func<int, double?>? line = null, double blankScale = 1, double blankSpacing = 0,
-        bool twoBlanks = false, bool ignoredBlanks = false, bool tabs = false, bool hyphen = false, bool enableShrink = true,
+        bool wrappedPrefix = false, bool twoBlanks = false, bool ignoredBlanks = false, bool tabs = false, bool hyphen = false, bool enableShrink = true,
         ParagraphAlignment alignment = ParagraphAlignment.Justify)
     {
         var doc = new Document();
@@ -166,6 +180,11 @@ public class WordSpaceContractionCapTests : IDisposable
             paragraph.Format.AddTabStop(Unit.FromPoint(120), TabAlignment.Left);
             paragraph.AddText("A B C D E");
             paragraph.AddTab();
+        }
+        if (wrappedPrefix)
+        {
+            paragraph.AddText("Prefix").Tag = "prefix";
+            paragraph.AddText(" ");
         }
         if (ignoredBlanks) paragraph.AddText("  ");
         paragraph.AddText(twoBlanks ? "Alpha Echo" : "Alpha");
@@ -193,7 +212,8 @@ public class WordSpaceContractionCapTests : IDisposable
             dr.JustifiedTerminalWordOverrunLimitForParagraph = _ => (legacy.Value, 0);
             dr.JustifiedNonterminalWordOverrunLimitForParagraph = _ => (legacy.Value, 0);
         }
-        dr.TextHorizontalScale = tag => Equals(tag, "blank") ? blankScale : null;
+        dr.TextHorizontalScale = tag => Equals(tag, "blank") ? blankScale :
+            Equals(tag, "prefix") ? (bodyWidth - Width(" ") / 2) / Width("Prefix") : null;
         dr.TextTrailingAdvance = tag => Equals(tag, "blank") ? blankSpacing : null;
         renderer.RenderDocument();
         using var pdf = renderer.PdfDocument;
