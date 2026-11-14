@@ -90,6 +90,8 @@ namespace MigraDoc.Rendering
             var column = Cell.Column;
             Debug.Assert(column != null, nameof(column) + " != null");
             XUnitPt width = InnerWidth;
+            if (Cell.Table!.CellMarginsMeasuredFromCollapsedGridEdge)
+                width += _bordersRenderer.GetWidth(BorderType.Right);
             width -= column.LeftPadding.Point;
             Debug.Assert(Cell.Table != null, "Cell.Table != null");
             var rightColumn = Cell.Table.Columns[column.Index + Cell.MergeRight];

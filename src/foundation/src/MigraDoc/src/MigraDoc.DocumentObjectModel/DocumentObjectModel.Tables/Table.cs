@@ -353,6 +353,18 @@ namespace MigraDoc.DocumentObjectModel.Tables
         }
 
         /// <summary>
+        /// Measures cell content width from the collapsed column grid, deducting
+        /// left and right padding without additionally deducting the effective
+        /// right border width. Border painting and column positions are unchanged.
+        /// False by default, retaining the standard border-reduced content width.
+        /// </summary>
+        public bool CellMarginsMeasuredFromCollapsedGridEdge
+        {
+            get => Values.CellMarginsMeasuredFromCollapsedGridEdge ?? false;
+            set => Values.CellMarginsMeasuredFromCollapsedGridEdge = value;
+        }
+
+        /// <summary>
         /// Gets or sets a comment associated with this object.
         /// </summary>
         public string Comment
@@ -392,6 +404,9 @@ namespace MigraDoc.DocumentObjectModel.Tables
             //if (Values.BottomPadding is not null)
             if (!Values.BottomPadding.IsValueNullOrEmpty())
                 serializer.WriteSimpleAttribute("BottomPadding", BottomPadding);
+
+            if (Values.CellMarginsMeasuredFromCollapsedGridEdge is not null)
+                serializer.WriteSimpleAttribute("CellMarginsMeasuredFromCollapsedGridEdge", CellMarginsMeasuredFromCollapsedGridEdge);
 
             Values.Borders?.Serialize(serializer, null);
 
@@ -488,6 +503,9 @@ namespace MigraDoc.DocumentObjectModel.Tables
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public Unit? RightPadding { get; set; }
+
+            /// <summary>Nullable backing value for the collapsed-grid content-width policy.</summary>
+            public bool? CellMarginsMeasuredFromCollapsedGridEdge { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
