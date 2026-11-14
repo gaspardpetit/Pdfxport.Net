@@ -28,6 +28,41 @@ namespace MigraDoc.Rendering
         /// </summary>
         public Cell Cell { get; }
 
+        /// <summary>
+        /// Gets the most recent rendering origin of this cell's nested content
+        /// on a one-based physical page, in points from the page's top-left.
+        /// Add this origin to nested render-info coordinates to obtain page
+        /// coordinates. Returns null for unpainted pages, nonpositive page
+        /// numbers, or a non-translation graphics transform (rotation, scale,
+        /// or shear). Use GetRenderedContentTransform for general transforms.
+        /// Preparation alone does not populate rendering state.
+        /// </summary>
+        public XPoint? GetRenderedContentOrigin(int physicalPageNumber)
+        {
+            var transform = GetRenderedContentTransform(physicalPageNumber);
+            return transform is { M11: 1, M12: 0, M21: 0, M22: 1 } matrix
+                ? new XPoint(matrix.OffsetX, matrix.OffsetY) : null;
+        }
+
+        /// <summary>
+        /// Gets the most recent transform from nested render-info coordinates
+        /// to page coordinates on a one-based physical page. Includes enclosing
+        /// frames and graphics transforms, including rotations and scaling.
+        /// Repeated headers retain a separate transform for each painted page.
+        /// Returns null for unpainted or nonpositive page numbers.
+        /// </summary>
+        public XMatrix? GetRenderedContentTransform(int physicalPageNumber) =>
+            _renderedContentTransforms.TryGetValue(physicalPageNumber, out var transform)
+                ? transform : null;
+
+        internal void SetRenderedContentTransform(int physicalPageNumber, XMatrix transform)
+        {
+            if (physicalPageNumber > 0)
+                _renderedContentTransforms[physicalPageNumber] = transform;
+        }
+
+        readonly Dictionary<int, XMatrix> _renderedContentTransforms = new();
+
         Area? IAreaProvider.GetNextArea()
         {
             if (_isFirstArea)
