@@ -3923,6 +3923,13 @@ namespace MigraDoc.Rendering
             else
                 contentArea = contentArea.Unite(GetFittingRectForLine(_currentYPosition, _currentVerticalInfo) ?? NRT.ThrowOnNull<Rectangle>());
 
+            // The leading wrap gap belongs to this fragment's flow height.
+            // Rendering starts at ContentArea.Y and applies GapBefore, so the
+            // origin must remain before the gap rather than at the first line.
+            if (paragraphFormatInfo.LineCount == 0 && _currentLineGap > 0 && contentArea != null)
+                contentArea = contentArea.Unite(new Rectangle(contentArea.X,
+                    _formattingArea.Y, contentArea.Width, 0));
+
             var lineInfo = new LineInfo
             {
                 Vertical = _currentVerticalInfo,
