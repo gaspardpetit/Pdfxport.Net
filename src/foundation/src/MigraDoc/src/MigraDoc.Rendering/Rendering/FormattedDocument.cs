@@ -297,6 +297,18 @@ namespace MigraDoc.Rendering
             return new Rectangle(rect.X + column * (width + spacing), rect.Y, width, rect.Height);
         }
 
+        SideExclusionArea? _pageWrapExclusions;
+
+        internal void StoreWrapExclusions(SideExclusionArea exclusions)
+            => _pageWrapExclusions = exclusions;
+
+        Area GetColumnArea(int page, int column)
+        {
+            var rect = CalcColumnRect(page, column);
+            return page == _currentPage && _pageWrapExclusions != null
+                ? _pageWrapExclusions.OnArea(rect) : rect;
+        }
+
         internal bool IsLaterColumn => _currentColumn > 0;
 
         internal bool HasFlowInPreviousColumns => IsLaterColumn &&
@@ -480,6 +492,7 @@ namespace MigraDoc.Rendering
             if (_isNewSection || _currentColumn >= _currentSection.PageSetup.ColumnCount - 1)
             {
                 _currentColumn = 0;
+                _pageWrapExclusions = null;
                 ++_currentPage;
                 ++_shownPageNumber;
                 ++_sectionPages;
@@ -489,7 +502,7 @@ namespace MigraDoc.Rendering
             else
                 ++_currentColumn;
             _isNewSection = false;
-            return CalcColumnRect(_currentPage, _currentColumn);
+            return GetColumnArea(_currentPage, _currentColumn);
         }
 
         int _currentPage;
@@ -497,8 +510,8 @@ namespace MigraDoc.Rendering
 
         Area IAreaProvider.ProbeNextArea()
             => _isNewSection || _currentColumn >= _currentSection.PageSetup.ColumnCount - 1
-                ? CalcColumnRect(_currentPage + 1, 0)
-                : CalcColumnRect(_currentPage, _currentColumn + 1);
+                ? GetColumnArea(_currentPage + 1, 0)
+                : GetColumnArea(_currentPage, _currentColumn + 1);
 
         void InitFieldInfos()
         {

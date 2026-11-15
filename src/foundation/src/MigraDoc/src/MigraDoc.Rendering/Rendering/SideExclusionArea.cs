@@ -46,6 +46,10 @@ namespace MigraDoc.Rendering
                 style, contour, distanceLeft, distanceRight, contourBandHeight,
                 contourLineFontBandHeight, lineFitHeight)]);
 
+        // Retain physical coordinates, contours and callbacks while changing
+        // only the column rectangle used to query available line intervals.
+        internal SideExclusionArea OnArea(Area area) => new(area, _exclusions);
+
         public override XUnitPt X { get => _area.X; internal set => _area.X = value; }
         public override XUnitPt Y { get => _area.Y; internal set => _area.Y = value; }
         public override XUnitPt Width { get => _area.Width; internal set => _area.Width = value; }

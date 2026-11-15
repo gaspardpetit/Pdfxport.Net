@@ -308,6 +308,8 @@ namespace MigraDoc.Rendering
                         right, XUnitPt.FromPoint(bandBottom), WrapStyle.TopBottom);
                 }
             }
+            if (_areaProvider is FormattedDocument body)
+                body.StoreWrapExclusions(result);
             return result;
         }
 

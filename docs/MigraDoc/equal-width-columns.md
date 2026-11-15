@@ -26,3 +26,7 @@ Headers and footers retain the complete margin width. Page-relative and
 page-margin-relative shapes retain those references; area-relative content uses
 the current column. Mirrored margins, footer clearance, body-bottom reservations,
 page numbering, and section page counts apply to physical pages.
+
+Shape wrap exclusions retain their physical-page coordinates across columns,
+including contours and additional top-and-bottom bands. They are discarded when
+flow advances to another physical page.

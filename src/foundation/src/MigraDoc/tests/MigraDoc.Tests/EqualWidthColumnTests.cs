@@ -5,6 +5,7 @@ using MigraDoc.DocumentObjectModel.Tables;
 using MigraDoc.DocumentObjectModel.Shapes;
 using MigraDoc.Rendering;
 using PdfSharp.Diagnostics;
+using PdfSharp.Drawing;
 using PdfSharp.Fonts;
 using PdfSharp.Quality;
 using PdfSharp.TestHelper;
@@ -347,6 +348,140 @@ public class EqualWidthColumnTests : IDisposable
         var info = renderer.DocumentRenderer.GetRenderInfoFromPage(page)!
             .Single(i => ReferenceEquals(i.DocumentObject, frame));
         info.LayoutInfo.ContentArea.X.Point.Should().BeApproximately(expected, 0.01);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ShapeWrapPersistsAcrossColumnsButClearsOnTheNextPage(bool splitParagraph)
+    {
+        var document = Create(2, 0);
+        AddWrappingFrame(document.LastSection, 90, 20, 60, 30);
+        AddBodyLines(document.LastSection, 30, splitParagraph);
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(2);
+        var first = Texts(renderer, 1);
+        first.Should().HaveCount(24);
+        first[12].X.Should().BeApproximately(150, 0.01);
+        first[14].X.Should().BeApproximately(150, 0.01);
+        first[15].X.Should().BeApproximately(130, 0.01);
+        Texts(renderer, 2)[0].X.Should().BeApproximately(20, 0.01);
+        Enumerable.Range(1, 2).SelectMany(page => Texts(renderer, page)).Select(t => t.Text)
+            .Should().Equal(Enumerable.Range(1, 30).Select(i => "Body" + i));
+    }
+
+    [Fact]
+    public void MultipleShapesAndTheirContoursAreRetainedAcrossColumns()
+    {
+        var document = Create(2, 0);
+        var firstShape = AddWrappingFrame(document.LastSection, 90, 20, 100, 20);
+        AddWrappingFrame(document.LastSection, 155, 40, 15, 20);
+        firstShape.WrapFormat.DistanceRight = Unit.FromPoint(2);
+        AddBodyLines(document.LastSection, 27, false);
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.DocumentRenderer.WrapContour = shape => ReferenceEquals(shape, firstShape)
+            ? new[] { new XPoint(0, 0), new XPoint(0.75, 0), new XPoint(0.75, 1), new XPoint(0, 1) }
+            : null;
+        renderer.RenderDocument();
+        var first = Texts(renderer, 1);
+        first[12].X.Should().BeApproximately(167, 0.01);
+        first[13].X.Should().BeApproximately(167, 0.01);
+        first[14].X.Should().BeApproximately(170, 0.01);
+        first[15].X.Should().BeApproximately(170, 0.01);
+        first[16].X.Should().BeApproximately(130, 0.01);
+        Texts(renderer, 2)[0].X.Should().BeApproximately(20, 0.01);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FullyBlockedColumnUsesRetainedWrapBands(bool keepTogether)
+    {
+        var document = Create(2, 0);
+        AddWrappingFrame(document.LastSection, 120, 20, 110, 30);
+        for (var i = 1; i <= 12; i++) document.LastSection.AddParagraph("Body" + i);
+        var next = document.LastSection.AddParagraph("After");
+        next.Format.KeepTogether = keepTogether;
+        next.AddLineBreak();
+        next.AddText("Second");
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(1);
+        var info = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
+            .OfType<ParagraphRenderInfo>().Single(i => ReferenceEquals(i.DocumentObject, next));
+        info.LayoutInfo.ContentArea.X.Point.Should().BeApproximately(130, 0.01);
+        info.LayoutInfo.ContentArea.Y.Point.Should().BeApproximately(50, 0.01);
+    }
+
+    [Fact]
+    public void ExplicitPageAndSectionBreaksClearShapeWrap()
+    {
+        var document = Create(2, 0);
+        AddWrappingFrame(document.LastSection, 0, 20, 240, 40);
+        document.LastSection.AddParagraph("Before");
+        document.LastSection.AddPageBreak();
+        document.LastSection.AddParagraph("After");
+        document.AddSection().AddParagraph("Next");
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(3);
+        var after = renderer.DocumentRenderer.GetRenderInfoFromPage(2)!.OfType<ParagraphRenderInfo>().Single();
+        var next = renderer.DocumentRenderer.GetRenderInfoFromPage(3)!.OfType<ParagraphRenderInfo>().Single();
+        after.LayoutInfo.ContentArea.Y.Point.Should().BeApproximately(20, 0.01);
+        next.LayoutInfo.ContentArea.Y.Point.Should().BeApproximately(20, 0.01);
+    }
+
+    [Fact]
+    public void AdditionalTopBottomBandsPersistWithoutReinvokingTheCallback()
+    {
+        var document = Create(2, 0);
+        var frame = AddWrappingFrame(document.LastSection, 0, 20, 240, 10);
+        frame.WrapFormat.Style = WrapStyle.TopBottom;
+        frame.WrapFormat.ExcludeFollowingText = true;
+        AddBodyLines(document.LastSection, 22, true);
+        var renderer = new PdfDocumentRenderer { Document = document };
+        var calls = 0;
+        renderer.DocumentRenderer.AdditionalTopBottomWrapBands = _ =>
+        {
+            calls++;
+            return new[] { (40d, 10d) };
+        };
+        renderer.RenderDocument();
+        renderer.PageCount.Should().Be(2);
+        var first = Texts(renderer, 1);
+        first.Should().HaveCount(20);
+        first[10].X.Should().BeApproximately(130, 0.01);
+        first[10].Y.Should().BeApproximately(first[0].Y, 0.01);
+        first[13].Y.Should().BeApproximately(first[10].Y + 40, 0.01);
+        var unwrapped = Render(Create(2, 1));
+        Texts(renderer, 2)[0].Y.Should().BeApproximately(Texts(unwrapped, 1)[0].Y, 0.01);
+        calls.Should().Be(1);
+    }
+
+    static TextFrame AddWrappingFrame(Section section, double left, double top, double width, double height)
+    {
+        var frame = section.AddTextFrame();
+        frame.RelativeHorizontal = RelativeHorizontal.Page;
+        frame.RelativeVertical = RelativeVertical.Page;
+        frame.Left = Unit.FromPoint(left);
+        frame.Top = Unit.FromPoint(top);
+        frame.Width = Unit.FromPoint(width);
+        frame.Height = Unit.FromPoint(height);
+        frame.WrapFormat.Style = WrapStyle.BothSides;
+        return frame;
+    }
+
+    static void AddBodyLines(Section section, int count, bool splitParagraph)
+    {
+        var paragraph = splitParagraph ? section.AddParagraph() : null;
+        if (paragraph != null) paragraph.Format.WidowControl = false;
+        for (var i = 1; i <= count; i++)
+        {
+            if (paragraph == null) section.AddParagraph("Body" + i);
+            else
+            {
+                if (i > 1) paragraph.AddLineBreak();
+                paragraph.AddText("Body" + i);
+            }
+        }
     }
 
     static PdfDocumentRenderer Render(Document document)
