@@ -135,6 +135,15 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Adds an explicit break to the next column, or the next page
+        /// when the current column is the last column on the page.
+        /// </summary>
+        public void AddColumnBreak()
+        {
+            Elements.AddColumnBreak();
+        }
+
+        /// <summary>
         /// Adds a new Image to the section.
         /// </summary>
         public Image AddImage(string fileName)

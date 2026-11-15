@@ -35,6 +35,7 @@ namespace MigraDoc.DocumentObjectModel.IO
             EnumToName.Add(Symbol.Image, @"\image");
             EnumToName.Add(Symbol.TextFrame, @"\textframe");
             EnumToName.Add(Symbol.PageBreak, @"\pagebreak");
+            EnumToName.Add(Symbol.ColumnBreak, @"\columnbreak");
             EnumToName.Add(Symbol.Barcode, @"\barcode");
             EnumToName.Add(Symbol.Chart, @"\chart");
             EnumToName.Add(Symbol.HeaderArea, @"\headerarea");
@@ -129,6 +130,7 @@ namespace MigraDoc.DocumentObjectModel.IO
             NameToEnum.Add(@"\image", Symbol.Image);
             NameToEnum.Add(@"\textframe", Symbol.TextFrame);
             NameToEnum.Add(@"\pagebreak", Symbol.PageBreak);
+            NameToEnum.Add(@"\columnbreak", Symbol.ColumnBreak);
             NameToEnum.Add(@"\barcode", Symbol.Barcode);
             NameToEnum.Add(@"\chart", Symbol.Chart);
             NameToEnum.Add(@"\headerarea", Symbol.HeaderArea);

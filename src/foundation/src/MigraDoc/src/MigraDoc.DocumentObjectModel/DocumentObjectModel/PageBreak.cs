@@ -31,10 +31,20 @@ namespace MigraDoc.DocumentObjectModel
             => (PageBreak)DeepCopy();
 
         /// <summary>
+        /// Advances section body flow to the next column, or to the first
+        /// column of the next page when there is no remaining column.
+        /// </summary>
+        public bool IsColumnBreak
+        {
+            get => Values.IsColumnBreak ?? false;
+            set => Values.IsColumnBreak = value;
+        }
+
+        /// <summary>
         /// Converts PageBreak into DDL.
         /// </summary>
         internal override void Serialize(Serializer serializer) 
-            => serializer.WriteLine("\\pagebreak");
+            => serializer.WriteLine(IsColumnBreak ? "\\columnbreak" : "\\pagebreak");
 
         /// <summary>
         /// Returns the metaobject of this instance.
@@ -55,6 +65,8 @@ namespace MigraDoc.DocumentObjectModel
         {
             internal PageBreakValues(DocumentObject owner) : base(owner)
             { }
+
+            public bool? IsColumnBreak { get; set; }
         }
     }
 }
