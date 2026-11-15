@@ -450,6 +450,11 @@ namespace MigraDoc.DocumentObjectModel.IO
                         ParsePageBreak(elements);
                         break;
 
+                    case Symbol.ColumnBreak:
+                        elements.AddColumnBreak();
+                        ReadCode();
+                        break;
+
                     case Symbol.Table:
                         ParseTable(elements, null);
                         break;

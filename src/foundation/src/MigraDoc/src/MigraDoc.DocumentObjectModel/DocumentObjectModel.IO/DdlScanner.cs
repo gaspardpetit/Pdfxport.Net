@@ -935,6 +935,7 @@ namespace MigraDoc.DocumentObjectModel.IO
                 case Symbol.TextFrame:
                 case Symbol.Chart:
                 case Symbol.PageBreak:
+                case Symbol.ColumnBreak:
                 case Symbol.Barcode:
                     return true;
             }
@@ -954,6 +955,7 @@ namespace MigraDoc.DocumentObjectModel.IO
                 case Symbol.TextFrame:
                 case Symbol.Chart:
                 case Symbol.PageBreak:
+                case Symbol.ColumnBreak:
                 case Symbol.Barcode:
                 case Symbol.Header:
                 case Symbol.PrimaryHeader:
@@ -1010,7 +1012,7 @@ namespace MigraDoc.DocumentObjectModel.IO
             // All document elements except page break.
             if (IsDocumentElement(symbol))
             {
-                if (symbol == Symbol.PageBreak)
+                if (symbol is Symbol.PageBreak or Symbol.ColumnBreak)
                     return false;
                 return true;
             }

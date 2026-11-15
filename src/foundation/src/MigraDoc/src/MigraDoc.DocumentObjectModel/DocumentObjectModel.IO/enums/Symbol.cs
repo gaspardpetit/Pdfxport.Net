@@ -90,6 +90,7 @@ namespace MigraDoc.DocumentObjectModel.IO
         Chart,
         Footnote,
         PageBreak,
+        ColumnBreak,
         Barcode,
 
         // Diagramms

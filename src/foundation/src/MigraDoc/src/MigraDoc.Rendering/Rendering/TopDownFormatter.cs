@@ -61,6 +61,27 @@ namespace MigraDoc.Rendering
             while (!ready && area != null!)
             {
                 DocumentObject docObj = _elements[idx];
+                if (topLevel && _areaProvider is FormattedDocument &&
+                    docObj is PageBreak { IsColumnBreak: true })
+                {
+                    // Consume the break once, including at an empty column.
+                    // Retrying it in the destination area would skip that column too.
+                    _areaProvider.StoreRenderInfos(renderInfos);
+                    renderInfos = new List<RenderInfo>();
+                    area = _areaProvider.GetNextArea() ?? NRT.ThrowOnNull<Area>();
+                    maxHeight = area.Height;
+                    prevRenderInfo = null;
+                    prevFormatInfo = null;
+                    prevBottomMargin = 0;
+                    isFirstOnPage = true;
+                    idx++;
+                    if (idx == _elements.Count)
+                    {
+                        _areaProvider.StoreRenderInfos(renderInfos);
+                        ready = true;
+                    }
+                    continue;
+                }
 
                 // On document level remove SpaceBefore from the first element on a page.
                 if (topLevel)

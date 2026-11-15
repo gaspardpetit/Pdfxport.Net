@@ -20,7 +20,7 @@ namespace MigraDoc.RtfRendering
         /// </summary>
         internal override void Render()
         {
-            _rtfWriter.WriteControl("page");
+            _rtfWriter.WriteControl(((PageBreak)_docObject).IsColumnBreak ? "column" : "page");
         }
     }
 }

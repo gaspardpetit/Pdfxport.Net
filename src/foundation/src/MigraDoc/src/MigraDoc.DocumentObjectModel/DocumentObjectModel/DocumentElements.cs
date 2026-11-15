@@ -103,6 +103,14 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Add a manual column break.
+        /// </summary>
+        public void AddColumnBreak()
+        {
+            Add(new PageBreak { IsColumnBreak = true });
+        }
+
+        /// <summary>
         /// Adds a new barcode to the collection.
         /// </summary>
         public Barcode AddBarcode()
