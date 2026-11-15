@@ -277,6 +277,47 @@ namespace MigraDoc.Rendering
             return new Rectangle(x, y, width, height);
         }
 
+        Rectangle CalcColumnRect(int page, int column)
+        {
+            var rect = CalcContentRect(page);
+            // Header/footer shapes always align to the complete margin area.
+            if (_headerFooterPage != null)
+                return rect;
+            var setup = _currentSection.PageSetup;
+            var count = setup.ColumnCount;
+            var spacing = setup.ColumnSpacing.Point;
+            if (count < 1)
+                throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnCount));
+            if (double.IsNaN(spacing) || double.IsInfinity(spacing) || spacing < 0)
+                throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnSpacing));
+            var width = (rect.Width.Point - spacing * (count - 1)) / count;
+            if (count > 1 && (double.IsNaN(width) || double.IsInfinity(width) || width <= 0))
+                throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnSpacing),
+                    "Column gaps must leave positive body width.");
+            return new Rectangle(rect.X + column * (width + spacing), rect.Y, width, rect.Height);
+        }
+
+        SideExclusionArea? _pageWrapExclusions;
+
+        internal void StoreWrapExclusions(SideExclusionArea exclusions)
+            => _pageWrapExclusions = exclusions;
+
+        Area GetColumnArea(int page, int column)
+        {
+            var rect = CalcColumnRect(page, column);
+            return page == _currentPage && _pageWrapExclusions != null
+                ? _pageWrapExclusions.OnArea(rect) : rect;
+        }
+
+        internal bool IsLaterColumn => _currentColumn > 0;
+
+        internal bool HasFlowInPreviousColumns => IsLaterColumn &&
+            _pageRenderInfos.TryGetValue(_currentPage, out var infos) &&
+            infos.Any(info => info.LayoutInfo.VerticalReference == VerticalReference.PreviousElement);
+
+        // Explicit page breaks skip all remaining columns on the physical page.
+        internal void EndColumnsOnPage() => _currentColumn = _currentSection.PageSetup.ColumnCount - 1;
+
         /// <summary>
         /// Gets the rendering information for the page content.
         /// </summary>
@@ -448,19 +489,29 @@ namespace MigraDoc.Rendering
             if (_isNewSection)
                 _sectionPages = 0;
 
-            ++_currentPage;
-            ++_shownPageNumber;
-            ++_sectionPages;
-            InitFieldInfos();
-            FormatHeadersFooters();
+            if (_isNewSection || _currentColumn >= _currentSection.PageSetup.ColumnCount - 1)
+            {
+                _currentColumn = 0;
+                _pageWrapExclusions = null;
+                ++_currentPage;
+                ++_shownPageNumber;
+                ++_sectionPages;
+                InitFieldInfos();
+                FormatHeadersFooters();
+            }
+            else
+                ++_currentColumn;
             _isNewSection = false;
-            return CalcContentRect(_currentPage);
+            return GetColumnArea(_currentPage, _currentColumn);
         }
 
         int _currentPage;
+        int _currentColumn;
 
         Area IAreaProvider.ProbeNextArea()
-            => CalcContentRect(_currentPage + 1);
+            => _isNewSection || _currentColumn >= _currentSection.PageSetup.ColumnCount - 1
+                ? GetColumnArea(_currentPage + 1, 0)
+                : GetColumnArea(_currentPage, _currentColumn + 1);
 
         void InitFieldInfos()
         {
@@ -478,6 +529,11 @@ namespace MigraDoc.Rendering
 
         void IAreaProvider.StoreRenderInfos(List<RenderInfo> renderInfos)
         {
+            if (_pageRenderInfos.TryGetValue(_currentPage, out var existing))
+            {
+                existing.AddRange(renderInfos);
+                return;
+            }
             _pageRenderInfos.Add(_currentPage, renderInfos);
             var pageSize = CalcPageSize(_currentSection.PageSetup);
             var pageOrientation = CalcPageOrientation(_currentSection.PageSetup);
@@ -529,12 +585,19 @@ namespace MigraDoc.Rendering
 
         bool PositionHorizontallyToMargin(LayoutInfo layoutInfo)
         {
-            var rect = CalcContentRect(_currentPage);
+            var rect = layoutInfo.HorizontalReference == HorizontalReference.AreaBoundary
+                ? CalcColumnRect(_currentPage, _currentColumn)
+                : CalcContentRect(_currentPage);
             var align = GetCurrentAlignment(layoutInfo.HorizontalAlignment);
 
             switch (align)
             {
                 case ElementAlignment.Near:
+                    // Shape layout starts at the supplied column origin. A
+                    // page-margin reference must use the physical margin even
+                    // when Left is zero or no offset was explicitly supplied.
+                    if (layoutInfo.HorizontalReference == HorizontalReference.PageMargin)
+                        layoutInfo.ContentArea.X = rect.X;
                     if (layoutInfo.HasExplicitLeft || layoutInfo.Left != 0)
                     {
                         layoutInfo.ContentArea.X += layoutInfo.Left;
@@ -545,7 +608,7 @@ namespace MigraDoc.Rendering
                         layoutInfo.ContentArea.X += layoutInfo.MarginLeft;
                         return true;
                     }
-                    return false;
+                    return layoutInfo.HorizontalReference == HorizontalReference.PageMargin;
 
                 case ElementAlignment.Far:
                     XUnitPt xPos = rect.X + rect.Width;

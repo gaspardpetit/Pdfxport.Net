@@ -144,10 +144,12 @@ namespace MigraDoc.Rendering
                 // Page- and margin-positioned shapes do not establish body flow.
                 // Ignore PageBreakBefore on the first flowing element after them,
                 // while preserving explicit page breaks.
-                bool pagebreakBefore = _areaProvider.IsAreaBreakBefore(renderer.RenderInfo.LayoutInfo) && !isFirstOnPage &&
-                    (docObj is PageBreak || renderInfos.Any(info =>
+                var body = _areaProvider as FormattedDocument;
+                bool explicitPageBreak = _areaProvider.IsAreaBreakBefore(renderer.RenderInfo.LayoutInfo) &&
+                    (!isFirstOnPage || body?.IsLaterColumn == true) &&
+                    (docObj is PageBreak || body?.HasFlowInPreviousColumns == true || renderInfos.Any(info =>
                         info.LayoutInfo.VerticalReference == VerticalReference.PreviousElement));
-                pagebreakBefore = pagebreakBefore || !isFirstOnPage && IsForcedAreaBreak(idx, renderer, area);
+                bool pagebreakBefore = explicitPageBreak || !isFirstOnPage && IsForcedAreaBreak(idx, renderer, area);
 
                 if (!pagebreakBefore && renderer.RenderInfo.FormatInfo.IsEnding)
                 {
@@ -239,6 +241,8 @@ namespace MigraDoc.Rendering
 
                     if (!ready)
                     {
+                        if (explicitPageBreak)
+                            body?.EndColumnsOnPage();
                         area = _areaProvider.GetNextArea();
                         maxHeight = area?.Height ?? NRT.ThrowOnNull<XUnitPt>();
                     }
@@ -304,6 +308,8 @@ namespace MigraDoc.Rendering
                         right, XUnitPt.FromPoint(bandBottom), WrapStyle.TopBottom);
                 }
             }
+            if (_areaProvider is FormattedDocument body)
+                body.StoreWrapExclusions(result);
             return result;
         }
 
