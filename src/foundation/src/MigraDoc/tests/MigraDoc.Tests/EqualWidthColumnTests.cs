@@ -409,7 +409,13 @@ public class EqualWidthColumnTests : IDisposable
         var info = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!
             .OfType<ParagraphRenderInfo>().Single(i => ReferenceEquals(i.DocumentObject, next));
         info.LayoutInfo.ContentArea.X.Point.Should().BeApproximately(130, 0.01);
-        info.LayoutInfo.ContentArea.Y.Point.Should().BeApproximately(50, 0.01);
+        // The fragment includes the leading 30pt gap in its flow rectangle;
+        // its painted first line still starts below the blocked band.
+        info.LayoutInfo.ContentArea.Y.Point.Should().BeApproximately(20, 0.01);
+        info.LayoutInfo.ContentArea.Height.Point.Should().BeApproximately(50, 0.01);
+        var unwrapped = Render(Create(2, 1));
+        Texts(renderer, 1, "After").Single().Y.Should()
+            .BeApproximately(Texts(unwrapped, 1)[0].Y + 30, 0.01);
     }
 
     [Fact]

@@ -24,8 +24,8 @@ public class WrapBandParagraphSpacingTests : IDisposable
     [Theory]
     [InlineData(40, 10, 20, 70)] // Band entirely inside the spacing.
     [InlineData(30, 10, 20, 60)] // Band starts at the body cursor.
-    [InlineData(20, 10, 20, 50)] // Band ends at the cursor: no overlap.
-    [InlineData(50, 10, 20, 60)] // Band starts at spacing end: line collision only.
+    [InlineData(20, 10, 20, 60)] // Before also clears the band: cursor 40, then 20pt spacing.
+    [InlineData(50, 10, 20, 50)] // Flow starts at spacing end; its first line clears to 60.
     [InlineData(40, 10, 0, 30)]  // Zero spacing leaves line wrapping unchanged.
     public void RestartsOnlyIntersectingPositiveSpacing(double top, double height, double spacing, double expected)
     {
