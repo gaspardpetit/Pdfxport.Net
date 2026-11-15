@@ -580,6 +580,11 @@ namespace MigraDoc.Rendering
             switch (align)
             {
                 case ElementAlignment.Near:
+                    // Shape layout starts at the supplied column origin. A
+                    // page-margin reference must use the physical margin even
+                    // when Left is zero or no offset was explicitly supplied.
+                    if (layoutInfo.HorizontalReference == HorizontalReference.PageMargin)
+                        layoutInfo.ContentArea.X = rect.X;
                     if (layoutInfo.HasExplicitLeft || layoutInfo.Left != 0)
                     {
                         layoutInfo.ContentArea.X += layoutInfo.Left;
@@ -590,7 +595,7 @@ namespace MigraDoc.Rendering
                         layoutInfo.ContentArea.X += layoutInfo.MarginLeft;
                         return true;
                     }
-                    return false;
+                    return layoutInfo.HorizontalReference == HorizontalReference.PageMargin;
 
                 case ElementAlignment.Far:
                     XUnitPt xPos = rect.X + rect.Width;

@@ -2,6 +2,7 @@ using FluentAssertions;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.IO;
 using MigraDoc.DocumentObjectModel.Tables;
+using MigraDoc.DocumentObjectModel.Shapes;
 using MigraDoc.Rendering;
 using PdfSharp.Diagnostics;
 using PdfSharp.Fonts;
@@ -298,6 +299,54 @@ public class EqualWidthColumnTests : IDisposable
         AllTexts(renderer, 2).Count(t => t.Text == "Header").Should().Be(1);
         Enumerable.Range(1, 2).SelectMany(page => Texts(renderer, page)).Select(t => t.Text)
             .Should().Equal(Enumerable.Range(1, 25).Select(i => "Body" + i));
+    }
+
+    public static IEnumerable<object[]> ShapePositions()
+    {
+        foreach (var before in new[] { 13, 25, 49 })
+        foreach (var reference in new[] { RelativeHorizontal.Margin, RelativeHorizontal.Column, RelativeHorizontal.Page })
+        {
+            yield return new object[] { before, reference, null!, 0d };
+            yield return new object[] { before, reference, 0d, 5d };
+            yield return new object[] { before, reference, 7d, 0d };
+            yield return new object[] { before, reference, null!, 5d };
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ShapePositions))]
+    public void NearAlignedShapesKeepTheirHorizontalReference(int before, RelativeHorizontal reference,
+        double? left, double wrapDistance)
+    {
+        var document = Create(3, before);
+        var section = document.LastSection;
+        section.PageSetup.LeftMargin = Unit.FromPoint(30);
+        section.PageSetup.RightMargin = Unit.FromPoint(10);
+        section.PageSetup.MirrorMargins = true;
+        var frame = section.AddTextFrame();
+        frame.RelativeHorizontal = reference;
+        frame.RelativeVertical = RelativeVertical.Page;
+        frame.Top = Unit.FromPoint(30);
+        if (left is { } offset) frame.Left = Unit.FromPoint(offset);
+        frame.WrapFormat.DistanceLeft = Unit.FromPoint(wrapDistance);
+        frame.Width = Unit.FromPoint(30);
+        frame.Height = Unit.FromPoint(10);
+        frame.AddParagraph("Frame");
+        var renderer = Render(document);
+        var page = before / 36 + 1;
+        var column = before % 36 / 12;
+        var marginOrigin = page % 2 == 0 ? 10 : 30;
+        var columnOrigin = marginOrigin + column * (160.0 / 3 + 20);
+        var expected = reference switch
+        {
+            RelativeHorizontal.Margin => marginOrigin + (left ?? wrapDistance),
+            RelativeHorizontal.Column => columnOrigin + (left ?? wrapDistance),
+            _ => wrapDistance != 0 ? wrapDistance : left ?? 0
+        };
+        renderer.PageCount.Should().Be(page);
+        var info = renderer.DocumentRenderer.GetRenderInfoFromPage(page)!
+            .Single(i => ReferenceEquals(i.DocumentObject, frame));
+        info.LayoutInfo.ContentArea.X.Point.Should().BeApproximately(expected, 0.01);
     }
 
     static PdfDocumentRenderer Render(Document document)
