@@ -138,6 +138,39 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Gets or sets the number of equal-width body columns. Defaults to one.
+        /// Columns fill from left to right before advancing to the next page.
+        /// Headers and footers retain the full page-margin width.
+        /// </summary>
+        public int ColumnCount
+        {
+            get => Values.ColumnCount ?? 1;
+            set
+            {
+                EnsureNotFrozen();
+                if (value < 1)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                Values.ColumnCount = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the nonnegative gap between body columns. Defaults to zero.
+        /// The combined gaps must leave positive width for the columns.
+        /// </summary>
+        public Unit ColumnSpacing
+        {
+            get => Values.ColumnSpacing ?? Unit.Zero;
+            set
+            {
+                EnsureNotFrozen();
+                if (double.IsNaN(value.Point) || double.IsInfinity(value.Point) || value.Point < 0)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                Values.ColumnSpacing = value;
+            }
+        }
+
+        /// <summary>
         /// Gets or sets the page orientation of the section.
         /// If Orientation is set, the PageFormat will be rotated if necessary.
         /// If PageWidth and PageHeight are set, the actual orientation will be defined by width and height.
@@ -524,6 +557,12 @@ namespace MigraDoc.DocumentObjectModel
                 if (Values.SectionStart is not null)
                     serializer.WriteSimpleAttribute("SectionStart", SectionStart);
 
+                if (Values.ColumnCount is not null)
+                    serializer.WriteSimpleAttribute("ColumnCount", ColumnCount);
+
+                if (Values.ColumnSpacing is not null)
+                    serializer.WriteSimpleAttribute("ColumnSpacing", ColumnSpacing);
+
                 if (Values.PageFormat is not null)
                     serializer.WriteSimpleAttribute("PageFormat", PageFormat);
 
@@ -574,6 +613,12 @@ namespace MigraDoc.DocumentObjectModel
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public BreakType? SectionStart { get; set; }
+
+            /// <summary>Number of equal-width body columns.</summary>
+            public int? ColumnCount { get; set; }
+
+            /// <summary>Gap between body columns.</summary>
+            public Unit? ColumnSpacing { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.

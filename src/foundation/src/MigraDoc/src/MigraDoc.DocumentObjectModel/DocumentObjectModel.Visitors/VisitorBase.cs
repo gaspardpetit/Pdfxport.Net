@@ -382,6 +382,10 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             //        pageSetup.pageFormat = refPageSetup.pageFormat;
             if (pageSetup.Values.SectionStart is null)
                 pageSetup.Values.SectionStart = refPageSetup.Values.SectionStart;
+            if (pageSetup.Values.ColumnCount is null)
+                pageSetup.Values.ColumnCount = refPageSetup.Values.ColumnCount;
+            if (pageSetup.Values.ColumnSpacing is null)
+                pageSetup.Values.ColumnSpacing = refPageSetup.Values.ColumnSpacing;
             if (pageSetup.Values.TopMargin.IsValueNullOrEmpty())
                 pageSetup.Values.TopMargin = refPageSetup.Values.TopMargin;
             if (pageSetup.Values.BottomMargin.IsValueNullOrEmpty())
