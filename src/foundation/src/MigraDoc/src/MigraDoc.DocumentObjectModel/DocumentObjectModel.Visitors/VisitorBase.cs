@@ -382,8 +382,14 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             //        pageSetup.pageFormat = refPageSetup.pageFormat;
             if (pageSetup.Values.SectionStart is null)
                 pageSetup.Values.SectionStart = refPageSetup.Values.SectionStart;
+            // An explicit count starts a new column definition. Otherwise,
+            // inherit the previous section's geometry along with its count.
             if (pageSetup.Values.ColumnCount is null)
+            {
+                pageSetup.Values.ColumnWidthsPoints ??= refPageSetup.Values.ColumnWidthsPoints?.ToArray();
+                pageSetup.Values.ColumnGapsPoints ??= refPageSetup.Values.ColumnGapsPoints?.ToArray();
                 pageSetup.Values.ColumnCount = refPageSetup.Values.ColumnCount;
+            }
             if (pageSetup.Values.ColumnSpacing is null)
                 pageSetup.Values.ColumnSpacing = refPageSetup.Values.ColumnSpacing;
             if (pageSetup.Values.TopMargin.IsValueNullOrEmpty())

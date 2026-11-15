@@ -290,11 +290,29 @@ namespace MigraDoc.Rendering
                 throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnCount));
             if (double.IsNaN(spacing) || double.IsInfinity(spacing) || spacing < 0)
                 throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnSpacing));
-            var width = (rect.Width.Point - spacing * (count - 1)) / count;
+            var widths = setup.ColumnWidthsPoints;
+            var gaps = setup.ColumnGapsPoints;
+            if (widths != null && (widths.Length != count ||
+                widths.Any(w => double.IsNaN(w) || double.IsInfinity(w) || w <= 0)))
+                throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnWidthsPoints));
+            if (gaps != null && (gaps.Length != count - 1 ||
+                gaps.Any(g => double.IsNaN(g) || double.IsInfinity(g) || g < 0)))
+                throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnGapsPoints));
+            var totalGap = gaps?.Sum() ?? spacing * (count - 1);
+            var width = widths?[column] ?? (rect.Width.Point - totalGap) / count;
+            var usedWidth = (widths?.Sum() ?? width * count) + totalGap;
+            if ((widths != null || gaps != null) &&
+                (double.IsNaN(usedWidth) || double.IsInfinity(usedWidth) ||
+                 width <= 0 || usedWidth > rect.Width.Point + 0.001))
+                throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnWidthsPoints),
+                    "Column widths and gaps must fit inside the body width.");
             if (count > 1 && (double.IsNaN(width) || double.IsInfinity(width) || width <= 0))
                 throw new ArgumentOutOfRangeException(nameof(PageSetup.ColumnSpacing),
                     "Column gaps must leave positive body width.");
-            return new Rectangle(rect.X + column * (width + spacing), rect.Y, width, rect.Height);
+            var x = rect.X.Point;
+            for (var index = 0; index < column; index++)
+                x += (widths?[index] ?? width) + (gaps?[index] ?? spacing);
+            return new Rectangle(x, rect.Y, width, rect.Height);
         }
 
         SideExclusionArea? _pageWrapExclusions;

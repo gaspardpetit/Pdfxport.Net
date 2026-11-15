@@ -2014,6 +2014,17 @@ namespace MigraDoc.DocumentObjectModel.IO
                 // BUG_OLD ReviewSTLA
                 if (valType == typeof(string))
                     ParseStringAssignment(dom, vd);
+                else if (valType == typeof(double[]) && dom is PageSetup &&
+                    vd.ValueName is "ColumnWidthsPoints" or "ColumnGapsPoints")
+                {
+                    EnsureCondition(Symbol == Symbol.StringLiteral,
+                        () => MdDomMsgs.StringValueExpected(_scanner.Token));
+                    // Point arrays use an invariant comma-separated DDL string.
+                    var values = Token.Length == 0 ? Array.Empty<double>() : Token.Split(',')
+                        .Select(part => double.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    dom.SetValue(vd.ValueName, values);
+                    ReadCode();
+                }
                 else if (valType == typeof(int))
                     ParseIntegerAssignment(dom, vd);
                 else if (valType == typeof(Unit))
