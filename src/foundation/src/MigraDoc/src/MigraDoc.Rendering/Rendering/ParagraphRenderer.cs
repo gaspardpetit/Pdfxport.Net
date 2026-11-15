@@ -4156,8 +4156,11 @@ namespace MigraDoc.Rendering
                     var paragraphFont = FontHandler.FontToXFont(_paragraph.Format.Font);
                     descent = FontHandler.GetDescent(paragraphFont);
 
-                    // In word, the baseline position seems to be scaled to the set line spacing. Same here with the descent for text positioning. 
-                    var factor = singleLineSpace.Point / paragraphFont.Size;
+                    // Matching natural line height also matches the single-spaced
+                    // baseline. Allow small differences from rounded point values;
+                    // other exact heights retain the scaled paragraph descent.
+                    var factor = Math.Abs(singleLineSpace.Point - paragraphFont.GetHeight()) < 0.02
+                        ? 1 : singleLineSpace.Point / paragraphFont.Size;
                     descent *= factor;
                 }
                 else
