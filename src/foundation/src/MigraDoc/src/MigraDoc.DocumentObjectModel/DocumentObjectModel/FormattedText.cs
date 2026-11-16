@@ -395,6 +395,19 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Gets or sets whether PDF layout ignores this run's text and tabs when determining line height.
+        /// Text retains its font size and horizontal width; its ink may extend outside
+        /// the line box. Inline images retain their line metrics. Nested runs inherit
+        /// this setting unless explicitly overridden. The paragraph font supplies the
+        /// minimum line metrics. Default is false. This setting does not affect RTF output.
+        /// </summary>
+        public bool ExcludeFromLineMetrics
+        {
+            get => Values.ExcludeFromLineMetrics ?? false;
+            set => Values.ExcludeFromLineMetrics = value;
+        }
+
+        /// <summary>
         /// Gets or sets the style name.
         /// </summary>
         public string Style
@@ -513,7 +526,7 @@ namespace MigraDoc.DocumentObjectModel
         internal override void Serialize(Serializer serializer)
         {
             bool isFormatted = false;
-            if (!Values.Font.IsValueNullOrEmpty())
+            if (!Values.Font.IsValueNullOrEmpty() || Values.ExcludeFromLineMetrics is not null)
             {
                 Font.Serialize(serializer);
                 isFormatted = true;
@@ -581,6 +594,9 @@ namespace MigraDoc.DocumentObjectModel
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public string? Style { get; set; }
+
+            /// <summary>Nullable local override for line metric participation.</summary>
+            public bool? ExcludeFromLineMetrics { get; set; }
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.

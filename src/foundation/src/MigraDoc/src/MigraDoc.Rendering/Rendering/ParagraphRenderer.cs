@@ -4060,9 +4060,31 @@ namespace MigraDoc.Rendering
             }
         }
 
+        static bool ExcludesTextFromLineMetrics(DocumentObject? element)
+        {
+            if (element is null or Image)
+                return false;
+            for (var span = DocumentRelations.GetParentOfType(element, typeof(FormattedText)) as FormattedText;
+                 span != null;
+                 span = DocumentRelations.GetParentOfType(span, typeof(FormattedText)) as FormattedText)
+                if (span.Values.ExcludeFromLineMetrics is { } excluded)
+                    return excluded;
+            return false;
+        }
+
         VerticalLineInfo CalcCurrentVerticalInfo()
         {
-            return CalcVerticalInfo(CurrentFont);
+            if (!ExcludesTextFromLineMetrics(_currentLeaf?.Current))
+                return CalcVerticalInfo(CurrentFont);
+            // Use the paragraph font as a minimum without borrowing the excluded
+            // run's size. Included runs can still enlarge the line normally.
+            var savedLeaf = _currentLeaf;
+            try
+            {
+                _currentLeaf = null;
+                return CalcVerticalInfo(CurrentFont);
+            }
+            finally { _currentLeaf = savedLeaf; }
         }
 
         Rectangle? GetFittingRectForLine(XUnitPt y, VerticalLineInfo line, XUnitPt bottomBorder = default)
@@ -4081,6 +4103,8 @@ namespace MigraDoc.Rendering
 
         VerticalLineInfo CalcVerticalInfo(XFont font, bool isListSymbol = false)
         {
+            if (!isListSymbol && ExcludesTextFromLineMetrics(_currentLeaf?.Current))
+                return CalcCurrentVerticalInfo();
             var paragraphFormat = _paragraph.Format;
             var lineSpacingRule = paragraphFormat.LineSpacingRule;
 
