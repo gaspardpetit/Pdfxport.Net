@@ -90,7 +90,7 @@ namespace MigraDoc.Rendering
             var column = Cell.Column;
             Debug.Assert(column != null, nameof(column) + " != null");
             XUnitPt width = InnerWidth;
-            if (Cell.Table!.CellMarginsMeasuredFromCollapsedGridEdge)
+            if (Cell.Table!.CellSpacing.Point == 0 && Cell.Table.CellMarginsMeasuredFromCollapsedGridEdge)
                 width += _bordersRenderer.GetWidth(BorderType.Right);
             width -= column.LeftPadding.Point;
             Debug.Assert(Cell.Table != null, "Cell.Table != null");
@@ -146,6 +146,8 @@ namespace MigraDoc.Rendering
                     width += (Cell.Table.Columns[columnIdx]?.Width ?? NRT.ThrowOnNull<Unit>()).Point;
                 }
                 width -= _bordersRenderer.GetWidth(BorderType.Right);
+                if (Cell.Table!.CellSpacing.Point > 0)
+                    width -= 2 * Cell.Table.CellSpacing.Point + _bordersRenderer.GetWidth(BorderType.Left);
 
                 return width;
             }

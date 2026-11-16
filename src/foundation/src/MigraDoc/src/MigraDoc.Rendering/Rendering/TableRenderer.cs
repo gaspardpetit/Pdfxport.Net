@@ -313,6 +313,8 @@ namespace MigraDoc.Rendering
 
         bool AdjacentClosedCellOwnsEdge(Cell cell, BorderType side, BordersRenderer current)
         {
+            if (_table.CellSpacing.Point > 0)
+                return false;
             if (cell.MergeRight != 0 || cell.MergeDown != 0 || cell.Row == null || cell.Column == null)
                 return false;
             var row = cell.Row.Index + (side == BorderType.Bottom ? 1 : side == BorderType.Top ? -1 : 0);
@@ -481,6 +483,11 @@ namespace MigraDoc.Rendering
 
             XUnitPt height = lowerBorderPos - upperBorderPos;
             height -= bordersRenderer.GetWidth(BorderType.Bottom);
+            if (_table.CellSpacing.Point > 0)
+            {
+                height -= bordersRenderer.GetWidth(BorderType.Top) + 2 * _table.CellSpacing.Point;
+                y += bordersRenderer.GetWidth(BorderType.Top) + _table.CellSpacing.Point;
+            }
 
             XUnitPt x = _startX;
             Debug.Assert(cell.Column != null, "cell.Column != null");
@@ -490,6 +497,8 @@ namespace MigraDoc.Rendering
                 x += (float_)(_table.Columns[clmIdx]?.Width.Point ?? NRT.ThrowOnNull<int>());
             }
             x += LeftBorderOffset;
+            if (_table.CellSpacing.Point > 0)
+                x += _table.CellSpacing.Point + bordersRenderer.GetWidth(BorderType.Left);
 
             return new(x, y, width, height);
         }
@@ -524,16 +533,17 @@ namespace MigraDoc.Rendering
             // A uniform double grid has two closed outlines: one facing each cell
             // and one around the outside of the table. Draw those as paths so the
             // corners are joins rather than unrelated line caps.
+            var independentEdges = _table.CellSpacing.Point > 0;
             XPen? gridPen = null;
-            var uniformDoubleGrid = followingCells == null && TryGetUniformDoubleGridPen(cells, out gridPen);
+            var uniformDoubleGrid = !independentEdges && followingCells == null && TryGetUniformDoubleGridPen(cells, out gridPen);
             XPen? triplePen = null;
-            var uniformTripleGrid = followingCells == null && TryGetUniformTripleGridPen(cells, out triplePen);
+            var uniformTripleGrid = !independentEdges && followingCells == null && TryGetUniformTripleGridPen(cells, out triplePen);
             XPen? compoundPen = null;
             BorderStyle compoundStyle = BorderStyle.None;
-            var uniformCompoundGrid = followingCells == null &&
+            var uniformCompoundGrid = !independentEdges && followingCells == null &&
                 TryGetUniformCompoundGridPen(cells, out compoundPen, out compoundStyle);
             XPen? threeDimensionalPen = null;
-            var uniformThreeDimensionalGrid = followingCells == null &&
+            var uniformThreeDimensionalGrid = !independentEdges && followingCells == null &&
                 TryGetThreeDimensionalGridPen(cells, out threeDimensionalPen);
             var centeredGridBand = uniformDoubleGrid ? gridPen!.Width * 3 :
                 uniformTripleGrid ? triplePen!.Width * 5 :
@@ -566,6 +576,12 @@ namespace MigraDoc.Rendering
                     precedingBottomBorders.Add(HorizontalBorderKey(cell, borders, bottomPen, false));
                 }
             }
+            if (independentEdges)
+            {
+                followingTopBorders.Clear();
+                precedingBottomBorders.Clear();
+                followingLeftBorders.Clear();
+            }
             var closedCells = new List<(Cell Cell, BorderStyle Style, XPen Pen, double Band)>();
             if (!uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid && !uniformThreeDimensionalGrid)
             {
@@ -584,7 +600,7 @@ namespace MigraDoc.Rendering
                 if (TryGetClosedCellRailPen(cell, out var pen, out var style))
                     followingClosedMasks.AddRange(GetClosedRailMasks(cell, style, pen!,
                         pen!.Width * ClosedRailWidthMultiplier(style)));
-            var junctions = !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid
+            var junctions = !independentEdges && !uniformDoubleGrid && !uniformTripleGrid && !uniformCompoundGrid
                 ? GetFourWayRailJunctions(cells)
                 : new List<(JunctionArm North, JunctionArm South, JunctionArm West, JunctionArm East)>();
             var junctionMasks = junctions.Select(junction => GetFourWayRailJunctionBounds(
@@ -715,6 +731,9 @@ namespace MigraDoc.Rendering
         Rectangle GetClosedCellInnerRect(Cell cell, double band)
         {
             var inner = GetInnerRect(CalcStartingHeight(), cell);
+            if (_table.CellSpacing.Point > 0)
+                return ResolveCellPlacement(cell, inner)?.PaintRect is { } spacedRect
+                    ? FromXRect(spacedRect) : inner;
             var effectiveBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
             var effective = new BordersRenderer(effectiveBorders, _gfx);
             var rightWidth = effective.GetWidth(BorderType.Right).Point;
@@ -1920,6 +1939,8 @@ namespace MigraDoc.Rendering
         {
             get
             {
+                if (_table.CellSpacing.Point > 0)
+                    return 0;
                 if (_leftBorderOffset < 0)
                 {
                     if (_table.Rows.Count > 0 && _table.Columns.Count > 0)
@@ -2091,7 +2112,7 @@ namespace MigraDoc.Rendering
             Cell minMergedCell = GetMinMergedCell(lastBorderRow);
             FormattedCell minMergedFormattedCell = _formattedCells[minMergedCell];
             XUnitPt maxBottomBorderPosition = lastPos + minMergedFormattedCell.InnerHeight;
-            maxBottomBorderPosition += CalcBottomBorderWidth(minMergedCell);
+            maxBottomBorderPosition += CalcBoundaryBand(minMergedCell);
 
             foreach (Cell cell in _mergedCells)
             {
@@ -2111,7 +2132,7 @@ namespace MigraDoc.Rendering
                     XUnitPt topBorderPos = _bottomBorderMapOld[cell.Row.Index];
 #endif
                         XUnitPt bottomBorderPos = topBorderPos + formattedCell.InnerHeight;
-                        bottomBorderPos += CalcBottomBorderWidth(cell);
+                        bottomBorderPos += CalcBoundaryBand(cell);
                         if (bottomBorderPos > maxBottomBorderPosition)
                             maxBottomBorderPosition = bottomBorderPos;
                     }
@@ -2127,6 +2148,8 @@ namespace MigraDoc.Rendering
         /// <param name="row">The row index.</param>
         XUnitPt CalcMaxTopBorderWidth(int row)
         {
+            if (_table.CellSpacing.Point > 0)
+                return 0;
             XUnitPt maxWidth = 0;
             if (_table.Rows.Count > row)
             {
@@ -2161,7 +2184,7 @@ namespace MigraDoc.Rendering
             var minMergedCell = GetMinMergedCell(lastBorderRow);
             var minMergedFormattedCell = _formattedCells[minMergedCell];
             XUnitPt maxBottomBorderPosition = lastPos + minMergedFormattedCell.InnerHeight;
-            maxBottomBorderPosition += CalcBottomBorderWidth(minMergedCell);
+            maxBottomBorderPosition += CalcBoundaryBand(minMergedCell);
 
             Debug.Assert(minMergedCell.Row != null, "minMergedCell.Row != null");
             int minRowIndex = minMergedCell.Row.Index; // Cache property result.
@@ -2208,7 +2231,7 @@ namespace MigraDoc.Rendering
                     XUnitPt topBorderPos = _bottomBorderMap[rowIndex];
 #endif
                         XUnitPt bottomBorderPos = topBorderPos + formattedCell.InnerHeight;
-                        bottomBorderPos += CalcBottomBorderWidth(cell);
+                        bottomBorderPos += CalcBoundaryBand(cell);
                         if (bottomBorderPos > maxBottomBorderPosition)
                             maxBottomBorderPosition = bottomBorderPos;
                     }
@@ -2245,6 +2268,15 @@ namespace MigraDoc.Rendering
                 _bottomBorderMap.Add(minRowIndexPlusMergeDown + 1, maxBottomBorderPosition);
                 lastBorderRow = minRowIndexPlusMergeDown + 1;
             }
+        }
+
+        XUnitPt CalcBoundaryBand(Cell cell)
+        {
+            if (_table.CellSpacing.Point == 0)
+                return CalcBottomBorderWidth(cell);
+            var borders = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), _gfx);
+            return borders.GetWidth(BorderType.Top) + borders.GetWidth(BorderType.Bottom) +
+                2 * _table.CellSpacing.Point;
         }
 
         /// <summary>

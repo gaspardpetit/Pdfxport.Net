@@ -299,6 +299,17 @@ namespace MigraDoc.DocumentObjectModel.Tables
         }
 
         /// <summary>
+        /// For PDF layout, the inset on each side of independently bordered cells, inside the column pitch.
+        /// Adjacent cells have twice this gap. Row heights describe the cell interior;
+        /// top/bottom borders and twice this inset are added. Zero retains shared borders.
+        /// </summary>
+        public Unit CellSpacing
+        {
+            get => Values.CellSpacing ?? Unit.Zero;
+            set => Values.CellSpacing = value;
+        }
+
+        /// <summary>
         /// Gets or sets the default left padding for all cells of the table.
         /// </summary>
         public Unit LeftPadding
@@ -407,6 +418,8 @@ namespace MigraDoc.DocumentObjectModel.Tables
 
             if (Values.CellMarginsMeasuredFromCollapsedGridEdge is not null)
                 serializer.WriteSimpleAttribute("CellMarginsMeasuredFromCollapsedGridEdge", CellMarginsMeasuredFromCollapsedGridEdge);
+            if (!Values.CellSpacing.IsValueNullOrEmpty())
+                serializer.WriteSimpleAttribute("CellSpacing", CellSpacing);
 
             Values.Borders?.Serialize(serializer, null);
 
@@ -491,6 +504,22 @@ namespace MigraDoc.DocumentObjectModel.Tables
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public Unit? BottomPadding { get; set; }
+
+            /// <summary>Space between independently bordered cells.</summary>
+            public Unit? CellSpacing
+            {
+                get => _cellSpacing;
+                set
+                {
+                    // DDL and SetValue assign Values directly, so keep the
+                    // invariant here rather than only in Table's convenience setter.
+                    if (value is { } spacing && (double.IsNaN(spacing.Point) ||
+                        double.IsInfinity(spacing.Point) || spacing.Point < 0))
+                        throw new ArgumentOutOfRangeException(nameof(value));
+                    _cellSpacing = value;
+                }
+            }
+            Unit? _cellSpacing;
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
