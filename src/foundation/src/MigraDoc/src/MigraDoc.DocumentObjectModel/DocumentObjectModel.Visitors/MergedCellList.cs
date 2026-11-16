@@ -151,11 +151,13 @@ namespace MigraDoc.DocumentObjectModel.Visitors
 
         Borders GetEffectiveBordersInternal(Cell cell, bool considerHeadingRows, int? consideredLastHeadingRow)
         {
+            // RTF has no cell-spacing output, so its boundaries remain shared.
+            var shared = !considerHeadingRows || cell.Table.CellSpacing.Point == 0;
 #if CACHE
             var lastKnownHeaderInsertionRowIndex = GetLastKnownHeaderInsertionRowIndex();
 
             // If a cached borders value exists for this cell, determine if it has to be determined again.
-            var existingLookupKey = _effectiveBordersLookup.TryGetValue(cell, out var result);
+            var existingLookupKey = _effectiveBordersLookup.TryGetValue((cell, considerHeadingRows, shared), out var result);
             if (existingLookupKey)
             {
                 // The cached borders object can be returned as no changes are expected, when...
@@ -205,7 +207,6 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             // For BorderTypes Top, Right, Bottom and Left update the width with the neighbors touching border where required.
             // In case of rounded corners this should not be done.
 
-            var shared = cell.Table.CellSpacing.Point == 0;
             var leftNeighbor = shared ? GetNeighborLeft(cellIdx) : null;
             if (leftNeighbor != null && leftNeighbor.RoundedCorner != RoundedCorner.TopRight && leftNeighbor.RoundedCorner != RoundedCorner.BottomRight)
             {
@@ -259,17 +260,18 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             }
 #if CACHE
             // Add or update cached borders and lastKnownHeaderInsertionRowIndex for cell.
-            _effectiveBordersLookup[cell] = (borders, lastKnownHeaderInsertionRowIndex);
+            _effectiveBordersLookup[(cell, considerHeadingRows, shared)] = (borders, lastKnownHeaderInsertionRowIndex);
 #endif
             return borders;
         }
 
 #if CACHE
         /// <summary>
-        /// A dictionary assigning the determined effective borders and the last known header insertion row index at that time to a cell for caching purposes.
+        /// Caches effective borders and the last known header insertion row index per cell and rendering policy.
         /// If a new last heading insertion row is known, the cached borders may have to be determined again.
         /// </summary>
-        readonly Dictionary<Cell, (Borders Borders, int LastKnownHeaderInsertionRowIndex)> _effectiveBordersLookup = new();
+        readonly Dictionary<(Cell Cell, bool ConsiderHeadingRows, bool SharedEdges),
+            (Borders Borders, int LastKnownHeaderInsertionRowIndex)> _effectiveBordersLookup = new();
 #endif
 
         /// <summary>

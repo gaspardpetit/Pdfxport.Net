@@ -268,6 +268,51 @@ public class CellSpacingTests : IDisposable
         origins.Should().OnlyContain(y => Math.Abs(y - origins[0]) < .001);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void PdfAndRtfKeepSeparateEffectiveBorderCaches(bool vertical, bool pdfFirst)
+    {
+        var document = Create();
+        var table = (Table)document.Sections[0].Elements[0];
+        table.CellSpacing = Unit.FromPoint(3);
+        var first = table[0,0];
+        var neighbor = vertical ? table[1,0] : table[0,1];
+        (vertical ? first.Borders.Bottom : first.Borders.Right).Width = Unit.FromPoint(1);
+        (vertical ? neighbor.Borders.Top : neighbor.Borders.Left).Width = Unit.FromPoint(7);
+        var cells = new MergedCellList(table);
+        double Width(bool pdf)
+        {
+            var borders = pdf ? cells.GetEffectiveBordersPdf(first, -1) : cells.GetEffectiveBordersRtf(first);
+            return (vertical ? borders.Bottom : borders.Right).Width.Point;
+        }
+        Width(pdfFirst).Should().Be(pdfFirst ? 1 : 7);
+        Width(!pdfFirst).Should().Be(pdfFirst ? 7 : 1);
+        Width(pdfFirst).Should().Be(pdfFirst ? 1 : 7);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PdfSpacingDoesNotChangeRtfBorderOutput(bool vertical)
+    {
+        string RenderRtf(double spacing)
+        {
+            var document = Create();
+            var table = (Table)document.Sections[0].Elements[0];
+            table.CellSpacing = Unit.FromPoint(spacing);
+            var neighbor = vertical ? table[1,0] : table[0,1];
+            (vertical ? table[0,0].Borders.Bottom : table[0,0].Borders.Right).Width = Unit.FromPoint(1);
+            (vertical ? neighbor.Borders.Top : neighbor.Borders.Left).Width = Unit.FromPoint(7);
+            return new MigraDoc.RtfRendering.RtfDocumentRenderer().RenderToString(document, ".");
+        }
+        var shared = RenderRtf(0);
+        shared.Should().Contain(@"\brdrw140");
+        RenderRtf(3).Should().Be(shared);
+    }
+
     static Document Create()
     {
         var document = new Document();
