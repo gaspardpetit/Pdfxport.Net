@@ -100,7 +100,8 @@ namespace MigraDoc.Rendering
                 if (renderer != null) // "Slightly hacked" for legends: see below.
                     renderer.MaxElementHeight = maxHeight;
 
-                if (topLevel && _documentRenderer.HasPrepareDocumentProgress)
+                if (topLevel && _areaProvider is not FormattedDocument { IsBalanceProbe: true } &&
+                    _documentRenderer.HasPrepareDocumentProgress)
                 {
                     _documentRenderer.OnPrepareDocumentProgress(_documentRenderer.ProgressCompleted + idx + 1,
                         _documentRenderer.ProgressMaximum);
@@ -235,6 +236,11 @@ namespace MigraDoc.Rendering
                         _areaProvider.PositionVertically(renderer.RenderInfo.LayoutInfo);
                     if (renderer.RenderInfo.FormatInfo.IsEmpty && isFirstOnPage)
                     {
+                        if (_areaProvider is FormattedDocument { IsBalanceProbe: true } probe)
+                        {
+                            probe.BalanceProbeFailed = true;
+                            return;
+                        }
                         area = area.Unite(new Rectangle(area.X, area.Y, area.Width, double.MaxValue));
 
                         renderer = Renderer.Create(gfx, _documentRenderer, docObj, _areaProvider.AreaFieldInfos);

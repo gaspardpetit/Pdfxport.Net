@@ -382,6 +382,8 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             //        pageSetup.pageFormat = refPageSetup.pageFormat;
             if (pageSetup.Values.SectionStart is null)
                 pageSetup.Values.SectionStart = refPageSetup.Values.SectionStart;
+            if (pageSetup.Values.BalanceColumns is null)
+                pageSetup.Values.BalanceColumns = refPageSetup.Values.BalanceColumns;
             // An explicit count starts a new column definition. Otherwise,
             // inherit the previous section's geometry along with its count.
             if (pageSetup.Values.ColumnCount is null)

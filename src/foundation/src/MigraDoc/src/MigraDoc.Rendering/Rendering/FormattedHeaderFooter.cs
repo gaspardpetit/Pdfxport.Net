@@ -11,11 +11,13 @@ namespace MigraDoc.Rendering
     /// </summary>
     class FormattedHeaderFooter : IAreaProvider
     {
-        internal FormattedHeaderFooter(HeaderFooter headerFooter, DocumentRenderer documentRenderer, FieldInfos fieldInfos)
+        internal FormattedHeaderFooter(HeaderFooter headerFooter, DocumentRenderer documentRenderer,
+            FieldInfos fieldInfos, FormattedDocument positioningProvider)
         {
             _headerFooter = headerFooter;
             _fieldInfos = fieldInfos;
             _documentRenderer = documentRenderer;
+            _positioningProvider = positioningProvider;
         }
 
         internal void Format(XGraphics gfx)
@@ -23,7 +25,7 @@ namespace MigraDoc.Rendering
             _gfx = gfx;
             _isFirstArea = true;
             _formatter = new TopDownFormatter(this, _documentRenderer, _headerFooter.Elements);
-            _documentRenderer.FormattedDocument.FormatHeaderFooter(_fieldInfos.PhysicalPageNr,
+            _positioningProvider.FormatHeaderFooter(_fieldInfos.PhysicalPageNr,
                 () => _formatter.FormatOnAreas(gfx, false));
             _contentHeight = RenderInfo.GetTotalHeight(GetRenderInfos());
         }
@@ -63,18 +65,17 @@ namespace MigraDoc.Rendering
 
         bool IAreaProvider.PositionVertically(LayoutInfo layoutInfo)
         {
-            IAreaProvider formattedDoc = _documentRenderer.FormattedDocument;
-            return formattedDoc.PositionVertically(layoutInfo);
+            return ((IAreaProvider)_positioningProvider).PositionVertically(layoutInfo);
         }
 
         bool IAreaProvider.PositionHorizontally(LayoutInfo layoutInfo)
         {
-            IAreaProvider formattedDoc = _documentRenderer.FormattedDocument;
-            return formattedDoc.PositionHorizontally(layoutInfo);
+            return ((IAreaProvider)_positioningProvider).PositionHorizontally(layoutInfo);
         }
 
         readonly HeaderFooter _headerFooter;
         readonly FieldInfos _fieldInfos;
+        readonly FormattedDocument _positioningProvider;
         TopDownFormatter _formatter = null!;  // Set in Format.
         List<RenderInfo>? _renderInfos;
         XGraphics _gfx = null!;  // Set in Format.
