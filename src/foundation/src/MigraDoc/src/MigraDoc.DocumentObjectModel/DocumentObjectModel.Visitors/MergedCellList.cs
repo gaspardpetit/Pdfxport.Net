@@ -335,21 +335,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             if (opposingStyle != BorderStyle.Single)
                 return width;
             var style = borders.GetBorder(type)?.Values.Style ?? borders.Values.Style ?? BorderStyle.Single;
-            var multiplier = style switch
-            {
-                BorderStyle.Double => 3,
-                BorderStyle.Triple => 5,
-                BorderStyle.ThinThickSmallGap or BorderStyle.ThickThinSmallGap => 1.75,
-                BorderStyle.ThinThickThinSmallGap => 2.5,
-                BorderStyle.ThinThickMediumGap or BorderStyle.ThickThinMediumGap => 2,
-                BorderStyle.ThinThickThinMediumGap => 3,
-                BorderStyle.ThinThickLargeGap or BorderStyle.ThickThinLargeGap => 2.125,
-                BorderStyle.ThinThickThinLargeGap => 3.5,
-                BorderStyle.DoubleWave => 2.5,
-                BorderStyle.Emboss3D or BorderStyle.Engrave3D => 1.75,
-                _ => 1
-            };
-            return width * multiplier;
+            return width * BorderStyleDescriptor.For(style).BandMultiplier;
         }
 
         static Unit GetEffectiveBorderWidth(Borders? borders, BorderType type)

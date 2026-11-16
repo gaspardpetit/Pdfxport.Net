@@ -912,16 +912,8 @@ namespace MigraDoc.Rendering
             RenderDiagonalBorders(effectiveBorders, inner);
         }
 
-        static double ClosedRailWidthMultiplier(BorderStyle style)
-        {
-            if (style == BorderStyle.Double)
-                return 3;
-            if (style == BorderStyle.Triple)
-                return 5;
-            var profile = CompoundProfile(style)!.Value;
-            return profile.First + profile.Middle + profile.Gap * (profile.ThreeRails ? 2 : 1) +
-                (profile.ThreeRails ? profile.First : 0);
-        }
+        static double ClosedRailWidthMultiplier(BorderStyle style) =>
+            BorderStyleDescriptor.For(style).BandMultiplier;
 
         sealed class JunctionArm
         {
@@ -1170,19 +1162,12 @@ namespace MigraDoc.Rendering
 #endif
         }
 
-        static (double First, double Middle, double Gap, bool ThreeRails)? CompoundProfile(BorderStyle style) => style switch
+        static (double First, double Middle, double Gap, bool ThreeRails)? CompoundProfile(BorderStyle style)
         {
-            BorderStyle.ThinThickSmallGap => (1.0, 0.375, 0.375, false),
-            BorderStyle.ThickThinSmallGap => (0.375, 1.0, 0.375, false),
-            BorderStyle.ThinThickThinSmallGap => (0.375, 1.0, 0.375, true),
-            BorderStyle.ThinThickMediumGap => (1.0, 0.5, 0.5, false),
-            BorderStyle.ThickThinMediumGap => (0.5, 1.0, 0.5, false),
-            BorderStyle.ThinThickThinMediumGap => (0.5, 1.0, 0.5, true),
-            BorderStyle.ThinThickLargeGap => (0.75, 0.375, 1.0, false),
-            BorderStyle.ThickThinLargeGap => (0.375, 0.75, 1.0, false),
-            BorderStyle.ThinThickThinLargeGap => (0.375, 0.75, 1.0, true),
-            _ => null
-        };
+            var rails = BorderStyleDescriptor.For(style).Rails;
+            return rails.Count > 0 && style is not (BorderStyle.Double or BorderStyle.Triple)
+                ? (rails.First, rails.Middle, rails.Gap, rails.Count == 3) : null;
+        }
 
         bool TryGetUniformCompoundGridPen(IReadOnlyList<Cell> cells, out XPen? pen, out BorderStyle style)
         {

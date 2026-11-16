@@ -63,39 +63,14 @@ namespace MigraDoc.Rendering
             return style;
         }
 
-        internal XUnitPt GetWidth(BorderType type)
-        {
-            var width = GetStrokeWidth(type);
-            return GetStyle(type) switch
-            {
-                BorderStyle.Double => width * 3,
-                BorderStyle.Triple => width * 5,
-                BorderStyle.ThinThickSmallGap or BorderStyle.ThickThinSmallGap => width * 1.75,
-                BorderStyle.ThinThickThinSmallGap => width * 2.5,
-                BorderStyle.ThinThickMediumGap or BorderStyle.ThickThinMediumGap => width * 2,
-                BorderStyle.ThinThickThinMediumGap => width * 3,
-                BorderStyle.ThinThickLargeGap or BorderStyle.ThickThinLargeGap => width * 2.125,
-                BorderStyle.ThinThickThinLargeGap => width * 3.5,
-                BorderStyle.DoubleWave => width * 2.5,
-                BorderStyle.Emboss3D or BorderStyle.Engrave3D => width * 1.75,
-                _ => width
-            };
-        }
+        internal XUnitPt GetWidth(BorderType type) =>
+            GetStrokeWidth(type) * BorderStyleDescriptor.For(GetStyle(type)).BandMultiplier;
 
-        static (double[] Widths, double Gap)? CompoundRails(BorderStyle style) => style switch
+        static (double[] Widths, double Gap)? CompoundRails(BorderStyle style)
         {
-            BorderStyle.Triple => (new[] { 1.0, 1.0, 1.0 }, 1.0),
-            BorderStyle.ThinThickSmallGap => (new[] { 1.0, 0.375 }, 0.375),
-            BorderStyle.ThickThinSmallGap => (new[] { 0.375, 1.0 }, 0.375),
-            BorderStyle.ThinThickThinSmallGap => (new[] { 0.375, 1.0, 0.375 }, 0.375),
-            BorderStyle.ThinThickMediumGap => (new[] { 1.0, 0.5 }, 0.5),
-            BorderStyle.ThickThinMediumGap => (new[] { 0.5, 1.0 }, 0.5),
-            BorderStyle.ThinThickThinMediumGap => (new[] { 0.5, 1.0, 0.5 }, 0.5),
-            BorderStyle.ThinThickLargeGap => (new[] { 0.75, 0.375 }, 1.0),
-            BorderStyle.ThickThinLargeGap => (new[] { 0.375, 0.75 }, 1.0),
-            BorderStyle.ThinThickThinLargeGap => (new[] { 0.375, 0.75, 0.375 }, 1.0),
-            _ => null
-        };
+            var rails = BorderStyleDescriptor.For(style).Rails;
+            return rails.Count > 0 && style != BorderStyle.Double ? (rails.Widths, rails.Gap) : null;
+        }
 
         XUnitPt GetStrokeWidth(BorderType type)
         {
