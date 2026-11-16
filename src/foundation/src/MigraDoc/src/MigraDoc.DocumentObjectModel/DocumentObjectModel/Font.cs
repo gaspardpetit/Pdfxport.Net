@@ -292,7 +292,8 @@ namespace MigraDoc.DocumentObjectModel
                 if (parent.Values.Style is null)
                 {
                     // Check if we can use a DDL keyword.
-                    var notNull = CheckWhatIsNotNull();
+                    var notNull = parent.Values.ExcludeFromLineMetrics is null
+                        ? CheckWhatIsNotNull() : FontProperties.None;
 
                     if (notNull == FontProperties.Size)
                     {
@@ -327,6 +328,8 @@ namespace MigraDoc.DocumentObjectModel
 
                 //bool needBlank = false;  // nice, but later…
                 serializer.Write("\\font" + fontStyle + "[");
+                if (parent.Values.ExcludeFromLineMetrics is not null)
+                    serializer.WriteSimpleAttribute("ExcludeFromLineMetrics", parent.ExcludeFromLineMetrics);
 
                 if (!String.IsNullOrEmpty(Values.Name))
                     serializer.WriteSimpleAttribute("Name", Name);
