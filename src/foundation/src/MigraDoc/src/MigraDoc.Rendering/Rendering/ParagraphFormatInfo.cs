@@ -31,9 +31,13 @@ namespace MigraDoc.Rendering
         public double ShiftedDescent;
         public bool HasBaselineShift;
 
+        // Spacing-rule metrics without baseline-shift expansion.
+        public XUnitPt UnshiftedHeight;
+        public XUnitPt UnshiftedInherentLineSpace;
+        public double UnshiftedDescent;
+
         // Script envelopes are relative to the unshifted line bottom, whereas
         // ordinary run envelopes above are relative to the common baseline.
-        public double UnshiftedDescent;
         public double ScriptShiftedAscent;
         public double ScriptShiftedDescent;
         public bool HasScriptEnvelope;

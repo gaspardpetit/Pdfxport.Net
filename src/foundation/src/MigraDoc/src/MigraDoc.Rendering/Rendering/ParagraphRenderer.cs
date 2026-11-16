@@ -4191,7 +4191,7 @@ namespace MigraDoc.Rendering
                 // Set inherentLineSpace and lineHeight to the same maximum value. This way the space resulting from the difference
                 // between original singleLineSpace and _paragraph.Format.LineSpacing.Point will be located at the top of the text line.
                 inherentLineSpace = singleLineSpace;
-                inherentLineSpace = Math.Max(inherentLineSpace, _currentVerticalInfo.InherentLineSpace);
+                inherentLineSpace = Math.Max(inherentLineSpace, _currentVerticalInfo.UnshiftedInherentLineSpace);
                 lineHeight = inherentLineSpace;
                 var bottomSpace = _paragraph.Format.AtLeastBottomLineSpace.Point;
                 if (!double.IsNaN(bottomSpace) && !double.IsInfinity(bottomSpace) && bottomSpace > 0)
@@ -4209,7 +4209,7 @@ namespace MigraDoc.Rendering
 
                 // Set inherentLineSpace to the maximum original singleLineSpace value and...
                 inherentLineSpace = singleLineSpace;
-                inherentLineSpace = Math.Max(inherentLineSpace, _currentVerticalInfo.InherentLineSpace);
+                inherentLineSpace = Math.Max(inherentLineSpace, _currentVerticalInfo.UnshiftedInherentLineSpace);
 
                 // ...set lineHeight to the maximum multiplied singleLineSpace value. This way the space resulting from the difference
                 // between original and multiplied singleLineSpace value will be located at the bottom of the text line.
@@ -4217,7 +4217,7 @@ namespace MigraDoc.Rendering
                 if (imageRenderInfo != null)
                     lineHeight -= Math.Max(0, imageHeight - FontHandler.GetAscent(font)) *
                                   (factor - 1);
-                lineHeight = Math.Max(lineHeight, _currentVerticalInfo.Height);
+                lineHeight = Math.Max(lineHeight, _currentVerticalInfo.UnshiftedHeight);
             }
 
             XUnitPt descent;
@@ -4244,8 +4244,14 @@ namespace MigraDoc.Rendering
             {
                 // Set descent to the maximum font descent for text positioning.
                 descent = isListSymbol ? 0 : FontHandler.GetDescent(font); // Ignore descent for bullet glyphs.
-                descent = Math.Max(descent, _currentVerticalInfo.Descent);
+                descent = Math.Max(descent, unshiftedDescent);
             }
+
+            // Keep the spacing-rule result independent of earlier expanded envelopes.
+            // A later font can move the script reference baseline and shrink the
+            // required envelope, so the expanded maximum must not feed back here.
+            var unshiftedHeight = lineHeight;
+            var unshiftedInherentLineSpace = inherentLineSpace;
 
             if (hasShift && lineSpacingRule != LineSpacingRule.Exactly)
             {
@@ -4272,10 +4278,16 @@ namespace MigraDoc.Rendering
                 lineHeight = Math.Max(lineHeight, XUnitPt.FromPoint(minimumMetrics.LineHeight));
                 inherentLineSpace = Math.Max(inherentLineSpace,
                     XUnitPt.FromPoint(minimumMetrics.InherentLineSpace));
+                unshiftedHeight = Math.Max(unshiftedHeight, XUnitPt.FromPoint(minimumMetrics.LineHeight));
+                unshiftedInherentLineSpace = Math.Max(unshiftedInherentLineSpace,
+                    XUnitPt.FromPoint(minimumMetrics.InherentLineSpace));
             }
 
             if (MaxElementHeight > 0)
+            {
                 lineHeight = Math.Min(lineHeight, MaxElementHeight - Tolerance);
+                unshiftedHeight = Math.Min(unshiftedHeight, MaxElementHeight - Tolerance);
+            }
 
             return new(lineHeight, descent, inherentLineSpace)
             {
@@ -4283,6 +4295,8 @@ namespace MigraDoc.Rendering
                 ShiftedDescent = shiftedDescent,
                 HasBaselineShift = hasShift,
                 UnshiftedDescent = unshiftedDescent,
+                UnshiftedHeight = unshiftedHeight,
+                UnshiftedInherentLineSpace = unshiftedInherentLineSpace,
                 ScriptShiftedAscent = scriptAscent,
                 ScriptShiftedDescent = scriptDescent,
                 HasScriptEnvelope = hasScript

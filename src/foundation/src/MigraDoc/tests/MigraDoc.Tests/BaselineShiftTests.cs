@@ -113,6 +113,75 @@ public class BaselineShiftTests : IDisposable
     }
 
     [Theory]
+    [InlineData(LineSpacingRule.Single, false)]
+    [InlineData(LineSpacingRule.Single, true)]
+    [InlineData(LineSpacingRule.AtLeast, false)]
+    [InlineData(LineSpacingRule.AtLeast, true)]
+    [InlineData(LineSpacingRule.Double, false)]
+    [InlineData(LineSpacingRule.Double, true)]
+    [InlineData(LineSpacingRule.Multiple, false)]
+    [InlineData(LineSpacingRule.Multiple, true)]
+    public void ScriptReferenceDescentDoesNotMakeHeightDependOnRunOrder(LineSpacingRule rule, bool subscript)
+    {
+        foreach (var shift in new[] { -20, 20 })
+        {
+            var expected = RenderOrder(new[] { 0, 1, 2 }, shift);
+            foreach (var order in new[] { new[] { 0, 2, 1 }, new[] { 1, 0, 2 },
+                         new[] { 1, 2, 0 }, new[] { 2, 0, 1 }, new[] { 2, 1, 0 } })
+            {
+                var actual = RenderOrder(order, shift);
+                actual.Height.Should().BeApproximately(expected.Height, .002);
+                foreach (var text in new[] { "normal", "shifted", "large" })
+                {
+                    var ys = actual.Runs.Where(r => r.Text == text).Select(r => r.Y).ToArray();
+                    var expectedYs = expected.Runs.Where(r => r.Text == text).Select(r => r.Y).ToArray();
+                    ys.Should().HaveCount(expectedYs.Length);
+                    for (int i = 0; i < ys.Length; i++)
+                        ys[i].Should().BeApproximately(expectedYs[i], .002);
+                }
+            }
+        }
+
+        Result RenderOrder(int[] order, double shift)
+        {
+            var document = Create();
+            var p = document.Sections[0].AddParagraph();
+            p.Format.LineSpacingRule = rule;
+            if (rule == LineSpacingRule.AtLeast)
+            {
+                p.Format.LineSpacing = Unit.FromPoint(1);
+                p.Format.AtLeastBottomLineSpace = Unit.FromPoint(3);
+            }
+            else if (rule == LineSpacingRule.Multiple)
+                p.Format.LineSpacing = Unit.FromPoint(1.5);
+            for (int line = 0; line < 2; line++)
+            {
+                if (line > 0) p.AddLineBreak();
+                foreach (var index in order)
+                {
+                    var run = p.AddFormattedText(index == 0 ? "normal" : index == 1 ? "shifted" : "large");
+                    run.Font.Size = index == 2 ? 24 : 12;
+                    if (index != 0)
+                    {
+                        run.Subscript = subscript;
+                        run.Superscript = !subscript;
+                    }
+                    if (index == 1) run.Font.BaselineShift = Unit.FromPoint(shift);
+                }
+            }
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.RenderDocument();
+            using var pdf = renderer.PdfDocument;
+            pdf.PageCount.Should().Be(1);
+            var area = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!.Single().LayoutInfo.ContentArea;
+            var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+            var runs = new List<(string, double, double)>();
+            while (reader.MoveAndGetNext(true, out var item)) runs.Add((item!.Text, item.X, item.Y));
+            return new Result(pdf.Pages[0].Height.Point - area.Y.Point, area.Height.Point, runs);
+        }
+    }
+
+    [Theory]
     [InlineData(-6)]
     [InlineData(6)]
     [InlineData(-20)]
