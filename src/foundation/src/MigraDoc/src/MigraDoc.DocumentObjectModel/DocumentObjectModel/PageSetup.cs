@@ -188,6 +188,24 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Gets or sets whether the final page of this section uses a reduced
+        /// common column height that retains its ordinary page count. Defaults
+        /// to false. Earlier physical pages retain their full body height.
+        /// If trial layouts cannot safely place the content, ordinary flow is retained.
+        /// Preparation uses repeated layout measurements; layout callbacks must
+        /// return consistent values for the same input.
+        /// </summary>
+        public bool BalanceColumns
+        {
+            get => Values.BalanceColumns ?? false;
+            set
+            {
+                EnsureNotFrozen();
+                Values.BalanceColumns = value;
+            }
+        }
+
+        /// <summary>
         /// Gets or sets the number of body columns. Defaults to one.
         /// Columns fill from left to right before advancing to the next page.
         /// Headers and footers retain the full page-margin width.
@@ -609,6 +627,9 @@ namespace MigraDoc.DocumentObjectModel
                 if (Values.SectionStart is not null)
                     serializer.WriteSimpleAttribute("SectionStart", SectionStart);
 
+                if (Values.BalanceColumns is not null)
+                    serializer.WriteSimpleAttribute("BalanceColumns", BalanceColumns);
+
                 if (Values.ColumnCount is not null)
                     serializer.WriteSimpleAttribute("ColumnCount", ColumnCount);
 
@@ -674,6 +695,9 @@ namespace MigraDoc.DocumentObjectModel
 
             /// <summary>Number of body columns.</summary>
             public int? ColumnCount { get; set; }
+
+            /// <summary>Whether the section's final page balances its columns.</summary>
+            public bool? BalanceColumns { get; set; }
 
             /// <summary>Optional body column widths in points.</summary>
             public double[]? ColumnWidthsPoints { get; set; }

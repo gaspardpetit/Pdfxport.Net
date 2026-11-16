@@ -82,13 +82,80 @@ namespace MigraDoc.Rendering
                 if (NeedsEmptyPage())
                     InsertEmptyPage();
 
+                (_balancedPage, _balancedHeight) = section.PageSetup.BalanceColumns &&
+                    section.PageSetup.ColumnCount > 1
+                    ? MeasureBalancedColumnHeight(section) : (null, null);
                 var formatter = new TopDownFormatter(this, _documentRenderer, section.Elements);
                 formatter.FormatOnAreas(gfx, true);
+                _balancedPage = null;
+                _balancedHeight = null;
                 FillSectionPagesInfo();
                 _documentRenderer.ProgressCompleted += section.Elements.Count;
             }
             PageCount = _currentPage;
             FillNumPagesInfo();
+        }
+
+        internal bool IsBalanceProbe { get; private set; }
+        internal bool BalanceProbeFailed { get; set; }
+        int? _balancedPage;
+        double? _balancedHeight;
+
+        (int? Page, double? Height) MeasureBalancedColumnHeight(Section section)
+        {
+            var beforeSpacing = section.Elements.OfType<Paragraph>()
+                .Select(p => (Paragraph: p, SpaceBefore: p.Format.Values.SpaceBefore)).ToArray();
+            (int Page, double Height) MeasureAt(int? limitedPage, double? height)
+            {
+                var probe = new FormattedDocument(_document, _documentRenderer)
+                {
+                    _gfx = _gfx,
+                    _currentSection = section,
+                    _sectionNumber = _sectionNumber,
+                    _currentPage = _currentPage,
+                    _shownPageNumber = _shownPageNumber,
+                    _isNewSection = true,
+                    IsBalanceProbe = true,
+                    _balancedPage = limitedPage,
+                    _balancedHeight = height
+                };
+                foreach (var bookmark in _bookmarks)
+                    probe._bookmarks.Add(bookmark.Key, bookmark.Value);
+                try
+                {
+                    _documentRenderer.PreserveListNumbering(() =>
+                        new TopDownFormatter(probe, _documentRenderer, section.Elements)
+                            .FormatOnAreas(_gfx, true));
+                    return probe.BalanceProbeFailed ? (int.MaxValue, 0) :
+                        (probe._currentPage, probe.CalcContentRect(probe._currentPage).Height.Point);
+                }
+                finally
+                {
+                    foreach (var (paragraph, spaceBefore) in beforeSpacing)
+                        paragraph.Format.Values.SpaceBefore = spaceBefore;
+                }
+            }
+
+            // Read the ordinary final-page height with the probe's section and
+            // displayed-page state, including restarted numbering and footer variants.
+            var (finalPage, fullHeight) = MeasureAt(null, null);
+            if (finalPage == int.MaxValue)
+                return (null, null);
+            if (MeasureAt(finalPage, fullHeight).Page != finalPage)
+                return (null, null);
+            var lower = 0.0;
+            var upper = fullHeight;
+            // Keep a successful upper bound; an unfit first element in a
+            // speculative short area must not use oversized-element fallback.
+            for (var iteration = 0; iteration < 12; iteration++)
+            {
+                var middle = (lower + upper) / 2;
+                if (MeasureAt(finalPage, middle).Page == finalPage)
+                    upper = middle;
+                else
+                    lower = middle;
+            }
+            return (finalPage, upper);
         }
 
         PagePosition CurrentPagePosition
@@ -130,7 +197,7 @@ namespace MigraDoc.Rendering
         {
             if (header != null && !_formattedHeaders.ContainsKey(hfp))
             {
-                var formattedHeaderFooter = new FormattedHeaderFooter(header, _documentRenderer, _currentFieldInfos)
+                var formattedHeaderFooter = new FormattedHeaderFooter(header, _documentRenderer, _currentFieldInfos, this)
                 {
                     ContentRect = GetHeaderArea(_currentSection, _currentPage)
                 };
@@ -143,7 +210,7 @@ namespace MigraDoc.Rendering
         {
             if (footer != null && !_formattedFooters.ContainsKey(hfp))
             {
-                var formattedHeaderFooter = new FormattedHeaderFooter(footer, _documentRenderer, _currentFieldInfos);
+                var formattedHeaderFooter = new FormattedHeaderFooter(footer, _documentRenderer, _currentFieldInfos, this);
                 formattedHeaderFooter.ContentRect = GetFooterArea(_currentSection, _currentPage);
                 formattedHeaderFooter.Format(_gfx);
                 _formattedFooters.Add(hfp, formattedHeaderFooter);
@@ -237,7 +304,7 @@ namespace MigraDoc.Rendering
                             DisplayPageNr = shownPageNumber,
                             Section = _sectionNumber
                         };
-                        formattedFooter = new FormattedHeaderFooter(footer, _documentRenderer, fields)
+                        formattedFooter = new FormattedHeaderFooter(footer, _documentRenderer, fields, this)
                         {
                             ContentRect = GetFooterArea(_currentSection, page)
                         };
@@ -312,7 +379,9 @@ namespace MigraDoc.Rendering
             var x = rect.X.Point;
             for (var index = 0; index < column; index++)
                 x += (widths?[index] ?? width) + (gaps?[index] ?? spacing);
-            return new Rectangle(x, rect.Y, width, rect.Height);
+            return new Rectangle(x, rect.Y, width,
+                _balancedPage == page && _balancedHeight is { } height
+                    ? Math.Min(rect.Height.Point, height) : rect.Height.Point);
         }
 
         SideExclusionArea? _pageWrapExclusions;
