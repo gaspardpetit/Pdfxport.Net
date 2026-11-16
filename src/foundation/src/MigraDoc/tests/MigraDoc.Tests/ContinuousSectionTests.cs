@@ -1,6 +1,7 @@
 using FluentAssertions;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.IO;
+using MigraDoc.DocumentObjectModel.Tables;
 using MigraDoc.Rendering;
 using MigraDoc.RtfRendering;
 using PdfSharp.Diagnostics;
@@ -304,6 +305,51 @@ public class ContinuousSectionTests : IDisposable
         while (stream.Text.MoveAndGetNext(true, out var item)) texts.Add(item!.Text);
         string.Concat(texts).Should().Be("Fields7/2/1/1");
         renderer.CurrentRenderPage.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(1, false, 50)]
+    [InlineData(2, false, 50)]
+    [InlineData(2, true, 50)]
+    [InlineData(2, false, 10)]
+    public void TableRowsUseFullBodyHeightForTheirOversizedLimit(int columns, bool balance, double rowHeight)
+    {
+        var document = Create(10);
+        var section = Next(document, columns);
+        section.PageSetup.BalanceColumns = balance;
+        var table = section.AddTable(); table.AddColumn(Unit.FromPoint(60));
+        var row = table.AddRow(); row.HeightRule = RowHeightRule.Exactly;
+        row.Height = Unit.FromPoint(rowHeight);
+        row.Cells[0].AddParagraph("Row");
+        var renderer = Render(document);
+        var tablePage = rowHeight > 20 ? 2 : 1;
+        renderer.PageCount.Should().Be(tablePage);
+        if (tablePage == 2) Texts(renderer, 1, "Row").Should().BeEmpty();
+        Texts(renderer, tablePage, "Row").Should().HaveCount(1);
+        var layout = renderer.DocumentRenderer.GetRenderInfoFromPage(tablePage)!
+            .Single(info => ReferenceEquals(info.DocumentObject, table)).LayoutInfo.ContentArea;
+        layout.Height.Point.Should().BeApproximately(rowHeight, 0.01);
+        (layout.Y.Point + layout.Height.Point).Should().BeLessThanOrEqualTo(140.01);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BalancingDoesNotShrinkATableRowsMeasuredHeight(bool balance)
+    {
+        var document = Create(0);
+        var section = document.LastSection;
+        section.PageSetup.ColumnCount = 2;
+        section.PageSetup.BalanceColumns = balance;
+        var table = section.AddTable(); table.AddColumn(Unit.FromPoint(60));
+        var row = table.AddRow(); row.HeightRule = RowHeightRule.Exactly;
+        row.Height = Unit.FromPoint(50);
+        row.Cells[0].AddParagraph("Row");
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(1);
+        renderer.DocumentRenderer.GetRenderInfoFromPage(1)!.Single().LayoutInfo.ContentArea.Height.Point
+            .Should().BeApproximately(50, 0.01);
+        Texts(renderer, 1, "Row").Should().HaveCount(1);
     }
 
     static Document Create(int paragraphs)

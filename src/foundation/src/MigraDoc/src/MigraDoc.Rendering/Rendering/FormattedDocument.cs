@@ -426,6 +426,10 @@ namespace MigraDoc.Rendering
         double? _continuousStartY;
         internal bool IsContinuingPage => _continuousStartY is not null;
 
+        // Oversized-element fallback is bounded by the full body, independently
+        // of the remaining shared-page space or a balanced column's height.
+        internal XUnitPt FullBodyHeight => CalcContentRect(_currentPage).Height;
+
         /// <summary>
         /// Gets the rendering information for the page content.
         /// </summary>

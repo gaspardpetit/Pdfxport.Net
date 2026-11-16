@@ -31,6 +31,9 @@ namespace MigraDoc.Rendering
             _elements = elements;
         }
 
+        XUnitPt GetMaxElementHeight(Area area)
+            => _areaProvider is FormattedDocument document ? document.FullBodyHeight : area.Height;
+
         readonly IAreaProvider _areaProvider;
 
         readonly DocumentElements _elements;
@@ -53,7 +56,7 @@ namespace MigraDoc.Rendering
             var area = _areaProvider.GetNextArea() ?? NRT.ThrowOnNull<Area>();
             if (topLevel && _areaProvider is FormattedDocument { IsContinuingPage: true })
                 isFirstOnPage = false;
-            XUnitPt maxHeight = area.Height;
+            XUnitPt maxHeight = GetMaxElementHeight(area);
             if (ready)
             {
                 _areaProvider.StoreRenderInfos(renderInfos);
@@ -71,7 +74,7 @@ namespace MigraDoc.Rendering
                     _areaProvider.StoreRenderInfos(renderInfos);
                     renderInfos = new List<RenderInfo>();
                     area = _areaProvider.GetNextArea() ?? NRT.ThrowOnNull<Area>();
-                    maxHeight = area.Height;
+                    maxHeight = GetMaxElementHeight(area);
                     prevRenderInfo = null;
                     prevFormatInfo = null;
                     prevBottomMargin = 0;
@@ -206,7 +209,7 @@ namespace MigraDoc.Rendering
                         }
                         prevBottomMargin = 0;
                         area = _areaProvider.GetNextArea();
-                        maxHeight = area?.Height ?? NRT.ThrowOnNull<XUnitPt>();
+                        maxHeight = GetMaxElementHeight(area ?? NRT.ThrowOnNull<Area>());
                     }
                     else
                     {
@@ -276,7 +279,7 @@ namespace MigraDoc.Rendering
                         if (explicitPageBreak)
                             body?.EndColumnsOnPage();
                         area = _areaProvider.GetNextArea();
-                        maxHeight = area?.Height ?? NRT.ThrowOnNull<XUnitPt>();
+                        maxHeight = GetMaxElementHeight(area ?? NRT.ThrowOnNull<Area>());
                     }
 
                 }
