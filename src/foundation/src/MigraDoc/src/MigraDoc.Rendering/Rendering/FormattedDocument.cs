@@ -391,7 +391,7 @@ namespace MigraDoc.Rendering
             var x = rect.X.Point;
             for (var index = 0; index < column; index++)
                 x += (widths?[index] ?? width) + (gaps?[index] ?? spacing);
-            var startY = _continuousStartY ?? rect.Y;
+            var startY = page == _currentPage ? _continuousStartY ?? rect.Y.Point : rect.Y.Point;
             var availableHeight = rect.Y + rect.Height - startY;
             return new Rectangle(x, startY, width,
                 _balancedPage == page && _balancedHeight is { } height
@@ -601,7 +601,7 @@ namespace MigraDoc.Rendering
             if (_isNewSection && _continuousStartY is not null)
             {
                 _currentColumn = 0;
-                _sectionPages = 1;
+                // Count the shared page only once it receives section content.
                 InitFieldInfos();
             }
             else if (_isNewSection || _currentColumn >= columnCount - 1)
@@ -661,7 +661,11 @@ namespace MigraDoc.Rendering
             foreach (var info in renderInfos)
                 info.FieldInfos = _currentFieldInfos;
             if (renderInfos.Any(info => !info.FormatInfo.IsEmpty))
+            {
+                if (_continuousStartY != null && _sectionPages == 0)
+                    ++_sectionPages;
                 _continuousRestartPending = false;
+            }
             if (_pageRenderInfos.TryGetValue(_currentPage, out var existing))
             {
                 existing.AddRange(renderInfos);

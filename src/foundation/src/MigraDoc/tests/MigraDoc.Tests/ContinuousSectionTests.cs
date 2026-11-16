@@ -4,6 +4,8 @@ using MigraDoc.DocumentObjectModel.IO;
 using MigraDoc.Rendering;
 using MigraDoc.RtfRendering;
 using PdfSharp.Diagnostics;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 using PdfSharp.Fonts;
 using PdfSharp.Quality;
 using PdfSharp.TestHelper;
@@ -230,6 +232,78 @@ public class ContinuousSectionTests : IDisposable
         var renderer = Render(document);
         renderer.PageCount.Should().Be(2);
         string.Concat(Texts(renderer, 2).Select(t => t.Text)).Should().Contain("Number7");
+    }
+
+    [Theory]
+    [InlineData(12, false, 1)]
+    [InlineData(10, true, 1)]
+    [InlineData(10, false, 2)]
+    public void SectionTotalsCountOnlyPagesReceivingContent(int precedingLines, bool keepTogether, int pages)
+    {
+        var document = Create(precedingLines);
+        var p = Next(document).AddParagraph("Pages");
+        p.AddSectionPagesField();
+        p.Format.KeepTogether = keepTogether;
+        for (var i = 0; i < 3; i++) { p.AddLineBreak(); p.AddText("Line"); }
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(2);
+        string.Concat(Enumerable.Range(1, 2).SelectMany(page => Texts(renderer, page)).Select(t => t.Text))
+            .Should().Contain("Pages" + pages);
+    }
+
+    [Fact]
+    public void WidowRepairLooksAheadToTheFullNextPhysicalPage()
+    {
+        var document = Create(10);
+        var p = Next(document, 2).AddParagraph("Line1");
+        p.AddLineBreak(); p.AddText("Line2"); p.AddLineBreak(); p.AddText("Line3");
+        p.Format.WidowControl = true;
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(1);
+        var lines = Texts(renderer, 1, "Line");
+        lines.Select(t => t.Text).Should().Equal("Line1", "Line2", "Line3");
+        lines.Count(t => Math.Abs(t.X - 20) < 0.01).Should().Be(1);
+        lines.Count(t => Math.Abs(t.X - 130) < 0.01).Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void PreparedBodyFragmentsUseTheirOwnSectionFields(int kind)
+    {
+        var document = Create(1);
+        var section = Next(document);
+        section.PageSetup.StartingNumber = 7;
+        Paragraph p;
+        DocumentObject target;
+        if (kind == 1)
+        {
+            var frame = section.AddTextFrame();
+            frame.Width = Unit.FromPoint(180); frame.Height = Unit.FromPoint(20);
+            p = frame.AddParagraph("Fields"); target = frame;
+        }
+        else if (kind == 2)
+        {
+            var table = section.AddTable(); table.AddColumn(Unit.FromPoint(180));
+            p = table.AddRow().Cells[0].AddParagraph("Fields"); target = table;
+        }
+        else { p = section.AddParagraph("Fields"); target = p; }
+        p.AddPageField(); p.AddText("/"); p.AddSectionField();
+        p.AddText("/"); p.AddSectionPagesField(); p.AddText("/"); p.AddNumPagesField();
+        var renderer = new DocumentRenderer(document);
+        renderer.DeferTextFramePaint = _ => kind == 1;
+        renderer.PrepareDocument();
+        renderer.FormattedDocument!.PageCount.Should().Be(1);
+        var fragment = renderer.GetRenderInfoFromPage(1)!.Single(info => ReferenceEquals(info.DocumentObject, target));
+        using var pdf = new PdfDocument();
+        var page = pdf.AddPage(); page.Width = 240; page.Height = 160;
+        using (var gfx = XGraphics.FromPdfPage(page)) renderer.RenderPreparedObject(gfx, fragment, 1, 0);
+        var stream = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0);
+        var texts = new List<string>();
+        while (stream.Text.MoveAndGetNext(true, out var item)) texts.Add(item!.Text);
+        string.Concat(texts).Should().Be("Fields7/2/1/1");
+        renderer.CurrentRenderPage.Should().Be(0);
     }
 
     static Document Create(int paragraphs)
