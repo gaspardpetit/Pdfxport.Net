@@ -52,6 +52,62 @@ public class CellSpacingTests : IDisposable
     }
 
     [Theory]
+    [InlineData(-3, false)]
+    [InlineData(double.NaN, false)]
+    [InlineData(double.PositiveInfinity, false)]
+    [InlineData(double.NegativeInfinity, false)]
+    [InlineData(-3, true)]
+    [InlineData(double.NaN, true)]
+    [InlineData(double.PositiveInfinity, true)]
+    [InlineData(double.NegativeInfinity, true)]
+    public void StoredSpacingRejectsInvalidAssignmentsWithoutChangingValue(double spacing, bool throughSetValue)
+    {
+        var table = new Table { CellSpacing = Unit.FromPoint(4) };
+        var exception = Record.Exception(() =>
+        {
+            if (throughSetValue) table.SetValue("CellSpacing", Unit.FromPoint(spacing));
+            else table.Values.CellSpacing = Unit.FromPoint(spacing);
+        });
+        exception.Should().NotBeNull();
+        exception!.GetBaseException().Should().BeOfType<ArgumentOutOfRangeException>();
+        table.CellSpacing.Point.Should().Be(4);
+    }
+
+    [Fact]
+    public void NegativeSpacingInDdlIsRejected()
+    {
+        var document = Create();
+        ((Table)document.Sections[0].Elements[0]).CellSpacing = Unit.FromPoint(3);
+        var ddl = DdlWriter.WriteToString(document);
+        ddl.Should().Contain("CellSpacing = 3");
+        ddl = ddl.Replace("CellSpacing = 3", "CellSpacing = \"-3pt\"");
+        var errors = new DdlReaderErrors();
+        using var input = new StringReader(ddl);
+        var reader = new DdlReader(input, errors);
+        // The parser reports assignment failures through its error collection;
+        // its later recovery may also reject the remaining table syntax.
+        Record.Exception(() => reader.ReadDocument());
+        reader.Close();
+        errors.Cast<DdlReaderError>().Should().Contain(error =>
+            error.ErrorMessage.Contains(nameof(ArgumentOutOfRangeException)) &&
+            error.ErrorMessage.Contains("CellSpacing"));
+    }
+
+    [Fact]
+    public void StoredSpacingCanBeClearedAndSetThroughMetadata()
+    {
+        var table = new Table { CellSpacing = Unit.FromPoint(4) };
+        table.Values.CellSpacing = null;
+        table.Values.CellSpacing.Should().BeNull();
+        table.CellSpacing.Should().Be(Unit.Zero);
+        table.SetValue("CellSpacing", Unit.FromPoint(2));
+        table.CellSpacing.Point.Should().Be(2);
+        table.SetValue("CellSpacing", null);
+        table.Values.CellSpacing.Should().BeNull();
+        table.CellSpacing.Should().Be(Unit.Zero);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void SpacedCellsKeepTheirOwnOpposingBorders(bool vertical)

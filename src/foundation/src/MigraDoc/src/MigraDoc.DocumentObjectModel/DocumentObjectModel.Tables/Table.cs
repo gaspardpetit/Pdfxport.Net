@@ -306,12 +306,7 @@ namespace MigraDoc.DocumentObjectModel.Tables
         public Unit CellSpacing
         {
             get => Values.CellSpacing ?? Unit.Zero;
-            set
-            {
-                if (double.IsNaN(value.Point) || double.IsInfinity(value.Point) || value.Point < 0)
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                Values.CellSpacing = value;
-            }
+            set => Values.CellSpacing = value;
         }
 
         /// <summary>
@@ -511,7 +506,20 @@ namespace MigraDoc.DocumentObjectModel.Tables
             public Unit? BottomPadding { get; set; }
 
             /// <summary>Space between independently bordered cells.</summary>
-            public Unit? CellSpacing { get; set; }
+            public Unit? CellSpacing
+            {
+                get => _cellSpacing;
+                set
+                {
+                    // DDL and SetValue assign Values directly, so keep the
+                    // invariant here rather than only in Table's convenience setter.
+                    if (value is { } spacing && (double.IsNaN(spacing.Point) ||
+                        double.IsInfinity(spacing.Point) || spacing.Point < 0))
+                        throw new ArgumentOutOfRangeException(nameof(value));
+                    _cellSpacing = value;
+                }
+            }
+            Unit? _cellSpacing;
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.
