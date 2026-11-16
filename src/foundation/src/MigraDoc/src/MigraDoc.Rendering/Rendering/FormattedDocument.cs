@@ -105,7 +105,7 @@ namespace MigraDoc.Rendering
         {
             var beforeSpacing = section.Elements.OfType<Paragraph>()
                 .Select(p => (Paragraph: p, SpaceBefore: p.Format.Values.SpaceBefore)).ToArray();
-            int PagesAt(int? limitedPage, double? height)
+            (int Page, double Height) MeasureAt(int? limitedPage, double? height)
             {
                 var probe = new FormattedDocument(_document, _documentRenderer)
                 {
@@ -126,7 +126,8 @@ namespace MigraDoc.Rendering
                     _documentRenderer.PreserveListNumbering(() =>
                         new TopDownFormatter(probe, _documentRenderer, section.Elements)
                             .FormatOnAreas(_gfx, true));
-                    return probe.BalanceProbeFailed ? int.MaxValue : probe._currentPage;
+                    return probe.BalanceProbeFailed ? (int.MaxValue, 0) :
+                        (probe._currentPage, probe.CalcContentRect(probe._currentPage).Height.Point);
                 }
                 finally
                 {
@@ -135,11 +136,12 @@ namespace MigraDoc.Rendering
                 }
             }
 
-            var finalPage = PagesAt(null, null);
+            // Read the ordinary final-page height with the probe's section and
+            // displayed-page state, including restarted numbering and footer variants.
+            var (finalPage, fullHeight) = MeasureAt(null, null);
             if (finalPage == int.MaxValue)
                 return (null, null);
-            var fullHeight = CalcContentRect(finalPage).Height.Point;
-            if (PagesAt(finalPage, fullHeight) != finalPage)
+            if (MeasureAt(finalPage, fullHeight).Page != finalPage)
                 return (null, null);
             var lower = 0.0;
             var upper = fullHeight;
@@ -148,7 +150,7 @@ namespace MigraDoc.Rendering
             for (var iteration = 0; iteration < 12; iteration++)
             {
                 var middle = (lower + upper) / 2;
-                if (PagesAt(finalPage, middle) == finalPage)
+                if (MeasureAt(finalPage, middle).Page == finalPage)
                     upper = middle;
                 else
                     lower = middle;

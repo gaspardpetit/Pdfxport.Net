@@ -126,6 +126,37 @@ public class BalancedColumnTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FinalPageHeightUsesTheNewSectionsFooterState(bool differentFirstPage)
+    {
+        var document = Create(2, 1);
+        document.LastSection.PageSetup.StartingNumber = 2;
+        var section = document.AddSection();
+        section.PageSetup = document.Sections[0].PageSetup.Clone();
+        section.PageSetup.BalanceColumns = true;
+        section.PageSetup.StartingNumber = 2;
+        section.PageSetup.FooterDistance = Unit.FromPoint(10);
+        section.PageSetup.OddAndEvenPagesHeaderFooter = !differentFirstPage;
+        section.PageSetup.DifferentFirstPageHeaderFooter = differentFirstPage;
+        var tallFooter = section.Footers.Primary.AddParagraph("TallFooter");
+        tallFooter.Format.LineSpacingRule = LineSpacingRule.Exactly;
+        tallFooter.Format.LineSpacing = Unit.FromPoint(100);
+        var shortFooter = differentFirstPage ? section.Footers.FirstPage : section.Footers.EvenPage;
+        shortFooter.AddParagraph("ShortFooter");
+        for (var i = 1; i <= 18; i++) section.AddParagraph("Next" + i);
+
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(2);
+        var texts = Texts(renderer, 2, "Next");
+        texts.Select(t => t.Text).Should().Equal(Enumerable.Range(1, 18).Select(i => "Next" + i));
+        texts.Take(9).Should().OnlyContain(t => Math.Abs(t.X - 20) < 0.01);
+        texts.Skip(9).Should().OnlyContain(t => Math.Abs(t.X - 130) < 0.01);
+        AllTexts(renderer, 2).Should().Contain(t => t.Text == "ShortFooter");
+        AllTexts(renderer, 2).Should().NotContain(t => t.Text == "TallFooter");
+    }
+
     [Fact]
     public void DdlCloneInheritanceAndExplicitFalsePreserveTheOption()
     {
