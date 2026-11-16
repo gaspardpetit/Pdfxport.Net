@@ -205,7 +205,8 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             // For BorderTypes Top, Right, Bottom and Left update the width with the neighbors touching border where required.
             // In case of rounded corners this should not be done.
 
-            var leftNeighbor = GetNeighborLeft(cellIdx);
+            var shared = cell.Table.CellSpacing.Point == 0;
+            var leftNeighbor = shared ? GetNeighborLeft(cellIdx) : null;
             if (leftNeighbor != null && leftNeighbor.RoundedCorner != RoundedCorner.TopRight && leftNeighbor.RoundedCorner != RoundedCorner.BottomRight)
             {
                 var nbrBrdrs = leftNeighbor.Values.Borders;
@@ -213,7 +214,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                     borders.SetValue("Left", GetBorderFromBorders(nbrBrdrs, BorderType.Right));
             }
 
-            var rightNeighbor = GetNeighborRight(cellIdx);
+            var rightNeighbor = shared ? GetNeighborRight(cellIdx) : null;
             if (rightNeighbor != null && rightNeighbor.RoundedCorner != RoundedCorner.TopLeft && rightNeighbor.RoundedCorner != RoundedCorner.BottomLeft)
             {
                 var nbrBrdrs = rightNeighbor.Values.Borders;
@@ -233,7 +234,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
             else
                 topRowIndexOverride = null;
 
-            var topNeighbor = GetNeighborTop(cellIdx, topRowIndexOverride);
+            var topNeighbor = shared ? GetNeighborTop(cellIdx, topRowIndexOverride) : null;
 
             // If not considering heading rows and if the topNeighbor is a heading row, set it to null to ignore it for top border determination.
             // This way the first content row’s top border doesn’t possibly get the bottom border of the original last heading row.
@@ -249,7 +250,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
                     borders.SetValue("Top", GetBorderFromBorders(nbrBrdrs, BorderType.Bottom));
             }
 
-            var bottomNeighbor = GetNeighborBottom(cellIdx);
+            var bottomNeighbor = shared ? GetNeighborBottom(cellIdx) : null;
             if (bottomNeighbor != null && bottomNeighbor.RoundedCorner != RoundedCorner.TopLeft && bottomNeighbor.RoundedCorner != RoundedCorner.TopRight)
             {
                 var nbrBrdrs = bottomNeighbor.Values.Borders;
