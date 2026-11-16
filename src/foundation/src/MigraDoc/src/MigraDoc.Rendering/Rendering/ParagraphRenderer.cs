@@ -615,7 +615,14 @@ namespace MigraDoc.Rendering
                         wordLength += pairAdvances.Take(decimalPosIndex).Sum();
                     notFitting = _currentXPosition + wordLength >= _formattingArea.X + _formattingArea.Width + Tolerance;
                     if (!notFitting)
-                        return _formattingArea.X + tabStopPosition - wordLength;
+                    {
+                        var alignedStart = _formattingArea.X + tabStopPosition - wordLength;
+                        // Without a number or decimal separator, use the same
+                        // non-overlapping fallback as a right-aligned tab.
+                        if (!hasNumber && decimalPosIndex < 0)
+                            return Math.Max(xPosition.Point, alignedStart.Point);
+                        return alignedStart;
+                    }
 
                     return _currentXPosition;
                 }
