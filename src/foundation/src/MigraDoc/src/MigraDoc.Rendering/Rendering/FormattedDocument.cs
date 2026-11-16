@@ -79,6 +79,22 @@ namespace MigraDoc.Rendering
                 _isNewSection = true;
                 _currentSection = section;
                 ++_sectionNumber;
+                _sectionFieldInfos.Clear();
+                _sectionFirstOwnedPage = 0;
+                _continuousStartY = section.PageSetup.SectionStart == BreakType.BreakContinuous &&
+                    _currentPage > 0 && _pageInfos.TryGetValue(_currentPage, out var pageInfo) &&
+                    Math.Abs(pageInfo.Width.Point - section.PageSetup.PageWidth.Point) < 0.01 &&
+                    Math.Abs(pageInfo.Height.Point - section.PageSetup.PageHeight.Point) < 0.01 &&
+                    pageInfo.Orientation == CalcPageOrientation(section.PageSetup) &&
+                    _pageRenderInfos.TryGetValue(_currentPage, out var preceding)
+                    ? Math.Max(section.PageSetup.TopMargin.Point,
+                        preceding.Where(info => info.LayoutInfo.Floating != Floating.None)
+                            .Select(info => info.LayoutInfo.ContentArea.Y.Point +
+                            info.LayoutInfo.ContentArea.Height.Point +
+                            info.LayoutInfo.MarginBottom.Point).DefaultIfEmpty(0).Max())
+                    : null;
+                _continuousRestartPending = _continuousStartY != null &&
+                    section.PageSetup.Values.StartingNumber != null;
                 if (NeedsEmptyPage())
                     InsertEmptyPage();
 
@@ -115,10 +131,16 @@ namespace MigraDoc.Rendering
                     _currentPage = _currentPage,
                     _shownPageNumber = _shownPageNumber,
                     _isNewSection = true,
+                    _continuousStartY = _continuousStartY,
+                    _continuousRestartPending = _continuousRestartPending,
                     IsBalanceProbe = true,
                     _balancedPage = limitedPage,
                     _balancedHeight = height
                 };
+                foreach (var bottom in _physicalPageBodyBottoms)
+                    probe._physicalPageBodyBottoms.Add(bottom.Key, bottom.Value);
+                if (_pageWrapExclusions != null)
+                    probe._pageWrapExclusions = _pageWrapExclusions;
                 foreach (var bookmark in _bookmarks)
                     probe._bookmarks.Add(bookmark.Key, bookmark.Value);
                 try
@@ -127,7 +149,7 @@ namespace MigraDoc.Rendering
                         new TopDownFormatter(probe, _documentRenderer, section.Elements)
                             .FormatOnAreas(_gfx, true));
                     return probe.BalanceProbeFailed ? (int.MaxValue, 0) :
-                        (probe._currentPage, probe.CalcContentRect(probe._currentPage).Height.Point);
+                        (probe._currentPage, probe.CalcColumnRect(probe._currentPage, 0).Height.Point);
                 }
                 finally
                 {
@@ -162,7 +184,7 @@ namespace MigraDoc.Rendering
         {
             get
             {
-                if (_isNewSection)
+                if (_isNewSection || _currentPage == _sectionFirstOwnedPage)
                     return PagePosition.First;
 
                 // Choose header and footer based on the shown page number, not the physical page number.
@@ -222,32 +244,17 @@ namespace MigraDoc.Rendering
         /// </summary>
         void FillNumPagesInfo()
         {
-            for (int page = 1; page <= PageCount; ++page)
-            {
-                if (IsEmptyPage(page))
-                    continue;
-
-                var fieldInfos = _pageFieldInfos[page];
-                fieldInfos.NumPages = PageCount;
-            }
+            foreach (var fields in _allFieldInfos)
+                fields.NumPages = PageCount;
         }
 
         /// <summary>
-        /// Fills the section pages information after formatting a section.
+        /// Updates every field context, including sections sharing a physical page.
         /// </summary>
         void FillSectionPagesInfo()
         {
-            for (int page = _currentPage; page > 0; --page)
-            {
-                if (IsEmptyPage(page))
-                    continue;
-
-                FieldInfos fieldInfos = _pageFieldInfos[page];
-                if (fieldInfos.Section != _sectionNumber)
-                    break;
-
-                fieldInfos.SectionPages = _sectionPages;
-            }
+            foreach (var fields in _sectionFieldInfos)
+                fields.SectionPages = _sectionPages;
         }
 
         // Header/footer shapes use page margins, independently of body exclusions.
@@ -280,13 +287,18 @@ namespace MigraDoc.Rendering
 
             height -= pageSetup.TopMargin.Point;
             height -= pageSetup.BottomMargin.Point;
-            if (_headerFooterPage == null)
+            var continuingBody = _continuousStartY != null && page == _currentPage &&
+                _physicalPageBodyBottoms.TryGetValue(page, out _);
+            if (_headerFooterPage == null && continuingBody)
+                height = _physicalPageBodyBottoms[page] - pageSetup.TopMargin.Point;
+            if (_headerFooterPage == null && !continuingBody)
             {
                 // A bottom-aligned footer can grow above the nominal bottom margin.
                 // Keep body lines out of the area occupied by its formatted content.
                 var pageOffset = page - _currentPage;
                 var shownPageNumber = _shownPageNumber + pageOffset;
-                var pagePosition = _sectionPages + pageOffset == 1 ? PagePosition.First :
+                var pagePosition = page == _sectionFirstOwnedPage ||
+                    _sectionFirstOwnedPage == 0 && pageOffset == 1 ? PagePosition.First :
                     shownPageNumber % 2 == 0 ? PagePosition.Even : PagePosition.Odd;
                 var footerPosition = new HeaderFooterPosition(_sectionNumber, pagePosition);
                 _formattedFooters.TryGetValue(footerPosition, out var formattedFooter);
@@ -379,11 +391,16 @@ namespace MigraDoc.Rendering
             var x = rect.X.Point;
             for (var index = 0; index < column; index++)
                 x += (widths?[index] ?? width) + (gaps?[index] ?? spacing);
-            return new Rectangle(x, rect.Y, width,
+            var startY = page == _currentPage ? _continuousStartY ?? rect.Y.Point : rect.Y.Point;
+            var availableHeight = rect.Y + rect.Height - startY;
+            return new Rectangle(x, startY, width,
                 _balancedPage == page && _balancedHeight is { } height
-                    ? Math.Min(rect.Height.Point, height) : rect.Height.Point);
+                    ? Math.Min(availableHeight, height) : availableHeight);
         }
 
+        readonly Dictionary<int, double> _physicalPageBodyBottoms = new();
+        readonly List<FieldInfos> _allFieldInfos = new();
+        readonly List<FieldInfos> _sectionFieldInfos = new();
         SideExclusionArea? _pageWrapExclusions;
 
         internal void StoreWrapExclusions(SideExclusionArea exclusions)
@@ -404,6 +421,14 @@ namespace MigraDoc.Rendering
 
         // Explicit page breaks skip all remaining columns on the physical page.
         internal void EndColumnsOnPage() => _currentColumn = _currentSection.PageSetup.ColumnCount - 1;
+        int _sectionFirstOwnedPage;
+        bool _continuousRestartPending;
+        double? _continuousStartY;
+        internal bool IsContinuingPage => _continuousStartY is not null;
+
+        // Oversized-element fallback is bounded by the full body, independently
+        // of the remaining shared-page space or a balanced column's height.
+        internal XUnitPt FullBodyHeight => CalcContentRect(_currentPage).Height;
 
         /// <summary>
         /// Gets the rendering information for the page content.
@@ -576,15 +601,32 @@ namespace MigraDoc.Rendering
             if (_isNewSection)
                 _sectionPages = 0;
 
-            if (_isNewSection || _currentColumn >= _currentSection.PageSetup.ColumnCount - 1)
+            var columnCount = Math.Max(1, _currentSection.PageSetup.ColumnCount);
+            if (_isNewSection && _continuousStartY is not null)
             {
                 _currentColumn = 0;
+                // Count the shared page only once it receives section content.
+                InitFieldInfos();
+            }
+            else if (_isNewSection || _currentColumn >= columnCount - 1)
+            {
+                _currentColumn = 0;
+                _continuousStartY = null;
                 _pageWrapExclusions = null;
                 ++_currentPage;
                 ++_shownPageNumber;
+                // A restart belongs to the first page that actually receives
+                // section content, even if no element fit on the shared page.
+                if (_continuousRestartPending)
+                    _shownPageNumber = _currentSection.PageSetup.StartingNumber;
+                _continuousRestartPending = false;
                 ++_sectionPages;
                 InitFieldInfos();
+                if (_sectionFirstOwnedPage == 0)
+                    _sectionFirstOwnedPage = _currentPage;
                 FormatHeadersFooters();
+                var body = CalcContentRect(_currentPage);
+                _physicalPageBodyBottoms[_currentPage] = body.Y.Point + body.Height.Point;
             }
             else
                 ++_currentColumn;
@@ -596,7 +638,9 @@ namespace MigraDoc.Rendering
         int _currentColumn;
 
         Area IAreaProvider.ProbeNextArea()
-            => _isNewSection || _currentColumn >= _currentSection.PageSetup.ColumnCount - 1
+            => _isNewSection && _continuousStartY is not null
+                ? GetColumnArea(_currentPage, 0)
+                : _isNewSection || _currentColumn >= Math.Max(1, _currentSection.PageSetup.ColumnCount) - 1
                 ? GetColumnArea(_currentPage + 1, 0)
                 : GetColumnArea(_currentPage, _currentColumn + 1);
 
@@ -612,10 +656,20 @@ namespace MigraDoc.Rendering
                 _shownPageNumber = _currentSection.PageSetup.StartingNumber;
 
             _currentFieldInfos.DisplayPageNr = _shownPageNumber;
+            _allFieldInfos.Add(_currentFieldInfos);
+            _sectionFieldInfos.Add(_currentFieldInfos);
         }
 
         void IAreaProvider.StoreRenderInfos(List<RenderInfo> renderInfos)
         {
+            foreach (var info in renderInfos)
+                info.FieldInfos = _currentFieldInfos;
+            if (renderInfos.Any(info => !info.FormatInfo.IsEmpty))
+            {
+                if (_continuousStartY != null && _sectionPages == 0)
+                    ++_sectionPages;
+                _continuousRestartPending = false;
+            }
             if (_pageRenderInfos.TryGetValue(_currentPage, out var existing))
             {
                 existing.AddRange(renderInfos);

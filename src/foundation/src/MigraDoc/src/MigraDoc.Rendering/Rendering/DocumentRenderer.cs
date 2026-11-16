@@ -739,6 +739,12 @@ namespace MigraDoc.Rendering
                 var fieldInfos = _formattedDocument.GetFieldInfos(page);
 
                 fieldInfos.Date = PrintDate ?? DateTimeOffset.Now;
+                FieldInfos FieldsFor(RenderInfo info)
+                {
+                    var fields = info.FieldInfos ?? fieldInfos;
+                    fields.Date = fieldInfos.Date;
+                    return fields;
+                }
 
                 if ((options & PageRenderOptions.RenderHeader) == PageRenderOptions.RenderHeader)
                     RenderHeader(gfx, page);
@@ -777,13 +783,13 @@ namespace MigraDoc.Rendering
                             }
                             for (int idx = 0; idx < count; idx++)
                                 if (layers[idx] == TextFrameLayer.BehindContent && !ShouldDeferFrame(renderInfos[idx]))
-                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                                    Renderer.Create(gfx, this, renderInfos[idx], FieldsFor(renderInfos[idx])).Render();
                             for (int idx = 0; idx < count; idx++)
                                 if (layers[idx] == TextFrameLayer.Normal && !ShouldDeferFrame(renderInfos[idx]))
-                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                                    Renderer.Create(gfx, this, renderInfos[idx], FieldsFor(renderInfos[idx])).Render();
                             for (int idx = 0; idx < count; idx++)
                                 if (layers[idx] == TextFrameLayer.AboveContent && !ShouldDeferFrame(renderInfos[idx]))
-                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                                    Renderer.Create(gfx, this, renderInfos[idx], FieldsFor(renderInfos[idx])).Render();
                         }
                         else
                         {
@@ -792,7 +798,7 @@ namespace MigraDoc.Rendering
                                 var renderInfo = renderInfos[idx];
                                 if (ShouldDeferFrame(renderInfo))
                                     continue;
-                                var renderer = Renderer.Create(gfx, this, renderInfo, fieldInfos);
+                                var renderer = Renderer.Create(gfx, this, renderInfo, FieldsFor(renderInfo));
                                 renderer.Render();
                             }
                         }
@@ -942,9 +948,11 @@ namespace MigraDoc.Rendering
         /// </summary>
         /// <param name="graphics">The graphics object to paint on.</param>
         /// <param name="renderInfo">A fragment returned by this renderer's page/header/footer render-info accessors.</param>
-        /// <param name="page">The physical page supplying field context.</param>
+        /// <param name="page">The physical page to which the fragment belongs.</param>
         /// <param name="verticalOffset">A finite offset in points, positive downward, applied to the entire fragment.</param>
         /// <remarks>
+        /// Body fragments retain their section field context; header/footer fragments
+        /// use the physical page's context.
         /// Coordinates are the stored layout coordinates, before footer bottom alignment.
         /// Graphics state and CurrentRenderPage are restored even when painting throws.
         /// </remarks>
@@ -967,7 +975,7 @@ namespace MigraDoc.Rendering
                 !GetHeaderRenderInfos(page).Contains(renderInfo) && !GetFooterRenderInfos(page).Contains(renderInfo))
                 throw new ArgumentException("The fragment does not belong to this renderer's prepared page.", nameof(renderInfo));
 
-            var fields = formattedDocument.GetFieldInfos(page).CreateSnapshot();
+            var fields = (renderInfo.FieldInfos ?? formattedDocument.GetFieldInfos(page)).CreateSnapshot();
             fields.Date = PrintDate ?? DateTimeOffset.Now;
             var state = graphics.Save();
             var previousPage = CurrentRenderPage;

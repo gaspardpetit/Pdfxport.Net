@@ -31,6 +31,9 @@ namespace MigraDoc.Rendering
             _elements = elements;
         }
 
+        XUnitPt GetMaxElementHeight(Area area)
+            => _areaProvider is FormattedDocument document ? document.FullBodyHeight : area.Height;
+
         readonly IAreaProvider _areaProvider;
 
         readonly DocumentElements _elements;
@@ -51,7 +54,9 @@ namespace MigraDoc.Rendering
             bool ready = _elements.Count == 0;
             bool isFirstOnPage = true;
             var area = _areaProvider.GetNextArea() ?? NRT.ThrowOnNull<Area>();
-            XUnitPt maxHeight = area.Height;
+            if (topLevel && _areaProvider is FormattedDocument { IsContinuingPage: true })
+                isFirstOnPage = false;
+            XUnitPt maxHeight = GetMaxElementHeight(area);
             if (ready)
             {
                 _areaProvider.StoreRenderInfos(renderInfos);
@@ -69,7 +74,7 @@ namespace MigraDoc.Rendering
                     _areaProvider.StoreRenderInfos(renderInfos);
                     renderInfos = new List<RenderInfo>();
                     area = _areaProvider.GetNextArea() ?? NRT.ThrowOnNull<Area>();
-                    maxHeight = area.Height;
+                    maxHeight = GetMaxElementHeight(area);
                     prevRenderInfo = null;
                     prevFormatInfo = null;
                     prevBottomMargin = 0;
@@ -169,9 +174,11 @@ namespace MigraDoc.Rendering
                 var body = _areaProvider as FormattedDocument;
                 bool explicitPageBreak = _areaProvider.IsAreaBreakBefore(renderer.RenderInfo.LayoutInfo) &&
                     (!isFirstOnPage || body?.IsLaterColumn == true) &&
-                    (docObj is PageBreak || body?.HasFlowInPreviousColumns == true || renderInfos.Any(info =>
+                    (docObj is PageBreak || body?.HasFlowInPreviousColumns == true ||
+                     body?.IsContinuingPage == true || renderInfos.Any(info =>
                         info.LayoutInfo.VerticalReference == VerticalReference.PreviousElement));
-                bool pagebreakBefore = explicitPageBreak || !isFirstOnPage && IsForcedAreaBreak(idx, renderer, area);
+                bool pagebreakBefore = explicitPageBreak ||
+                    (!isFirstOnPage || body?.IsContinuingPage == true) && IsForcedAreaBreak(idx, renderer, area);
 
                 if (!pagebreakBefore && renderer.RenderInfo.FormatInfo.IsEnding)
                 {
@@ -202,7 +209,7 @@ namespace MigraDoc.Rendering
                         }
                         prevBottomMargin = 0;
                         area = _areaProvider.GetNextArea();
-                        maxHeight = area?.Height ?? NRT.ThrowOnNull<XUnitPt>();
+                        maxHeight = GetMaxElementHeight(area ?? NRT.ThrowOnNull<Area>());
                     }
                     else
                     {
@@ -234,7 +241,8 @@ namespace MigraDoc.Rendering
                         textFrame.PaginateContent &&
                         !renderer.RenderInfo.FormatInfo.IsEmpty)
                         _areaProvider.PositionVertically(renderer.RenderInfo.LayoutInfo);
-                    if (renderer.RenderInfo.FormatInfo.IsEmpty && isFirstOnPage)
+                    if (renderer.RenderInfo.FormatInfo.IsEmpty && isFirstOnPage &&
+                        _areaProvider is not FormattedDocument { IsContinuingPage: true })
                     {
                         if (_areaProvider is FormattedDocument { IsBalanceProbe: true } probe)
                         {
@@ -271,7 +279,7 @@ namespace MigraDoc.Rendering
                         if (explicitPageBreak)
                             body?.EndColumnsOnPage();
                         area = _areaProvider.GetNextArea();
-                        maxHeight = area?.Height ?? NRT.ThrowOnNull<XUnitPt>();
+                        maxHeight = GetMaxElementHeight(area ?? NRT.ThrowOnNull<Area>());
                     }
 
                 }
