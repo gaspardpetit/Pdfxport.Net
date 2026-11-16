@@ -739,6 +739,12 @@ namespace MigraDoc.Rendering
                 var fieldInfos = _formattedDocument.GetFieldInfos(page);
 
                 fieldInfos.Date = PrintDate ?? DateTimeOffset.Now;
+                FieldInfos FieldsFor(RenderInfo info)
+                {
+                    var fields = info.FieldInfos ?? fieldInfos;
+                    fields.Date = fieldInfos.Date;
+                    return fields;
+                }
 
                 if ((options & PageRenderOptions.RenderHeader) == PageRenderOptions.RenderHeader)
                     RenderHeader(gfx, page);
@@ -777,13 +783,13 @@ namespace MigraDoc.Rendering
                             }
                             for (int idx = 0; idx < count; idx++)
                                 if (layers[idx] == TextFrameLayer.BehindContent && !ShouldDeferFrame(renderInfos[idx]))
-                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                                    Renderer.Create(gfx, this, renderInfos[idx], FieldsFor(renderInfos[idx])).Render();
                             for (int idx = 0; idx < count; idx++)
                                 if (layers[idx] == TextFrameLayer.Normal && !ShouldDeferFrame(renderInfos[idx]))
-                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                                    Renderer.Create(gfx, this, renderInfos[idx], FieldsFor(renderInfos[idx])).Render();
                             for (int idx = 0; idx < count; idx++)
                                 if (layers[idx] == TextFrameLayer.AboveContent && !ShouldDeferFrame(renderInfos[idx]))
-                                    Renderer.Create(gfx, this, renderInfos[idx], fieldInfos).Render();
+                                    Renderer.Create(gfx, this, renderInfos[idx], FieldsFor(renderInfos[idx])).Render();
                         }
                         else
                         {
@@ -792,7 +798,7 @@ namespace MigraDoc.Rendering
                                 var renderInfo = renderInfos[idx];
                                 if (ShouldDeferFrame(renderInfo))
                                     continue;
-                                var renderer = Renderer.Create(gfx, this, renderInfo, fieldInfos);
+                                var renderer = Renderer.Create(gfx, this, renderInfo, FieldsFor(renderInfo));
                                 renderer.Render();
                             }
                         }

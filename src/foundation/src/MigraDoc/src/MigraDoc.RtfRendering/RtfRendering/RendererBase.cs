@@ -165,6 +165,7 @@ namespace MigraDoc.RtfRendering
             //(Section) BreakType
             _enumTranslationTable.Add(BreakType.BreakEvenPage, "even");
             _enumTranslationTable.Add(BreakType.BreakOddPage, "odd");
+            _enumTranslationTable.Add(BreakType.BreakContinuous, "none");
             _enumTranslationTable.Add(BreakType.BreakNextPage, "page");
 
             //TODO_OLD:  ListType under construction.

@@ -51,6 +51,8 @@ namespace MigraDoc.Rendering
             bool ready = _elements.Count == 0;
             bool isFirstOnPage = true;
             var area = _areaProvider.GetNextArea() ?? NRT.ThrowOnNull<Area>();
+            if (topLevel && _areaProvider is FormattedDocument { IsContinuingPage: true })
+                isFirstOnPage = false;
             XUnitPt maxHeight = area.Height;
             if (ready)
             {
@@ -169,9 +171,11 @@ namespace MigraDoc.Rendering
                 var body = _areaProvider as FormattedDocument;
                 bool explicitPageBreak = _areaProvider.IsAreaBreakBefore(renderer.RenderInfo.LayoutInfo) &&
                     (!isFirstOnPage || body?.IsLaterColumn == true) &&
-                    (docObj is PageBreak || body?.HasFlowInPreviousColumns == true || renderInfos.Any(info =>
+                    (docObj is PageBreak || body?.HasFlowInPreviousColumns == true ||
+                     body?.IsContinuingPage == true || renderInfos.Any(info =>
                         info.LayoutInfo.VerticalReference == VerticalReference.PreviousElement));
-                bool pagebreakBefore = explicitPageBreak || !isFirstOnPage && IsForcedAreaBreak(idx, renderer, area);
+                bool pagebreakBefore = explicitPageBreak ||
+                    (!isFirstOnPage || body?.IsContinuingPage == true) && IsForcedAreaBreak(idx, renderer, area);
 
                 if (!pagebreakBefore && renderer.RenderInfo.FormatInfo.IsEnding)
                 {
@@ -234,7 +238,8 @@ namespace MigraDoc.Rendering
                         textFrame.PaginateContent &&
                         !renderer.RenderInfo.FormatInfo.IsEmpty)
                         _areaProvider.PositionVertically(renderer.RenderInfo.LayoutInfo);
-                    if (renderer.RenderInfo.FormatInfo.IsEmpty && isFirstOnPage)
+                    if (renderer.RenderInfo.FormatInfo.IsEmpty && isFirstOnPage &&
+                        _areaProvider is not FormattedDocument { IsContinuingPage: true })
                     {
                         if (_areaProvider is FormattedDocument { IsBalanceProbe: true } probe)
                         {

@@ -21,6 +21,13 @@ namespace MigraDoc.DocumentObjectModel
         /// <summary>
         /// Breaks at the next odd page.
         /// </summary>
-        BreakOddPage
+        BreakOddPage,
+
+        /// <summary>
+        /// Continues below the preceding section on the current page when its
+        /// dimensions and orientation match. The current page retains its existing
+        /// header, footer and body bottom; new page settings apply on later pages.
+        /// </summary>
+        BreakContinuous
     }
 }

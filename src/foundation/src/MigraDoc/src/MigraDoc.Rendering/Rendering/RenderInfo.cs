@@ -22,6 +22,9 @@ namespace MigraDoc.Rendering
         /// </summary>
         public LayoutInfo LayoutInfo { get; } = new LayoutInfo();
 
+        // A physical page can contain body content from multiple sections.
+        internal FieldInfos? FieldInfos { get; set; }
+
         /// <summary>
         /// Gets the document object to which the layout information applies. Use the Tag property of DocumentObject to identify an object.
         /// </summary>
