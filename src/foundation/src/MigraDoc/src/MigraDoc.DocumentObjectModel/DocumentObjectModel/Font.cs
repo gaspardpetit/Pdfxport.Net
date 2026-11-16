@@ -74,6 +74,9 @@ namespace MigraDoc.DocumentObjectModel
 
             if (font.Values.Italic is not null && (refFont == null || font.Italic != refFont.Italic))
                 Italic = font.Italic;
+            if (font.Values.BaselineShift is not null &&
+                (refFont == null || font.BaselineShift != refFont.BaselineShift || refFont.Values.BaselineShift is null))
+                BaselineShift = font.BaselineShift;
 
             if (font.Values.Subscript is not null && (refFont == null || font.Subscript != refFont.Subscript))
                 Subscript = font.Subscript;
@@ -109,6 +112,8 @@ namespace MigraDoc.DocumentObjectModel
 
             if (font.Values.Italic is not null)
                 Italic = font.Italic;
+            if (font.Values.BaselineShift is not null)
+                BaselineShift = font.BaselineShift;
 
             if (font.Values.Subscript is not null)
                 Subscript = font.Subscript;
@@ -141,6 +146,18 @@ namespace MigraDoc.DocumentObjectModel
         {
             get => Values.Size ?? Unit.Empty;
             set => Values.Size = value;
+        }
+
+        /// <summary>
+        /// Gets or sets the signed PDF baseline offset without changing font size.
+        /// Positive values raise inline content; negative values lower it. Automatic
+        /// line metrics include the shifted extent; exact-height or excluded runs
+        /// may paint outside their line box. Zero is the default. RTF output is unaffected.
+        /// </summary>
+        public Unit BaselineShift
+        {
+            get => Values.BaselineShift ?? Unit.Empty;
+            set => Values.BaselineShift = value;
         }
 
         /// <summary>
@@ -255,6 +272,8 @@ namespace MigraDoc.DocumentObjectModel
                 fp |= FontProperties.Name;
             if (!Values.Size.IsValueNullOrEmpty())
                 fp |= FontProperties.Size;
+            if (Values.BaselineShift is not null)
+                fp |= FontProperties.BaselineShift;
             if (Values.Bold is not null)
                 fp |= FontProperties.Bold;
             if (Values.Italic is not null)
@@ -336,6 +355,8 @@ namespace MigraDoc.DocumentObjectModel
 
                 if (!Values.Size.IsValueNullOrEmpty())
                     serializer.WriteSimpleAttribute("Size", Size);
+                if (Values.BaselineShift is not null)
+                    serializer.WriteSimpleAttribute("BaselineShift", BaselineShift);
 
                 if (Values.Bold is not null)
                     serializer.WriteSimpleAttribute("Bold", Bold);
@@ -375,6 +396,9 @@ namespace MigraDoc.DocumentObjectModel
 
                 if (!Values.Size.IsValueNullOrEmpty() && (font == null || Size != font.Size))
                     serializer.WriteSimpleAttribute("Size", Size);
+                if (Values.BaselineShift is not null &&
+                    (font == null || BaselineShift != font.BaselineShift || font.Values.BaselineShift is null))
+                    serializer.WriteSimpleAttribute("BaselineShift", BaselineShift);
                 // NBool and NEnum have to be compared directly to check whether the value is Null.
 
                 if (Values.Bold is not null && (font == null || Bold != font.Bold || font.Values.Bold is null))
@@ -433,6 +457,19 @@ namespace MigraDoc.DocumentObjectModel
             /// See enclosing document object class for documentation of this property.
             /// </summary>
             public Unit? Size { get; set; }
+
+            /// <summary>Signed offset from the normal text baseline.</summary>
+            public Unit? BaselineShift
+            {
+                get => _baselineShift;
+                set
+                {
+                    if (value is { } shift && (double.IsNaN(shift.Point) || double.IsInfinity(shift.Point)))
+                        throw new ArgumentOutOfRangeException(nameof(value));
+                    _baselineShift = value;
+                }
+            }
+            Unit? _baselineShift;
 
             /// <summary>
             /// Gets or sets the internal nullable implementation value of the enclosing document object property.

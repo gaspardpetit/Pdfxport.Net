@@ -2004,7 +2004,7 @@ namespace MigraDoc.Rendering
                     // Move descender up.
                     position -= verticalInfo.Descent;
 
-                return position;
+                return position - font.BaselineShift.ToXUnitPt();
             }
         }
 
@@ -4136,6 +4136,14 @@ namespace MigraDoc.Rendering
                     : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;
             }
 
+            var shift = isListSymbol ? 0 : CurrentDomFont.BaselineShift.Point;
+            var rawDescent = isListSymbol ? 0 : FontHandler.GetDescent(font).Point;
+            var shiftedAscent = Math.Max(_currentVerticalInfo.ShiftedAscent,
+                Math.Max(0, singleLineSpace.Point - rawDescent + shift));
+            var shiftedDescent = Math.Max(_currentVerticalInfo.ShiftedDescent,
+                Math.Max(0, rawDescent - shift));
+            var hasShift = _currentVerticalInfo.HasBaselineShift || shift != 0;
+
             XUnitPt inherentLineSpace, lineHeight;
             if (lineSpacingRule == LineSpacingRule.Exactly)
             {
@@ -4211,6 +4219,14 @@ namespace MigraDoc.Rendering
                 descent = Math.Max(descent, _currentVerticalInfo.Descent);
             }
 
+            if (hasShift && lineSpacingRule != LineSpacingRule.Exactly)
+            {
+                var shiftedHeight = XUnitPt.FromPoint(shiftedAscent + shiftedDescent);
+                inherentLineSpace = Math.Max(inherentLineSpace, shiftedHeight);
+                lineHeight = Math.Max(lineHeight, shiftedHeight);
+                descent = XUnitPt.FromPoint(shiftedDescent);
+            }
+
             if (_documentRenderer.MinimumLineMetricsForFont?.Invoke(_paragraph, font) is { } minimumMetrics &&
                 IsFinite(minimumMetrics.LineHeight) && minimumMetrics.LineHeight > 0 &&
                 IsFinite(minimumMetrics.InherentLineSpace) && minimumMetrics.InherentLineSpace > 0)
@@ -4223,7 +4239,12 @@ namespace MigraDoc.Rendering
             if (MaxElementHeight > 0)
                 lineHeight = Math.Min(lineHeight, MaxElementHeight - Tolerance);
 
-            return new(lineHeight, descent, inherentLineSpace);
+            return new(lineHeight, descent, inherentLineSpace)
+            {
+                ShiftedAscent = shiftedAscent,
+                ShiftedDescent = shiftedDescent,
+                HasBaselineShift = hasShift
+            };
         }
 
         /// <summary>
@@ -4354,7 +4375,8 @@ namespace MigraDoc.Rendering
             var offsetFactor = geometry?.VerticalOffsetFactor ??
                 _documentRenderer.UnderlineVerticalOffsetFactor ?? 0.33;
 
-            bool penChanged = UnderlinePenChanged(pen, offsetFactor, offsetPoints, font.Underline == Underline.Double, font.Underline == Underline.Wavy);
+            bool penChanged = UnderlinePenChanged(pen, offsetFactor, offsetPoints, font.Underline == Underline.Double, font.Underline == Underline.Wavy) ||
+                _currentUnderlinePen != null && _currentUnderlineBaselineShift != font.BaselineShift.Point;
             if (penChanged)
             {
                 if (_currentUnderlinePen != null)
@@ -4397,11 +4419,14 @@ namespace MigraDoc.Rendering
         {
             _underlineStartPos = xPosition;
             _underlineEndPos = xPosition;
+            _currentUnderlineBaselinePosition = CurrentBaselinePosition;
+            _currentUnderlineBaselineShift = CurrentDomFont.BaselineShift.Point;
         }
 
         void EndUnderline(XPen pen, XUnitPt xPosition)
         {
-            XUnitPt yPosition = CurrentBaselinePosition;
+            XUnitPt yPosition = _currentUnderlineBaselineShift != 0 || CurrentDomFont.BaselineShift.Point != 0
+                ? _currentUnderlineBaselinePosition : CurrentBaselinePosition;
             yPosition += _currentUnderlineOffsetPoints ??
                 _currentUnderlineOffsetFactor * _currentVerticalInfo.Descent.Point;
             if (_currentUnderlineIsWavy)
@@ -4470,6 +4495,8 @@ namespace MigraDoc.Rendering
         XPen? _currentUnderlinePen;
         XUnitPt _underlineStartPos;
         XUnitPt _underlineEndPos;
+        XUnitPt _currentUnderlineBaselinePosition;
+        double _currentUnderlineBaselineShift;
         double _currentUnderlineOffsetFactor;
 
         double? _currentUnderlineOffsetPoints;

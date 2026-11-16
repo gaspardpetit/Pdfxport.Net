@@ -1,4 +1,4 @@
-// MigraDoc - Creating Documents on the Fly
+﻿// MigraDoc - Creating Documents on the Fly
 // See the LICENSE file in the solution root for more information.
 
 using MigraDoc.DocumentObjectModel.Shapes;
@@ -24,6 +24,12 @@ namespace MigraDoc.Rendering
         public XUnitPt Descent;
 
         public XUnitPt InherentLineSpace;
+
+        // Natural run envelope in points, accumulated even before the first shifted run.
+        // HasBaselineShift keeps the existing unshifted layout path unchanged.
+        public double ShiftedAscent;
+        public double ShiftedDescent;
+        public bool HasBaselineShift;
     }
 
     /// <summary>
