@@ -98,7 +98,8 @@ namespace MigraDoc.DocumentObjectModel.Tests
                             break;
 
                         case ReferenceTypeDescriptor rtd:
-                            (rtd.ValueType == typeof(string) || rtd.ValueType == typeof(object)).Should().BeTrue();
+                            (rtd.ValueType == typeof(string) || rtd.ValueType == typeof(object) ||
+                             rtd.ValueType == typeof(double[]) && type == typeof(PageSetup)).Should().BeTrue();
                             // We do not check nullability because it is difficult reflection stuff and works anyway.
                             break;
 

@@ -35,6 +35,17 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Copies mutable column geometry independently of the original.
+        /// </summary>
+        protected override object DeepCopy()
+        {
+            var copy = (PageSetup)base.DeepCopy();
+            copy.Values.ColumnWidthsPoints = Values.ColumnWidthsPoints?.ToArray();
+            copy.Values.ColumnGapsPoints = Values.ColumnGapsPoints?.ToArray();
+            return copy;
+        }
+
+        /// <summary>
         /// Freezes this instance.
         /// </summary>
         internal void Freeze() => _frozen = true;
@@ -138,9 +149,50 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
-        /// Gets or sets the number of equal-width body columns. Defaults to one.
+        /// Gets or sets positive body column widths in points. At formatting time,
+        /// the array must contain ColumnCount entries. Null uses equal widths after
+        /// subtracting the gaps. Widths and gaps must fit within the body width;
+        /// unused width is left at the right. Arrays are copied on get and set.
+        /// DDL stores an invariant comma-separated string, e.g. "60,120".
+        /// </summary>
+        public double[]? ColumnWidthsPoints
+        {
+            get => Values.ColumnWidthsPoints?.ToArray();
+            set
+            {
+                EnsureNotFrozen();
+                if (value != null &&
+                    value.Any(width => double.IsNaN(width) || double.IsInfinity(width) || width <= 0))
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                Values.ColumnWidthsPoints = value?.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets nonnegative gaps between body columns in points. At formatting
+        /// time, the array must contain ColumnCount minus one entries.
+        /// Null uses ColumnSpacing. Arrays are copied on get and set. DDL stores
+        /// an invariant comma-separated string; one column uses an empty string.
+        /// </summary>
+        public double[]? ColumnGapsPoints
+        {
+            get => Values.ColumnGapsPoints?.ToArray();
+            set
+            {
+                EnsureNotFrozen();
+                if (value != null &&
+                    value.Any(gap => double.IsNaN(gap) || double.IsInfinity(gap) || gap < 0))
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                Values.ColumnGapsPoints = value?.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the number of body columns. Defaults to one.
         /// Columns fill from left to right before advancing to the next page.
         /// Headers and footers retain the full page-margin width.
+        /// An explicit count starts a new section column definition; otherwise
+        /// widths and gaps are inherited with the preceding section's count.
         /// </summary>
         public int ColumnCount
         {
@@ -560,6 +612,12 @@ namespace MigraDoc.DocumentObjectModel
                 if (Values.ColumnCount is not null)
                     serializer.WriteSimpleAttribute("ColumnCount", ColumnCount);
 
+                if (Values.ColumnWidthsPoints is { } widths)
+                    serializer.WriteSimpleAttribute("ColumnWidthsPoints", string.Join(",", widths.Select(w => w.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
+
+                if (Values.ColumnGapsPoints is { } gaps)
+                    serializer.WriteSimpleAttribute("ColumnGapsPoints", string.Join(",", gaps.Select(g => g.ToString("R", System.Globalization.CultureInfo.InvariantCulture))));
+
                 if (Values.ColumnSpacing is not null)
                     serializer.WriteSimpleAttribute("ColumnSpacing", ColumnSpacing);
 
@@ -614,8 +672,14 @@ namespace MigraDoc.DocumentObjectModel
             /// </summary>
             public BreakType? SectionStart { get; set; }
 
-            /// <summary>Number of equal-width body columns.</summary>
+            /// <summary>Number of body columns.</summary>
             public int? ColumnCount { get; set; }
+
+            /// <summary>Optional body column widths in points.</summary>
+            public double[]? ColumnWidthsPoints { get; set; }
+
+            /// <summary>Optional gaps between body columns in points.</summary>
+            public double[]? ColumnGapsPoints { get; set; }
 
             /// <summary>Gap between body columns.</summary>
             public Unit? ColumnSpacing { get; set; }
