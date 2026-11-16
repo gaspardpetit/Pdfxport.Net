@@ -30,6 +30,13 @@ namespace MigraDoc.Rendering
         public double ShiftedAscent;
         public double ShiftedDescent;
         public bool HasBaselineShift;
+
+        // Script envelopes are relative to the unshifted line bottom, whereas
+        // ordinary run envelopes above are relative to the common baseline.
+        public double UnshiftedDescent;
+        public double ScriptShiftedAscent;
+        public double ScriptShiftedDescent;
+        public bool HasScriptEnvelope;
     }
 
     /// <summary>

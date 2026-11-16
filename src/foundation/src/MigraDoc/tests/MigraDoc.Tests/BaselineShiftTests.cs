@@ -2,6 +2,7 @@
 // See the LICENSE file in the solution root for more information.
 
 using System.Globalization;
+using PdfSharp.Drawing;
 using PdfSharp.Pdf.Content;
 using PdfSharp.Pdf.Content.Objects;
 using FluentAssertions;
@@ -69,6 +70,65 @@ public class BaselineShiftTests : IDisposable
             var runs = actual.Runs.Skip(line * 3).Take(3).ToArray();
             (runs[0].Y - runs[2].Y).Should().BeApproximately(first, .002);
             (runs[1].Y - runs[2].Y).Should().BeApproximately(second, .002);
+        }
+    }
+
+    [Theory]
+    [InlineData(-6, 1)]
+    [InlineData(6, 1)]
+    [InlineData(-20, 1)]
+    [InlineData(20, 1)]
+    [InlineData(-6, 2)]
+    [InlineData(6, 2)]
+    [InlineData(-20, 2)]
+    [InlineData(20, 2)]
+    public void IncludedScriptsUseTheSameBaselineForPaintAndMetrics(double shift, int script)
+    {
+        foreach (var scriptFirst in new[] { false, true })
+        foreach (var normalSize in new[] { 12, 24 })
+        {
+            var normal = Render(0, script: script, scriptFirst: scriptFirst, normalSize: normalSize);
+            var actual = Render(shift, script: script, scriptFirst: scriptFirst, normalSize: normalSize);
+            for (int line = 0; line < 2; line++)
+            {
+                var before = normal.Runs.Skip(line * 3).Take(3).ToArray();
+                var after = actual.Runs.Skip(line * 3).Take(3).ToArray();
+                var beforeOffset = before.Single(r => r.Text == "shifted").Y - before.Single(r => r.Text == "normal").Y;
+                var afterOffset = after.Single(r => r.Text == "shifted").Y - after.Single(r => r.Text == "normal").Y;
+                afterOffset.Should().BeApproximately(beforeOffset + shift, .002);
+            }
+            var font = new XFont("Arial", 12);
+            double ascent = 12.0 * font.Metrics.Ascent / font.FontFamily.GetEmHeight(font.Style);
+            double descent = 12.0 * font.Metrics.Descent / font.FontFamily.GetEmHeight(font.Style);
+            double scale = .8 * ascent / font.GetHeight();
+            var scripts = actual.Runs.Where(r => r.Text == "shifted").ToArray();
+            foreach (var run in scripts)
+            {
+                (run.Y + scale * (font.GetHeight() - descent)).Should().BeLessThanOrEqualTo(actual.Top + .002);
+                (run.Y - scale * descent).Should().BeGreaterThanOrEqualTo(actual.Top - actual.Height - .002);
+            }
+            // The lower edge of one script cannot overlap the upper edge of the next.
+            (scripts[0].Y - scripts[1].Y).Should().BeGreaterThanOrEqualTo(scale * font.GetHeight() - .002);
+        }
+    }
+
+    [Theory]
+    [InlineData(-6)]
+    [InlineData(6)]
+    [InlineData(-20)]
+    [InlineData(20)]
+    public void AtLeastBottomGapRemainsAdditionalToShiftedEnvelope(double shift)
+    {
+        foreach (var scriptFirst in new[] { false, true })
+        {
+            var withoutGap = Render(shift, atLeastBottom: 0, scriptFirst: scriptFirst);
+            var withGap = Render(shift, atLeastBottom: 3, scriptFirst: scriptFirst);
+            withGap.Height.Should().BeApproximately(withoutGap.Height + 6, .002);
+            var first = withGap.Runs.Take(3).Single(r => r.Text == "normal");
+            var second = withGap.Runs.Skip(3).Single(r => r.Text == "normal");
+            var firstControl = withoutGap.Runs.Take(3).Single(r => r.Text == "normal");
+            var secondControl = withoutGap.Runs.Skip(3).Single(r => r.Text == "normal");
+            (first.Y - second.Y).Should().BeApproximately(firstControl.Y - secondControl.Y + 3, .002);
         }
     }
 
@@ -187,12 +247,19 @@ public class BaselineShiftTests : IDisposable
         font.BaselineShift.Point.Should().Be(3);
     }
 
-    record Result(double Height, List<(string Text, double X, double Y)> Runs);
+    record Result(double Top, double Height, List<(string Text, double X, double Y)> Runs);
     static Result Render(double? shift, double second = 0, bool excluded = false,
-        int script = 0, bool exact = false)
+        int script = 0, bool exact = false, bool scriptFirst = true, int normalSize = 12, double? atLeastBottom = null)
     {
         var document = Create();
         var p = document.Sections[0].AddParagraph();
+        p.Format.Font.Size = normalSize;
+        if (atLeastBottom.HasValue)
+        {
+            p.Format.LineSpacingRule = LineSpacingRule.AtLeast;
+            p.Format.LineSpacing = Unit.FromPoint(1);
+            p.Format.AtLeastBottomLineSpace = Unit.FromPoint(atLeastBottom.Value);
+        }
         if (exact)
         {
             p.Format.LineSpacingRule = LineSpacingRule.Exactly;
@@ -201,13 +268,22 @@ public class BaselineShiftTests : IDisposable
         for (int i = 0; i < 2; i++)
         {
             if (i > 0) p.AddLineBreak();
+            if (!scriptFirst)
+            {
+                p.AddText("normal");
+                p.AddFormattedText("second").Font.BaselineShift = Unit.FromPoint(second);
+            }
             var run = p.AddFormattedText("shifted");
+            run.Font.Size = 12;
             run.ExcludeFromLineMetrics = excluded;
             if (shift.HasValue) run.Font.BaselineShift = Unit.FromPoint(shift.Value);
             if (script == 1) run.Subscript = true;
             if (script == 2) run.Superscript = true;
-            p.AddFormattedText("second").Font.BaselineShift = Unit.FromPoint(second);
-            p.AddText("normal");
+            if (scriptFirst)
+            {
+                p.AddFormattedText("second").Font.BaselineShift = Unit.FromPoint(second);
+                p.AddText("normal");
+            }
         }
         var renderer = new PdfDocumentRenderer { Document = document };
         renderer.RenderDocument();
@@ -217,7 +293,7 @@ public class BaselineShiftTests : IDisposable
         var runs = new List<(string, double, double)>();
         while (reader.MoveAndGetNext(true, out var item)) runs.Add((item!.Text, item.X, item.Y));
         runs.Should().HaveCount(6);
-        return new Result(area.Height.Point, runs);
+        return new Result(pdf.Pages[0].Height.Point - area.Y.Point, area.Height.Point, runs);
     }
     static Document Create()
     {

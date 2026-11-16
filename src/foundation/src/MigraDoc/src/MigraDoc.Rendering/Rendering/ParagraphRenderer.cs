@@ -1984,28 +1984,31 @@ namespace MigraDoc.Rendering
                 XFont xFont = CurrentFont;
 
                 double setLineSpace = verticalInfo.InherentLineSpace;
-                double standardFontLineSpace = xFont.GetHeight();
-
                 // Set position to bottom of text.
                 position += setLineSpace;
-                if (font.Subscript)
-                {
-                    // Move sub-/superscaled descender up.
-                    position -= FontHandler.GetSubSuperScaling(xFont) * FontHandler.GetDescent(xFont);
-                }
-                else if (font.Superscript)
-                {
-                    // Set position to top of text.
-                    position -= standardFontLineSpace;
-                    // Move sub-/superscaled LineSpace down and descender up.
-                    position += FontHandler.GetSubSuperScaling(xFont) * (standardFontLineSpace - FontHandler.GetDescent(xFont));
-                }
+                if (font.Subscript || font.Superscript)
+                    position += ScriptBaselineFromLineBottom(font, xFont);
                 else
                     // Move descender up.
                     position -= verticalInfo.Descent;
 
+                // Script offsets were measured from the unshifted line bottom. Move
+                // them with the common baseline when shifted runs enlarge descent.
+                if ((font.Subscript || font.Superscript) && verticalInfo.HasBaselineShift &&
+                    _paragraph.Format.LineSpacingRule != LineSpacingRule.Exactly)
+                    position -= verticalInfo.Descent.Point - verticalInfo.UnshiftedDescent;
+
                 return position - font.BaselineShift.ToXUnitPt();
             }
+        }
+
+        // Shared by painting and shifted envelope calculation.
+        static double ScriptBaselineFromLineBottom(Font font, XFont xFont)
+        {
+            var scale = FontHandler.GetSubSuperScaling(xFont);
+            var descent = FontHandler.GetDescent(xFont).Point;
+            return font.Subscript ? -scale * descent
+                : -xFont.GetHeight() + scale * (xFont.GetHeight() - descent);
         }
 
         XBrush? CurrentBrush
@@ -4136,12 +4139,37 @@ namespace MigraDoc.Rendering
                     : singleLineSpace - FontHandler.GetAscent(font) + imageHeight;
             }
 
-            var shift = isListSymbol ? 0 : CurrentDomFont.BaselineShift.Point;
+            var domFont = CurrentDomFont;
+            var shift = isListSymbol ? 0 : domFont.BaselineShift.Point;
             var rawDescent = isListSymbol ? 0 : FontHandler.GetDescent(font).Point;
-            var shiftedAscent = Math.Max(_currentVerticalInfo.ShiftedAscent,
-                Math.Max(0, singleLineSpace.Point - rawDescent + shift));
-            var shiftedDescent = Math.Max(_currentVerticalInfo.ShiftedDescent,
-                Math.Max(0, rawDescent - shift));
+            var unshiftedDescent = Math.Max(_currentVerticalInfo.UnshiftedDescent, rawDescent);
+            var shiftedAscent = _currentVerticalInfo.ShiftedAscent;
+            var shiftedDescent = _currentVerticalInfo.ShiftedDescent;
+            var scriptAscent = _currentVerticalInfo.ScriptShiftedAscent;
+            var scriptDescent = _currentVerticalInfo.ScriptShiftedDescent;
+            var hasScript = _currentVerticalInfo.HasScriptEnvelope;
+            if (!isListSymbol && (domFont.Subscript || domFont.Superscript))
+            {
+                var scale = FontHandler.GetSubSuperScaling(font);
+                var fontHeight = font.GetHeight();
+                // Script baseline relative to the original line bottom. Keeping this
+                // envelope separate lets a later, larger font change the common
+                // unshifted descent without invalidating earlier script runs.
+                var baseline = ScriptBaselineFromLineBottom(domFont, font);
+                var ascent = imageRenderInfo == null ? scale * (fontHeight - rawDescent)
+                    : singleLineSpace.Point - rawDescent;
+                var descentOfRun = imageRenderInfo == null ? scale * rawDescent : rawDescent;
+                scriptAscent = hasScript ? Math.Max(scriptAscent, ascent - baseline + shift)
+                    : ascent - baseline + shift;
+                scriptDescent = hasScript ? Math.Max(scriptDescent, descentOfRun + baseline - shift)
+                    : descentOfRun + baseline - shift;
+                hasScript = true;
+            }
+            else
+            {
+                shiftedAscent = Math.Max(shiftedAscent, Math.Max(0, singleLineSpace.Point - rawDescent + shift));
+                shiftedDescent = Math.Max(shiftedDescent, Math.Max(0, rawDescent - shift));
+            }
             var hasShift = _currentVerticalInfo.HasBaselineShift || shift != 0;
 
             XUnitPt inherentLineSpace, lineHeight;
@@ -4221,10 +4249,20 @@ namespace MigraDoc.Rendering
 
             if (hasShift && lineSpacingRule != LineSpacingRule.Exactly)
             {
-                var shiftedHeight = XUnitPt.FromPoint(shiftedAscent + shiftedDescent);
+                var ascent = hasScript ? Math.Max(shiftedAscent, scriptAscent - unshiftedDescent) : shiftedAscent;
+                var descentOfLine = hasScript ? Math.Max(shiftedDescent, scriptDescent + unshiftedDescent) : shiftedDescent;
+                var shiftedHeight = XUnitPt.FromPoint(ascent + descentOfLine);
                 inherentLineSpace = Math.Max(inherentLineSpace, shiftedHeight);
-                lineHeight = Math.Max(lineHeight, shiftedHeight);
-                descent = XUnitPt.FromPoint(shiftedDescent);
+                if (lineSpacingRule == LineSpacingRule.AtLeast)
+                {
+                    // The configured gap is additional to the final envelope.
+                    var bottomSpace = paragraphFormat.AtLeastBottomLineSpace.Point;
+                    lineHeight = inherentLineSpace +
+                        (IsFinite(bottomSpace) && bottomSpace > 0 ? bottomSpace : 0);
+                }
+                else
+                    lineHeight = Math.Max(lineHeight, shiftedHeight);
+                descent = XUnitPt.FromPoint(descentOfLine);
             }
 
             if (_documentRenderer.MinimumLineMetricsForFont?.Invoke(_paragraph, font) is { } minimumMetrics &&
@@ -4243,7 +4281,11 @@ namespace MigraDoc.Rendering
             {
                 ShiftedAscent = shiftedAscent,
                 ShiftedDescent = shiftedDescent,
-                HasBaselineShift = hasShift
+                HasBaselineShift = hasShift,
+                UnshiftedDescent = unshiftedDescent,
+                ScriptShiftedAscent = scriptAscent,
+                ScriptShiftedDescent = scriptDescent,
+                HasScriptEnvelope = hasScript
             };
         }
 
