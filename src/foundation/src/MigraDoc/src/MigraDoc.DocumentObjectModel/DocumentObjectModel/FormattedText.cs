@@ -394,6 +394,13 @@ namespace MigraDoc.DocumentObjectModel
             }
         }
 
+        /// <summary>Gets or sets the signed PDF baseline offset. See <see cref="Font.BaselineShift"/>.</summary>
+        public Unit BaselineShift
+        {
+            get => Font.BaselineShift;
+            set => Font.BaselineShift = value;
+        }
+
         /// <summary>
         /// Gets or sets whether PDF layout ignores this run's text and tabs when determining line height.
         /// Text retains its font size and horizontal width; its ink may extend outside
@@ -616,6 +623,13 @@ namespace MigraDoc.DocumentObjectModel
             {
                 get => Font?.Name;
                 set => Owner.Font.Values.Name = value;
+            }
+
+            /// <summary>Nullable signed PDF baseline offset forwarded to this run's font.</summary>
+            public Unit? BaselineShift
+            {
+                get => Font?.Values.BaselineShift;
+                set => Owner.Font.Values.BaselineShift = value;
             }
 
             /// <summary>

@@ -139,6 +139,7 @@ namespace MigraDoc.DocumentObjectModel.Visitors
 
             font.Values.Name ??= refFont.Values.Name;
             font.Values.Size ??= refFont.Values.Size;
+            font.Values.BaselineShift ??= refFont.Values.BaselineShift;
             if (font.Values.Color.IsValueNullOrEmpty())
                 font.Values.Color = refFont.Values.Color;
             if (font.Values.UnderlineColor.IsValueNullOrEmpty())

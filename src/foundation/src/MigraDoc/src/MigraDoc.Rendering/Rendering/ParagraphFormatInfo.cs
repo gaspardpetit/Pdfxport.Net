@@ -24,6 +24,23 @@ namespace MigraDoc.Rendering
         public XUnitPt Descent;
 
         public XUnitPt InherentLineSpace;
+
+        // Natural run envelope in points, accumulated even before the first shifted run.
+        // HasBaselineShift keeps the existing unshifted layout path unchanged.
+        public double ShiftedAscent;
+        public double ShiftedDescent;
+        public bool HasBaselineShift;
+
+        // Spacing-rule metrics without baseline-shift expansion.
+        public XUnitPt UnshiftedHeight;
+        public XUnitPt UnshiftedInherentLineSpace;
+        public double UnshiftedDescent;
+
+        // Script envelopes are relative to the unshifted line bottom, whereas
+        // ordinary run envelopes above are relative to the common baseline.
+        public double ScriptShiftedAscent;
+        public double ScriptShiftedDescent;
+        public bool HasScriptEnvelope;
     }
 
     /// <summary>
