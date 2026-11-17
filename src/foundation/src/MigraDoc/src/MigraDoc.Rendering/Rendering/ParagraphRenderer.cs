@@ -4483,8 +4483,13 @@ namespace MigraDoc.Rendering
         {
             XUnitPt yPosition = _currentUnderlineBaselineShift != 0 || CurrentDomFont.BaselineShift.Point != 0
                 ? _currentUnderlineBaselinePosition : CurrentBaselinePosition;
+            // Layout expansion changes the common baseline, not the underline's
+            // distance from it. Exact lines retain their scaled paragraph descent.
+            var underlineDescent = _currentVerticalInfo.HasBaselineShift &&
+                _paragraph.Format.LineSpacingRule != LineSpacingRule.Exactly
+                ? _currentVerticalInfo.UnshiftedDescent : _currentVerticalInfo.Descent.Point;
             yPosition += _currentUnderlineOffsetPoints ??
-                _currentUnderlineOffsetFactor * _currentVerticalInfo.Descent.Point;
+                _currentUnderlineOffsetFactor * underlineDescent;
             if (_currentUnderlineIsWavy)
             {
                 DrawWaveUnderline(pen, xPosition, yPosition);

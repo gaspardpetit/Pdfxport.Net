@@ -245,6 +245,60 @@ public class BaselineShiftTests : IDisposable
         (ys[0] - ys[1]).Should().BeApproximately(4, .002);
     }
 
+    [Theory]
+    [InlineData(-30, 0)]
+    [InlineData(30, 0)]
+    [InlineData(-30, 1)]
+    [InlineData(30, 1)]
+    [InlineData(-30, 2)]
+    [InlineData(30, 2)]
+    [InlineData(-30, 3)]
+    [InlineData(30, 3)]
+    public void UnderlineOffsetFromGlyphBaselineDoesNotIncludeLayoutExpansion(double shift, int geometry)
+    {
+        foreach (var exact in new[] { false, true })
+        foreach (var excluded in new[] { false, true })
+        {
+            var expected = Gaps(0, exact, excluded);
+            var actual = Gaps(shift, exact, excluded);
+            for (int i = 0; i < actual.Length; i++)
+                actual[i].Should().BeApproximately(expected[i], .002);
+        }
+
+        double[] Gaps(double offset, bool exact, bool excluded)
+        {
+            var document = Create();
+            var paragraph = document.Sections[0].AddParagraph();
+            if (exact)
+            {
+                paragraph.Format.LineSpacingRule = LineSpacingRule.Exactly;
+                paragraph.Format.LineSpacing = Unit.FromPoint(20);
+            }
+            paragraph.AddFormattedText("normal").Underline = Underline.Single;
+            paragraph.AddText("gap"); // Separate strokes even when both offsets are zero.
+            var shifted = paragraph.AddFormattedText("shifted");
+            shifted.Underline = Underline.Single;
+            shifted.Font.BaselineShift = Unit.FromPoint(offset);
+            shifted.ExcludeFromLineMetrics = excluded;
+            var renderer = new PdfDocumentRenderer { Document = document };
+            if (geometry == 1) renderer.DocumentRenderer.UnderlineVerticalOffsetFactor = .5;
+            if (geometry == 2) renderer.DocumentRenderer.UseFontUnderlineMetrics = true;
+            if (geometry == 3) renderer.DocumentRenderer.UnderlineGeometry = _ => (.1, .4);
+            renderer.RenderDocument();
+            using var pdf = renderer.PdfDocument;
+            var starts = ContentReader.ReadContent(pdf.Pages[0]).OfType<COperator>()
+                .Where(op => op.OpCode.Name == "m").ToArray();
+            starts.Should().HaveCount(2);
+            var reader = PdfFileHelper.GetPageContentStreamEnumerator(pdf, 0).Text;
+            var baselines = new List<double>();
+            while (reader.MoveAndGetNext(true, out var item))
+                if (item!.Text != "gap") baselines.Add(item.Y);
+            baselines.Should().HaveCount(2);
+            return starts.Select((op, i) => baselines[i] -
+                double.Parse(op.Operands[1].ToString()!, CultureInfo.InvariantCulture)).ToArray();
+        }
+    }
+
     [Fact]
     public void UnderlineSegmentsFollowTheirOwnBaseline()
     {
