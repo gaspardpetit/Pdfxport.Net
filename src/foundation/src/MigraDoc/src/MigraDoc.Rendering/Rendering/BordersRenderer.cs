@@ -330,10 +330,11 @@ namespace MigraDoc.Rendering
                 var cross = doubleWave ? baseWidth * (0.7 + rail * 1.1) : baseWidth * 0.5;
                 var amplitude = baseWidth * 0.28;
                 var pitch = Math.Max(1.5, baseWidth * 1.45);
-                var chevron = pitch * 0.68;
                 for (var start = 0.0; start < length.Point; start += pitch)
                 {
-                    var end = Math.Min(length.Point, start + chevron);
+                    // Adjacent repeats meet without gaps. Keep the final repeat
+                    // at full pitch; the reserved-band clip trims its excess.
+                    var end = start + pitch;
                     var midpoint = (start + end) / 2;
                     if (vertical)
                     {
