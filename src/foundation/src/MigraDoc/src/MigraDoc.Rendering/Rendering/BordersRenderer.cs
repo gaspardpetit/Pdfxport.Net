@@ -381,11 +381,7 @@ namespace MigraDoc.Rendering
             _gfx.IntersectClip(vertical
                 ? new XRect(left.Point, top.Point, source.Width, length.Point)
                 : new XRect(left.Point, top.Point, length.Point, source.Width));
-            var tint = XColor.FromArgb((int)Math.Round(source.Color.A * 255),
-                (int)Math.Round(((double)source.Color.R + 255) / 2),
-                (int)Math.Round(((double)source.Color.G + 255) / 2),
-                (int)Math.Round(((double)source.Color.B + 255) / 2));
-            var railPen = new XPen(tint, Math.Max(0.35, source.Width * 0.35));
+            var railPen = new XPen(source.Color, Math.Max(0.35, source.Width * 0.35));
             var cross = source.Width;
             var pitch = Math.Max(0.8, source.Width * 0.8);
             for (var start = 0.0; start < length.Point; start += pitch)
