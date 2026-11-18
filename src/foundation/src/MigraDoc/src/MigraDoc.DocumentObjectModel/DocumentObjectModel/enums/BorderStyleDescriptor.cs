@@ -31,6 +31,7 @@ namespace MigraDoc.DocumentObjectModel
 
         readonly double _patternBandMultiplier;
         internal bool OwnsHorizontalJunction => Kind != BorderDrawingKind.Stroke;
+        internal static BorderRailProfile ThreeDimensionalRails => new(3, .375, 1, 0);
 
         /// <summary>Gets the nominal PDF geometry of a border style.</summary>
         /// <remarks>
@@ -53,7 +54,7 @@ namespace MigraDoc.DocumentObjectModel
             BorderStyle.Wave => new(BorderDrawingKind.Wave, default),
             BorderStyle.DoubleWave => new(BorderDrawingKind.DoubleWave, default, 2.5),
             BorderStyle.DashDotStroked => new(BorderDrawingKind.DiagonalHatch, default),
-            BorderStyle.Emboss3D or BorderStyle.Engrave3D => new(BorderDrawingKind.ThreeDimensional, default, 1.75),
+            BorderStyle.Emboss3D or BorderStyle.Engrave3D => new(BorderDrawingKind.ThreeDimensional, default, ThreeDimensionalRails.BandMultiplier),
             _ => new(BorderDrawingKind.Stroke, default)
         };
 

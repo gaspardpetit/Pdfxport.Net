@@ -428,7 +428,9 @@ namespace MigraDoc.Rendering
             var colors = emboss
                 ? new[] { shade, middle, source.Color }
                 : new[] { source.Color, middle, shade };
-            var widths = new[] { source.Width * .375, source.Width, source.Width * .375 };
+            var profile = BorderStyleDescriptor.ThreeDimensionalRails;
+            var widths = new[] { source.Width * profile.First, source.Width * profile.Middle,
+                source.Width * profile.First };
             var position = vertical ? left : top;
             for (var rail = 0; rail < widths.Length; rail++)
             {

@@ -118,7 +118,14 @@ namespace MigraDoc.Rendering
                     state = _gfx.Save();
                     ExcludeBorderRegions(borderExclusions);
                 }
-                RenderBorders(cell, innerRect, followingTopBorders, precedingBottomBorders, followingLeftBorders);
+                if (_table.CellSpacing.Point > 0 &&
+                    TryGetClosedThreeDimensionalCell(cell, out var closedPen, out var emboss))
+                {
+                    RenderClosedThreeDimensionalCell(innerRect, closedPen!, emboss);
+                    RenderDiagonalBorders(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), innerRect);
+                }
+                else
+                    RenderBorders(cell, innerRect, followingTopBorders, precedingBottomBorders, followingLeftBorders);
                 if (state != null)
                     _gfx.Restore(state);
             }
@@ -1189,6 +1196,89 @@ namespace MigraDoc.Rendering
             return pen != null;
         }
 
+        bool TryGetClosedThreeDimensionalCell(Cell cell, out XPen? pen, out bool emboss)
+        {
+            pen = null;
+            emboss = false;
+            if (cell.RoundedCorner != RoundedCorner.None || cell.MergeRight != 0 ||
+                cell.MergeDown != 0 || _mergedCells.GetCoveringCell(cell) != cell)
+                return false;
+            var borders = new BordersRenderer(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), _gfx);
+            BorderStyle? style = null;
+            foreach (var side in new[] { BorderType.Top, BorderType.Right,
+                         BorderType.Bottom, BorderType.Left })
+            {
+                var edgeStyle = borders.GetStyle(side);
+                var edgePen = borders.GetPen(side);
+                if (edgeStyle is not (BorderStyle.Emboss3D or BorderStyle.Engrave3D) ||
+                    edgePen == null || cell.Borders.GetBorder(side)?.Values.Visible == false ||
+                    style != null && style != edgeStyle ||
+                    pen != null && (pen.Width != edgePen.Width || pen.Color != edgePen.Color))
+                    return false;
+                style = edgeStyle;
+                pen ??= edgePen;
+            }
+            emboss = style == BorderStyle.Emboss3D;
+            return pen != null;
+        }
+
+        void RenderClosedThreeDimensionalCell(Rectangle inner, XPen pen, bool emboss)
+        {
+            var profile = BorderStyleDescriptor.ThreeDimensionalRails;
+            var band = pen.Width * profile.BandMultiplier;
+            var outerLeft = inner.X.Point - band;
+            var outerTop = inner.Y.Point - band;
+            var innerLeft = inner.X.Point;
+            var innerTop = inner.Y.Point;
+            var innerRight = innerLeft + inner.Width.Point;
+            var innerBottom = innerTop + inner.Height.Point;
+            var outerRight = innerRight + band;
+            var outerBottom = innerBottom + band;
+            XColor Highlight(double amount) => XColor.FromArgb(
+                (int)Math.Round(pen.Color.A * 255),
+                (int)Math.Round(pen.Color.R + (255 - pen.Color.R) * amount),
+                (int)Math.Round(pen.Color.G + (255 - pen.Color.G) * amount),
+                (int)Math.Round(pen.Color.B + (255 - pen.Color.B) * amount));
+            var shade = Highlight(.28);
+            var middle = Highlight(.1);
+            var colors = emboss ? new[] { shade, middle, pen.Color } :
+                new[] { pen.Color, middle, shade };
+            var widths = new[] { pen.Width * profile.First,
+                pen.Width * profile.Middle, pen.Width * profile.First };
+
+            void Face(XPoint[] polygon, bool vertical, double left, double top)
+            {
+                var state = _gfx.Save();
+                var clip = new XGraphicsPath();
+                clip.AddPolygon(polygon);
+                _gfx.IntersectClip(clip);
+                var offset = 0.0;
+                for (var index = 0; index < widths.Length; index++)
+                {
+                    _gfx.DrawRectangle(new XSolidBrush(colors[index]), vertical
+                        ? new XRect(left + offset, outerTop, widths[index],
+                            outerBottom - outerTop)
+                        : new XRect(outerLeft, top + offset, outerRight - outerLeft,
+                            widths[index]));
+                    offset += widths[index];
+                }
+                _gfx.Restore(state);
+            }
+
+            Face(new[] { new XPoint(outerLeft, outerTop), new XPoint(outerRight, outerTop),
+                new XPoint(innerRight, innerTop), new XPoint(innerLeft, innerTop) },
+                false, outerLeft, outerTop);
+            Face(new[] { new XPoint(outerRight, outerTop), new XPoint(outerRight, outerBottom),
+                new XPoint(innerRight, innerBottom), new XPoint(innerRight, innerTop) },
+                true, innerRight, outerTop);
+            Face(new[] { new XPoint(outerLeft, outerBottom), new XPoint(outerRight, outerBottom),
+                new XPoint(innerRight, innerBottom), new XPoint(innerLeft, innerBottom) },
+                false, outerLeft, innerBottom);
+            Face(new[] { new XPoint(outerLeft, outerTop), new XPoint(innerLeft, innerTop),
+                new XPoint(innerLeft, innerBottom), new XPoint(outerLeft, outerBottom) },
+                true, outerLeft, outerTop);
+        }
+
         bool TryGetThreeDimensionalGridPen(IReadOnlyList<Cell> cells, out XPen? pen)
         {
             pen = null;
@@ -1224,7 +1314,8 @@ namespace MigraDoc.Rendering
                 item => GetInnerRect(CalcStartingHeight(), item.Value));
             var columns = _table.Columns.Count;
             var rows = _table.Rows.Count;
-            var band = pen.Width * 1.75;
+            var profile = BorderStyleDescriptor.ThreeDimensionalRails;
+            var band = pen.Width * profile.BandMultiplier;
             var last = grid[(rows - 1, columns - 1)];
             var x = new double[columns + 1];
             var y = new double[rows + 1];
@@ -1287,7 +1378,8 @@ namespace MigraDoc.Rendering
             var shade = Highlight(.28);
             var middle = Highlight(.1);
             var middleBrush = new XSolidBrush(middle);
-            var widths = new[] { pen.Width * .375, pen.Width, pen.Width * .375 };
+            var widths = new[] { pen.Width * profile.First, pen.Width * profile.Middle,
+                pen.Width * profile.First };
             var vertical = new (BordersRenderer Renderer, BorderType Side)?[rows, columns + 1];
             var horizontal = new (BordersRenderer Renderer, BorderType Side)?[rows + 1, columns];
 
