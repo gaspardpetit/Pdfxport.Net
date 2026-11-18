@@ -665,8 +665,7 @@ namespace MigraDoc.Rendering
             foreach (var side in new[] { BorderType.Top, BorderType.Right, BorderType.Bottom, BorderType.Left })
             {
                 var edgeStyle = renderer.GetStyle(side);
-                if (edgeStyle is not (BorderStyle.Double or BorderStyle.Triple) &&
-                    CompoundProfile(edgeStyle) == null ||
+                if (BorderStyleDescriptor.For(edgeStyle).Kind != BorderDrawingKind.Rails ||
                     style != BorderStyle.None && edgeStyle != style ||
                     cell.Borders.GetBorder(side)?.Values.Visible == false)
                     return false;
@@ -689,8 +688,7 @@ namespace MigraDoc.Rendering
                     (winningPen.Width != edgePen.Width || winningPen.Color != edgePen.Color))
                     return false;
                 if (winningStyle != edgeStyle &&
-                    (winningStyle is not (BorderStyle.Double or BorderStyle.Triple) &&
-                     CompoundProfile(winningStyle) == null ||
+                    (BorderStyleDescriptor.For(winningStyle).Kind != BorderDrawingKind.Rails ||
                      !AdjacentCellHasClosedRailProfile(cell, side, winningStyle, winningPen)) &&
                     effective.GetWidth(side).Point >=
                     edgePen.Width * ClosedRailWidthMultiplier(edgeStyle))
@@ -934,17 +932,13 @@ namespace MigraDoc.Rendering
                 return null;
             double[] widths;
             double gap;
-            if (style is BorderStyle.Double or BorderStyle.Triple)
+            var descriptor = BorderStyleDescriptor.For(style);
+            if (descriptor.Kind == BorderDrawingKind.Rails)
             {
-                widths = Enumerable.Repeat(pen.Width, style == BorderStyle.Triple ? 3 : 2).ToArray();
-                gap = pen.Width;
-            }
-            else if (CompoundProfile(style) is { } profile)
-            {
-                widths = profile.ThreeRails
-                    ? new[] { pen.Width * profile.First, pen.Width * profile.Middle,
-                        pen.Width * profile.First }
-                    : new[] { pen.Width * profile.First, pen.Width * profile.Middle };
+                var profile = descriptor.Rails;
+                widths = new double[profile.Count];
+                for (var index = 0; index < widths.Length; index++)
+                    widths[index] = pen.Width * profile.WidthAt(index);
                 gap = pen.Width * profile.Gap;
             }
             else
