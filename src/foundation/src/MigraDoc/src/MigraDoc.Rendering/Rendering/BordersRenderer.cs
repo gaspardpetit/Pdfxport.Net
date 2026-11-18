@@ -375,9 +375,17 @@ namespace MigraDoc.Rendering
                 : new XRect(left.Point, top.Point, length.Point, source.Width));
             var railPen = new XPen(source.Color, Math.Max(0.35, source.Width * 0.35));
             var cross = source.Width;
-            var pitch = Math.Max(0.8, source.Width * 0.8);
-            for (var start = 0.0; start < length.Point; start += pitch)
+            var slot = Math.Max(0.4, source.Width * 3.84 / 8);
+            // Eight slots: five adjacent strokes, a gap, an isolated stroke,
+            // then a gap before the next group.
+            for (var group = 0.0; group < length.Point; group += slot * 8)
+            for (var offset = 0; offset < 8; offset++)
             {
+                if (offset is 5 or 7)
+                    continue;
+                var start = group + offset * slot;
+                if (start >= length.Point)
+                    break;
                 var along = Math.Min(cross * 0.65, length.Point - start);
                 // Omit a negligible final remnant instead of drawing a tiny hatch cap.
                 if (along < 0.02)
