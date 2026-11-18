@@ -3,11 +3,12 @@
 
 namespace MigraDoc.DocumentObjectModel
 {
-    /// <summary>Shared nominal band and rail geometry for existing border styles.</summary>
-    internal readonly record struct BorderStyleDescriptor(BorderRailProfile Rails,
+    /// <summary>Shared drawing family, nominal band and rail geometry for existing border styles.</summary>
+    internal readonly record struct BorderStyleDescriptor(BorderDrawingKind Kind, BorderRailProfile Rails,
         double PatternBandMultiplier = 1)
     {
         internal double BandMultiplier => Rails.Count > 0 ? Rails.BandMultiplier : PatternBandMultiplier;
+        internal bool OwnsHorizontalJunction => Kind != BorderDrawingKind.Stroke;
 
         internal static BorderStyleDescriptor For(BorderStyle style) => style switch
         {
@@ -22,15 +23,28 @@ namespace MigraDoc.DocumentObjectModel
             BorderStyle.ThinThickLargeGap => Rails2(.75, .375, 1),
             BorderStyle.ThickThinLargeGap => Rails2(.375, .75, 1),
             BorderStyle.ThinThickThinLargeGap => Rails3(.375, .75, 1),
-            BorderStyle.DoubleWave => new(default, 2.5),
-            BorderStyle.Emboss3D or BorderStyle.Engrave3D => new(default, 1.75),
-            _ => new(default)
+            BorderStyle.Wave => new(BorderDrawingKind.Wave, default),
+            BorderStyle.DoubleWave => new(BorderDrawingKind.DoubleWave, default, 2.5),
+            BorderStyle.DashDotStroked => new(BorderDrawingKind.DiagonalHatch, default),
+            BorderStyle.Emboss3D or BorderStyle.Engrave3D => new(BorderDrawingKind.ThreeDimensional, default, 1.75),
+            _ => new(BorderDrawingKind.Stroke, default)
         };
 
         static BorderStyleDescriptor Rails2(double first, double second, double gap) =>
-            new(new BorderRailProfile(2, first, second, gap));
+            new(BorderDrawingKind.Rails, new BorderRailProfile(2, first, second, gap));
         static BorderStyleDescriptor Rails3(double first, double middle, double gap) =>
-            new(new BorderRailProfile(3, first, middle, gap));
+            new(BorderDrawingKind.Rails, new BorderRailProfile(3, first, middle, gap));
+    }
+
+    /// <summary>The existing border painter families.</summary>
+    internal enum BorderDrawingKind
+    {
+        Stroke,
+        Rails,
+        Wave,
+        DoubleWave,
+        DiagonalHatch,
+        ThreeDimensional
     }
 
     /// <summary>Two or three rails; three-rail styles have symmetric outer rails.</summary>

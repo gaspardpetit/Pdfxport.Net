@@ -141,22 +141,8 @@ namespace MigraDoc.Rendering
             var pen = GetPen(type);
             if (pen != null)
             {
-                if (GetStyle(type) is BorderStyle.Wave or BorderStyle.DoubleWave)
-                {
-                    RenderWave(left, top, height, true, GetStyle(type) == BorderStyle.DoubleWave, pen);
+                if (TryRenderPattern(GetStyle(type), left, top, height, true, pen))
                     return;
-                }
-                if (GetStyle(type) == BorderStyle.DashDotStroked)
-                {
-                    RenderHatch(left, top, height, true, pen);
-                    return;
-                }
-                if (GetStyle(type) is BorderStyle.Emboss3D or BorderStyle.Engrave3D)
-                {
-                    RenderThreeDimensional(left, top, height, true,
-                        GetStyle(type) == BorderStyle.Emboss3D, pen);
-                    return;
-                }
                 if (GetStyle(type) == BorderStyle.Double)
                 {
                     var strokeWidth = borderWidth / 3;
@@ -233,22 +219,8 @@ namespace MigraDoc.Rendering
             var pen = GetPen(type);
             if (pen != null)
             {
-                if (GetStyle(type) is BorderStyle.Wave or BorderStyle.DoubleWave)
-                {
-                    RenderWave(left, top, width, false, GetStyle(type) == BorderStyle.DoubleWave, pen);
+                if (TryRenderPattern(GetStyle(type), left, top, width, false, pen))
                     return;
-                }
-                if (GetStyle(type) == BorderStyle.DashDotStroked)
-                {
-                    RenderHatch(left, top, width, false, pen);
-                    return;
-                }
-                if (GetStyle(type) is BorderStyle.Emboss3D or BorderStyle.Engrave3D)
-                {
-                    RenderThreeDimensional(left, top, width, false,
-                        GetStyle(type) == BorderStyle.Emboss3D, pen);
-                    return;
-                }
                 if (GetStyle(type) == BorderStyle.Double)
                 {
                     var strokeWidth = borderWidth / 3;
@@ -310,6 +282,26 @@ namespace MigraDoc.Rendering
                     _gfx.DrawLine(endpointPen, left + width - endpointLength, top, left + width, top);
 #endif
                 }
+            }
+        }
+
+        bool TryRenderPattern(BorderStyle style, XUnitPt left, XUnitPt top,
+            XUnitPt length, bool vertical, XPen pen)
+        {
+            switch (BorderStyleDescriptor.For(style).Kind)
+            {
+                case BorderDrawingKind.Wave:
+                case BorderDrawingKind.DoubleWave:
+                    RenderWave(left, top, length, vertical, style == BorderStyle.DoubleWave, pen);
+                    return true;
+                case BorderDrawingKind.DiagonalHatch:
+                    RenderHatch(left, top, length, vertical, pen);
+                    return true;
+                case BorderDrawingKind.ThreeDimensional:
+                    RenderThreeDimensional(left, top, length, vertical, style == BorderStyle.Emboss3D, pen);
+                    return true;
+                default:
+                    return false;
             }
         }
 
