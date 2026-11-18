@@ -5,6 +5,7 @@ using System.Globalization;
 using FluentAssertions;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.Rendering;
+using PdfSharp.Drawing;
 using PdfSharp.Diagnostics;
 using PdfSharp.Fonts;
 using PdfSharp.Pdf.Content;
@@ -79,6 +80,104 @@ public class SpacedThreeDimensionalBorderTests : IDisposable
         var operators = ContentReader.ReadContent(pdf.Pages[0]).OfType<COperator>().ToArray();
         Faces(operators).Should().BeEmpty();
         operators.Count(op => op.OpCode.Name == "S").Should().Be(mixed ? 12 : 9);
+    }
+
+    public static IEnumerable<object[]> DiagonalCases
+    {
+        get
+        {
+            foreach (var style in new[] { BorderStyle.Emboss3D, BorderStyle.Engrave3D })
+            foreach (var mask in new[] { 1, 2, 3 })
+            foreach (var diagonalStyle in new[] { BorderStyle.Single, BorderStyle.Double })
+            foreach (var moved in new[] { false, true })
+                yield return new object[] { style, mask, diagonalStyle, moved };
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(DiagonalCases))]
+    public void ClosedSpacedCellsPreserveDiagonals(BorderStyle style, int mask, BorderStyle diagonalStyle, bool moved)
+    {
+        var document = Create(style, 3, 3, 1);
+        var table = (MigraDoc.DocumentObjectModel.Tables.Table)document.LastSection.Elements[0]!;
+        var cell = table[0, 0];
+        if ((mask & 1) != 0) Configure(cell.Borders.DiagonalDown);
+        if ((mask & 2) != 0) Configure(cell.Borders.DiagonalUp);
+        var renderer = new PdfDocumentRenderer { Document = document };
+        XRect? paintRect = null;
+        renderer.DocumentRenderer.TableCellPlacement = (_, geometry) =>
+        {
+            var original = geometry.DefaultPaintRect;
+            paintRect = new XRect(original.X + (moved ? 5 : 0), original.Y + (moved ? 7 : 0),
+                original.Width * (moved ? .8 : 1), original.Height + (moved ? 3 : 0));
+            return new TableCellPlacement(PaintRect: paintRect, ContentRect: geometry.GridRect);
+        };
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        paintRect.Should().NotBeNull();
+        var rect = paintRect!.Value;
+        var operators = ContentReader.ReadContent(pdf.Pages[0]).OfType<COperator>().ToArray();
+        var lines = new List<(Point Start, Point End)>();
+        Point? start = null, end = null;
+        foreach (var op in operators)
+        {
+            if (op.OpCode.Name == "m") { start = new Point(N(op.Operands[0]), N(op.Operands[1])); end = null; }
+            if (op.OpCode.Name == "l") end = new Point(N(op.Operands[0]), N(op.Operands[1]));
+            if (op.OpCode.Name == "S" && start != null && end != null) lines.Add((start, end));
+        }
+        int diagonalCount = mask == 3 ? 2 : 1;
+        int strokes = diagonalStyle == BorderStyle.Double ? 2 : 1;
+        lines.Should().HaveCount(diagonalCount * strokes);
+        double top = pdf.Pages[0].Height.Point - rect.Y, bottom = top - rect.Height;
+        foreach (var direction in new[] { 1, 2 })
+        {
+            var group = lines.Where(line => direction == 1 ? line.End.Y < line.Start.Y : line.End.Y > line.Start.Y).ToArray();
+            group.Should().HaveCount((mask & direction) == 0 ? 0 : strokes);
+            if (group.Length == 0) continue;
+            // Double diagonals straddle the same corner-to-corner centerline.
+            group.Average(line => line.Start.X).Should().BeApproximately(rect.X, .002);
+            group.Average(line => line.End.X).Should().BeApproximately(rect.Right, .002);
+            group.Average(line => line.Start.Y).Should().BeApproximately(direction == 1 ? top : bottom, .002);
+            group.Average(line => line.End.Y).Should().BeApproximately(direction == 1 ? bottom : top, .002);
+        }
+        var clips = Faces(operators);
+        clips.Should().HaveCount(4 + diagonalCount);
+        foreach (var clip in clips.Skip(4))
+        {
+            clip.Min(p => p.X).Should().BeApproximately(rect.X, .002);
+            clip.Max(p => p.X).Should().BeApproximately(rect.Right, .002);
+            clip.Min(p => p.Y).Should().BeApproximately(bottom, .002);
+            clip.Max(p => p.Y).Should().BeApproximately(top, .002);
+        }
+
+        void Configure(Border border)
+        {
+            border.Visible = true;
+            border.Style = diagonalStyle;
+            border.Width = Unit.FromPoint(1);
+            border.Color = Colors.Red;
+        }
+    }
+
+    [Theory]
+    [InlineData(BorderStyle.Emboss3D)]
+    [InlineData(BorderStyle.Engrave3D)]
+    public void HiddenDiagonalsRemainHidden(BorderStyle style)
+    {
+        var document = Create(style, 3, 3, 1);
+        var table = (MigraDoc.DocumentObjectModel.Tables.Table)document.LastSection.Elements[0]!;
+        foreach (var border in new[] { table[0, 0].Borders.DiagonalDown, table[0, 0].Borders.DiagonalUp })
+        {
+            border.Style = BorderStyle.Single;
+            border.Width = Unit.FromPoint(1);
+            border.Visible = false;
+        }
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var operators = ContentReader.ReadContent(pdf.Pages[0]).OfType<COperator>().ToArray();
+        operators.Should().NotContain(op => op.OpCode.Name == "S");
+        Faces(operators).Should().HaveCount(4);
     }
 
     static Document Create(BorderStyle style, double width, double spacing, int size)

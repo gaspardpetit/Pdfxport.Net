@@ -120,7 +120,10 @@ namespace MigraDoc.Rendering
                 }
                 if (_table.CellSpacing.Point > 0 &&
                     TryGetClosedThreeDimensionalCell(cell, out var closedPen, out var emboss))
+                {
                     RenderClosedThreeDimensionalCell(innerRect, closedPen!, emboss);
+                    RenderDiagonalBorders(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), innerRect);
+                }
                 else
                     RenderBorders(cell, innerRect, followingTopBorders, precedingBottomBorders, followingLeftBorders);
                 if (state != null)
