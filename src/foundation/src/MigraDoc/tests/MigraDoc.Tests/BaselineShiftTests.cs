@@ -202,6 +202,111 @@ public class BaselineShiftTests : IDisposable
     }
 
     [Theory]
+    [InlineData(LineSpacingRule.Single, 0)]
+    [InlineData(LineSpacingRule.Single, 1)]
+    [InlineData(LineSpacingRule.Single, 2)]
+    [InlineData(LineSpacingRule.AtLeast, 0)]
+    [InlineData(LineSpacingRule.AtLeast, 1)]
+    [InlineData(LineSpacingRule.AtLeast, 2)]
+    [InlineData(LineSpacingRule.Multiple, 0)]
+    [InlineData(LineSpacingRule.Multiple, 1)]
+    [InlineData(LineSpacingRule.Multiple, 2)]
+    [InlineData(LineSpacingRule.Exactly, 0)]
+    [InlineData(LineSpacingRule.Exactly, 1)]
+    [InlineData(LineSpacingRule.Exactly, 2)]
+    public void IgnoringShiftMetricsRetainsFontSizeAndMovesOnlyPaint(LineSpacingRule spacing, int script)
+    {
+        var small = RenderWithoutShift(12);
+        foreach (var size in new[] { 12, 24 })
+        {
+            var control = RenderWithoutShift(size);
+            if (size == 24 && spacing != LineSpacingRule.Exactly)
+                control.Height.Should().BeGreaterThan(small.Height);
+            foreach (var shift in new[] { -30, -6, 6, 30 })
+            {
+                var actual = Render(shift, script: script, exact: spacing == LineSpacingRule.Exactly,
+                    atLeastBottom: spacing == LineSpacingRule.AtLeast ? 3 : null,
+                    includeShiftMetrics: false, shiftedSize: size, spacing: spacing);
+                actual.Height.Should().BeApproximately(control.Height, .002);
+                actual.Runs.Select(r => r.X).Should().Equal(control.Runs.Select(r => r.X));
+                for (int i = 0; i < actual.Runs.Count; i++)
+                    actual.Runs[i].Y.Should().BeApproximately(control.Runs[i].Y +
+                        (actual.Runs[i].Text == "shifted" ? shift : 0), .002);
+            }
+        }
+        Result RenderWithoutShift(int size) => Render(0, script: script,
+            exact: spacing == LineSpacingRule.Exactly,
+            atLeastBottom: spacing == LineSpacingRule.AtLeast ? 3 : null,
+            includeShiftMetrics: false, shiftedSize: size, spacing: spacing);
+    }
+
+    [Theory]
+    [InlineData(4, -6)]
+    [InlineData(-30, 30)]
+    [InlineData(30, -30)]
+    public void BothShiftDirectionsCanBeIgnoredOnTheSameLine(double first, double second)
+    {
+        var control = Render(0, includeShiftMetrics: false);
+        var actual = Render(first, second, includeShiftMetrics: false);
+        actual.Height.Should().BeApproximately(control.Height, .002);
+        for (int i = 0; i < actual.Runs.Count; i++)
+            actual.Runs[i].Y.Should().BeApproximately(control.Runs[i].Y +
+                (actual.Runs[i].Text == "shifted" ? first : actual.Runs[i].Text == "second" ? second : 0), .002);
+    }
+
+    [Fact]
+    public void ShiftMetricInclusionDefaultsToTrueAndDoesNotAffectZeroOffsets()
+    {
+        new PdfDocumentRenderer { Document = Create() }.DocumentRenderer.IncludeBaselineShiftInLineMetrics.Should().BeTrue();
+        Render(4).Should().BeEquivalentTo(Render(4, includeShiftMetrics: true));
+        Render(0, includeShiftMetrics: true).Should().BeEquivalentTo(Render(0, includeShiftMetrics: false));
+    }
+
+    [Theory]
+    [InlineData(-30)]
+    [InlineData(-6)]
+    [InlineData(6)]
+    [InlineData(30)]
+    public void IgnoringShiftMetricsRetainsInlineImageSize(double shift)
+    {
+        var control = RenderImage(0, 40);
+        var actual = RenderImage(shift, 40);
+        actual.Height.Should().BeApproximately(control.Height, .002);
+        actual.Y.Should().BeApproximately(control.Y + shift, .002);
+        actual.Height.Should().BeGreaterThan(RenderImage(0, 8).Height);
+
+        (double Height, double Y) RenderImage(double offset, double height)
+        {
+            var document = Create();
+            var paragraph = document.Sections[0].AddParagraph();
+            var span = paragraph.AddFormattedText();
+            span.Font.BaselineShift = Unit.FromPoint(offset);
+            var image = span.AddImage("base64:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4//8/AwAI/AL+p5qgoAAAAABJRU5ErkJggg==");
+            image.Width = Unit.FromPoint(8);
+            image.Height = Unit.FromPoint(height);
+            paragraph.AddText("normal");
+            var renderer = new PdfDocumentRenderer { Document = document };
+            renderer.DocumentRenderer.IncludeBaselineShiftInLineMetrics = false;
+            renderer.RenderDocument();
+            using var pdf = renderer.PdfDocument;
+            var area = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!.Single().LayoutInfo.ContentArea;
+            COperator? matrix = null;
+            var positions = new List<double>();
+            foreach (var op in ContentReader.ReadContent(pdf.Pages[0]).OfType<COperator>())
+            {
+                if (op.OpCode.Name == "cm") matrix = op;
+                if (op.OpCode.Name == "Do")
+                {
+                    matrix.Should().NotBeNull();
+                    positions.Add(double.Parse(matrix!.Operands[5].ToString()!, CultureInfo.InvariantCulture));
+                }
+            }
+            positions.Should().HaveCount(1);
+            return (area.Height.Point, positions[0]);
+        }
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData(0.0)]
     [InlineData(4.0)]
@@ -372,11 +477,15 @@ public class BaselineShiftTests : IDisposable
 
     record Result(double Top, double Height, List<(string Text, double X, double Y)> Runs);
     static Result Render(double? shift, double second = 0, bool excluded = false,
-        int script = 0, bool exact = false, bool scriptFirst = true, int normalSize = 12, double? atLeastBottom = null)
+        int script = 0, bool exact = false, bool scriptFirst = true, int normalSize = 12,
+        double? atLeastBottom = null, bool? includeShiftMetrics = null, int shiftedSize = 12,
+        LineSpacingRule spacing = LineSpacingRule.Single)
     {
         var document = Create();
         var p = document.Sections[0].AddParagraph();
         p.Format.Font.Size = normalSize;
+        p.Format.LineSpacingRule = spacing;
+        if (spacing == LineSpacingRule.Multiple) p.Format.LineSpacing = Unit.FromPoint(1.5);
         if (atLeastBottom.HasValue)
         {
             p.Format.LineSpacingRule = LineSpacingRule.AtLeast;
@@ -397,7 +506,7 @@ public class BaselineShiftTests : IDisposable
                 p.AddFormattedText("second").Font.BaselineShift = Unit.FromPoint(second);
             }
             var run = p.AddFormattedText("shifted");
-            run.Font.Size = 12;
+            run.Font.Size = shiftedSize;
             run.ExcludeFromLineMetrics = excluded;
             if (shift.HasValue) run.Font.BaselineShift = Unit.FromPoint(shift.Value);
             if (script == 1) run.Subscript = true;
@@ -409,6 +518,8 @@ public class BaselineShiftTests : IDisposable
             }
         }
         var renderer = new PdfDocumentRenderer { Document = document };
+        if (includeShiftMetrics.HasValue)
+            renderer.DocumentRenderer.IncludeBaselineShiftInLineMetrics = includeShiftMetrics.Value;
         renderer.RenderDocument();
         using var pdf = renderer.PdfDocument;
         var area = renderer.DocumentRenderer.GetRenderInfoFromPage(1)!.Single().LayoutInfo.ContentArea;
