@@ -18,7 +18,9 @@
     <NuGetTags_MigraDoc>MigraDoc PDFsharp PDF Document Generation</NuGetTags_MigraDoc>
   </PropertyGroup>
 
-  <Target Name="SetNuspecProperties" BeforeTargets="GenerateNuspec">
+  <!-- Output discovery reads custom nuspec tokens before GenerateNuspec's
+       BeforeTargets hook runs, so initialize them before either consumer. -->
+  <Target Name="SetNuspecProperties" BeforeTargets="_GetOutputItemsFromPack;GenerateNuspec">
 
     <ReadLinesFromFile File="@(DescriptionFile)">
       <Output TaskParameter="Lines" ItemName="DescriptionFileContents" />

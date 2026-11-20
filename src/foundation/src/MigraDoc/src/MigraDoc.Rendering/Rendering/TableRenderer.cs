@@ -772,7 +772,10 @@ namespace MigraDoc.Rendering
                 borders.GetWidth(BorderType.Right).Point,
                 borders.GetWidth(BorderType.Top).Point,
                 borders.GetWidth(BorderType.Bottom).Point,
-                cell.Column.LeftPadding.Point));
+                cell.Column.LeftPadding.Point)
+            {
+                RowTopNarrowestBand = HorizontalBoundaryBands(row).Narrowest
+            });
         }
 
         static XRect ToXRect(Rectangle rect) =>
