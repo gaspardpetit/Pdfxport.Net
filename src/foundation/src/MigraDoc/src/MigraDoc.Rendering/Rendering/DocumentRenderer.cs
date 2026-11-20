@@ -378,6 +378,13 @@ namespace MigraDoc.Rendering
         public Func<Paragraph, IReadOnlyList<XFont>, double?>? ExactFinalLineHeight { get; set; }
 
         /// <summary>
+        /// Gets or sets whether <see cref="Font.BaselineShift"/> contributes to PDF line metrics.
+        /// The default is true. False retains font and image size contributions but ignores
+        /// the signed shift when measuring a line; shifted ink may extend outside its box.
+        /// </summary>
+        public bool IncludeBaselineShiftInLineMetrics { get; set; } = true;
+
+        /// <summary>
         /// Supplies minimum line height and inherent line space, in points, for a resolved font
         /// in a paragraph. Both values must be finite and positive; null or invalid values
         /// preserve the normal font metrics.

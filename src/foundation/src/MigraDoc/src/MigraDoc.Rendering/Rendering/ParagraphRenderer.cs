@@ -4140,7 +4140,8 @@ namespace MigraDoc.Rendering
             }
 
             var domFont = CurrentDomFont;
-            var shift = isListSymbol ? 0 : domFont.BaselineShift.Point;
+            var shift = isListSymbol || !_documentRenderer.IncludeBaselineShiftInLineMetrics
+                ? 0 : domFont.BaselineShift.Point;
             var rawDescent = isListSymbol ? 0 : FontHandler.GetDescent(font).Point;
             var unshiftedDescent = Math.Max(_currentVerticalInfo.UnshiftedDescent, rawDescent);
             var shiftedAscent = _currentVerticalInfo.ShiftedAscent;
