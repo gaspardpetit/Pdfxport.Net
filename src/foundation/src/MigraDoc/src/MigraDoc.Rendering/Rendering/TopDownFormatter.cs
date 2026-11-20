@@ -63,12 +63,27 @@ namespace MigraDoc.Rendering
                 return;
             }
             int idx = 0;
+            int overflowedParagraph = -1;
+            int coalescibleBreak = -1;
+            int coalescedBreak = -1;
             while (!ready && area != null!)
             {
                 DocumentObject docObj = _elements[idx];
                 if (topLevel && _areaProvider is FormattedDocument &&
                     docObj is PageBreak { IsColumnBreak: true })
                 {
+                    if (docObj is PageBreak { CoalesceWithPrecedingParagraphOverflow: true } &&
+                        coalescibleBreak == idx)
+                    {
+                        coalescedBreak = idx;
+                        idx++;
+                        if (idx == _elements.Count)
+                        {
+                            _areaProvider.StoreRenderInfos(renderInfos);
+                            ready = true;
+                        }
+                        continue;
+                    }
                     // Consume the break once, including at an empty column.
                     // Retrying it in the destination area would skip that column too.
                     _areaProvider.StoreRenderInfos(renderInfos);
@@ -94,7 +109,7 @@ namespace MigraDoc.Rendering
                     if (docObj is Paragraph p && p.Format.SpaceBefore > Unit.Zero)
                     {
                         // IsFirstOnPage isn’t true for an element in _elements following a PageBreak. IsFirstOnRenderedPage is also true if the last element was a PageBreak.
-                        bool isFirstOnRenderedPage = isFirstOnPage || idx > 0 && _elements[idx - 1] is PageBreak;
+                        bool isFirstOnRenderedPage = isFirstOnPage || idx > 0 && idx - 1 != coalescedBreak && _elements[idx - 1] is PageBreak;
                         if (isFirstOnRenderedPage)
                             p.Format.SpaceBefore = Unit.Zero;
                     }
@@ -198,6 +213,7 @@ namespace MigraDoc.Rendering
                     }
                     else if (NeedsEndingOnNextArea(idx, renderer, area, isFirstOnPage))
                     {
+                        overflowedParagraph = -1;
                         renderer.RenderInfo.RemoveEnding();
                         prevRenderInfo = FinishPage(renderer.RenderInfo, pagebreakBefore, ref renderInfos);
                         if (prevRenderInfo != null)
@@ -213,6 +229,8 @@ namespace MigraDoc.Rendering
                     }
                     else
                     {
+                        if (overflowedParagraph == idx && renderer.RenderInfo.FormatInfo.IsComplete)
+                            coalescibleBreak = idx + 1;
                         renderInfos.Add(renderer.RenderInfo);
                         isFirstOnPage = false;
                         _areaProvider.PositionVertically(renderer.RenderInfo.LayoutInfo);
@@ -237,6 +255,13 @@ namespace MigraDoc.Rendering
                 }
                 else
                 {
+                    // Record only a complete retry: no fragment may have been
+                    // accepted in the old area, and explicit page breaks stay distinct.
+                    if (docObj is Paragraph && prevFormatInfo == null && !isFirstOnPage &&
+                        !explicitPageBreak && (renderer.RenderInfo.FormatInfo.IsEmpty || pagebreakBefore))
+                        overflowedParagraph = idx;
+                    else if (!renderer.RenderInfo.FormatInfo.IsEmpty || explicitPageBreak)
+                        overflowedParagraph = -1;
                     if (docObj is TextFrame textFrame &&
                         textFrame.PaginateContent &&
                         !renderer.RenderInfo.FormatInfo.IsEmpty)
