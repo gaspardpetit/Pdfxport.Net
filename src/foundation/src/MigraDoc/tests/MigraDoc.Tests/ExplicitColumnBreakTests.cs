@@ -210,6 +210,198 @@ public class ExplicitColumnBreakTests : IDisposable
         Texts(renderer, 2, "After").Single().Y.Should().BeApproximately(baseline, 0.01);
     }
 
+    [Theory]
+    [InlineData(1, false, 3, 20)]
+    [InlineData(1, true, 2, 20)]
+    [InlineData(2, false, 2, 20)]
+    [InlineData(2, true, 1, 130)]
+    [InlineData(3, true, 1, 20 + 220.0 / 3)]
+    public void OptInReusesWholeParagraphOverflow(int columns, bool coalesce, int pages, double x)
+    {
+        var document = Create(columns, 12);
+        document.LastSection.AddParagraph("Overflow");
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = coalesce
+        });
+        document.LastSection.AddParagraph("After");
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(pages);
+        Texts(renderer, pages, "After").Single().X.Should().BeApproximately(x, 0.01);
+        Enumerable.Range(1, pages).SelectMany(i => AllTexts(renderer, i))
+            .Count(t => t.Text == "Overflow").Should().Be(1);
+        if (coalesce)
+            Texts(renderer, pages, "After").Single().Y.Should().BeApproximately(
+                Texts(renderer, pages, "Overflow").Single().Y + 10, 0.01);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OnlyWholeParagraphOverflowCoalesces(bool keepTogether)
+    {
+        var document = Create(2, 11);
+        var paragraph = document.LastSection.AddParagraph("Start");
+        paragraph.Format.WidowControl = false;
+        paragraph.Format.KeepTogether = keepTogether;
+        paragraph.AddLineBreak();
+        paragraph.AddText("End");
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = true
+        });
+        document.LastSection.AddParagraph("After");
+        var renderer = Render(document);
+        // KeepTogether moves the whole two-line paragraph and permits coalescing;
+        // otherwise the paragraph spans columns and the explicit break still advances.
+        renderer.PageCount.Should().Be(keepTogether ? 1 : 2);
+        Texts(renderer, keepTogether ? 1 : 2, "After").Single().X
+            .Should().BeApproximately(keepTogether ? 130 : 20, 0.01);
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(12, true)]
+    public void BreakWithoutAutomaticWholeParagraphOverflowStillAdvances(int before, bool explicitPage)
+    {
+        var document = Create(2, before);
+        var paragraph = document.LastSection.AddParagraph("Before");
+        paragraph.Format.PageBreakBefore = explicitPage;
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = true
+        });
+        document.LastSection.AddParagraph("After");
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(explicitPage ? 2 : 1);
+        Texts(renderer, explicitPage ? 2 : 1, "After").Single().X.Should().BeApproximately(130, 0.01);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReusedTransitionIsImmediateAndConsumedOnce(bool interveningParagraph)
+    {
+        var document = Create(2, 12);
+        document.LastSection.AddParagraph("Overflow");
+        if (interveningParagraph) document.LastSection.AddParagraph("Intervening");
+        for (var i = 0; i < (interveningParagraph ? 1 : 2); i++)
+            document.LastSection.Elements.Add(new PageBreak
+            {
+                IsColumnBreak = true,
+                CoalesceWithPrecedingParagraphOverflow = true
+            });
+        document.LastSection.AddParagraph("After");
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(2);
+        Texts(renderer, 2, "After").Single().X.Should().BeApproximately(20, 0.01);
+    }
+
+    [Fact]
+    public void CoalescedTerminalBreakDoesNotCreateAnEmptyPage()
+    {
+        var document = Create(2, 12);
+        document.LastSection.AddParagraph("Overflow");
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = true
+        });
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(1);
+        Texts(renderer, 1, "Overflow").Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OverflowOptionSurvivesDdlAndCloning(bool enabled)
+    {
+        var document = Create(2, 12);
+        document.LastSection.AddParagraph("Overflow");
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = enabled
+        });
+        document.LastSection.AddParagraph("After");
+        var ddl = DdlWriter.WriteToString(document);
+        ddl.Should().Contain("CoalesceWithPrecedingParagraphOverflow");
+        foreach (var candidate in new[] { document.Clone(), DdlReader.DocumentFromString(ddl) })
+        {
+            candidate.LastSection.Elements.OfType<PageBreak>().Single()
+                .CoalesceWithPrecedingParagraphOverflow.Should().Be(enabled);
+            Render(candidate).PageCount.Should().Be(enabled ? 1 : 2);
+        }
+        new PageBreak().CoalesceWithPrecedingParagraphOverflow.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CoalescingPreservesFollowingSpacingAndEmptyParagraph(bool empty)
+    {
+        var document = Create(2, 12);
+        document.LastSection.AddParagraph(empty ? "" : "Overflow");
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = true
+        });
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(1);
+        var baseline = Texts(Render(Create(2, 1)), 1).Single().Y;
+        Texts(renderer, 1, "After").Single().Y.Should().BeApproximately(baseline + 27, 0.01);
+    }
+
+    [Fact]
+    public void ParagraphThatSplitsAfterInitialOverflowDoesNotCoalesce()
+    {
+        var document = Create(2, 12);
+        var paragraph = document.LastSection.AddParagraph("Start");
+        paragraph.Format.WidowControl = false;
+        for (var i = 1; i < 14; i++)
+        {
+            paragraph.AddLineBreak();
+            paragraph.AddText("Part" + i);
+        }
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = true
+        });
+        document.LastSection.AddParagraph("After");
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(2);
+        Texts(renderer, 2, "After").Single().X.Should().BeApproximately(130, 0.01);
+    }
+
+    [Fact]
+    public void OptionDoesNotSuppressPhysicalPageBreak()
+    {
+        var document = Create(2, 12);
+        document.LastSection.AddParagraph("Overflow");
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            CoalesceWithPrecedingParagraphOverflow = true
+        });
+        document.LastSection.AddParagraph("After");
+        var restored = DdlReader.DocumentFromString(DdlWriter.WriteToString(document));
+        foreach (var candidate in new[] { document, restored })
+        {
+            candidate.LastSection.Elements.OfType<PageBreak>().Single()
+                .CoalesceWithPrecedingParagraphOverflow.Should().BeTrue();
+            var renderer = Render(candidate);
+            renderer.PageCount.Should().Be(2);
+            Texts(renderer, 2, "After").Single().X.Should().BeApproximately(20, 0.01);
+        }
+    }
+
     static PdfDocumentRenderer Render(Document document)
     {
         var renderer = new PdfDocumentRenderer { Document = document };

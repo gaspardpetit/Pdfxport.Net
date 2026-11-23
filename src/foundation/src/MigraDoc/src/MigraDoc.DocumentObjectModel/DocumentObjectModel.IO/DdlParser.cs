@@ -451,8 +451,11 @@ namespace MigraDoc.DocumentObjectModel.IO
                         break;
 
                     case Symbol.ColumnBreak:
-                        elements.AddColumnBreak();
+                        var columnBreak = new PageBreak { IsColumnBreak = true };
+                        elements.Add(columnBreak);
                         ReadCode();
+                        if (Symbol == Symbol.BracketLeft)
+                            ParseAttributes(columnBreak);
                         break;
 
                     case Symbol.Table:
@@ -1029,8 +1032,11 @@ namespace MigraDoc.DocumentObjectModel.IO
         void ParsePageBreak(DocumentElements elements)
         {
             EnsureSymbol(Symbol.PageBreak);
-            elements.AddPageBreak();
+            var pageBreak = new PageBreak();
+            elements.Add(pageBreak);
             ReadCode();
+            if (Symbol == Symbol.BracketLeft)
+                ParseAttributes(pageBreak);
         }
 
         /// <summary>

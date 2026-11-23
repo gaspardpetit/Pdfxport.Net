@@ -41,10 +41,30 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Gets or sets whether this column break reuses an automatic area advance
+        /// that moved the immediately preceding paragraph wholly into the current area.
+        /// Defaults to false. Applies only to PDF section body column breaks; split
+        /// paragraphs and explicit page breaks do not qualify.
+        /// </summary>
+        public bool CoalesceWithPrecedingParagraphOverflow
+        {
+            get => Values.CoalesceWithPrecedingParagraphOverflow ?? false;
+            set => Values.CoalesceWithPrecedingParagraphOverflow = value;
+        }
+
+        /// <summary>
         /// Converts PageBreak into DDL.
         /// </summary>
         internal override void Serialize(Serializer serializer) 
-            => serializer.WriteLine(IsColumnBreak ? "\\columnbreak" : "\\pagebreak");
+        {
+            serializer.WriteLine(IsColumnBreak ? "\\columnbreak" : "\\pagebreak");
+            if (Values.CoalesceWithPrecedingParagraphOverflow is not null)
+            {
+                serializer.BeginAttributes();
+                serializer.WriteSimpleAttribute("CoalesceWithPrecedingParagraphOverflow", CoalesceWithPrecedingParagraphOverflow);
+                serializer.EndAttributes();
+            }
+        }
 
         /// <summary>
         /// Returns the metaobject of this instance.
@@ -67,6 +87,8 @@ namespace MigraDoc.DocumentObjectModel
             { }
 
             public bool? IsColumnBreak { get; set; }
+
+            public bool? CoalesceWithPrecedingParagraphOverflow { get; set; }
         }
     }
 }
