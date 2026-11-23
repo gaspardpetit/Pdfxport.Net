@@ -47,6 +47,7 @@ namespace MigraDoc.Rendering
         void InitRendering()
         {
             _paintedSolidBottomBorders.Clear();
+            _paintedSolidRightBorders.Clear();
             _horizontalBoundaryWidths.Clear();
             var formatInfo = (TableFormatInfo)_renderInfo.FormatInfo;
             _bottomBorderMap = formatInfo.BottomBorderMap ?? NRT.ThrowOnNull<Dictionary<int, XUnitPt>>();
@@ -287,9 +288,29 @@ namespace MigraDoc.Rendering
                 if (!followingOwnsRight && !AdjacentClosedCellOwnsEdge(cell, BorderType.Right, bordersRenderer) &&
                     (rightPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Right), rightPen) ||
                      !followingLeftBorders.Contains(rightKey)))
+                {
                     bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos,
                         verticalBottom - topPos, rightOuterStrokeTop, rightInnerStrokeBottom);
-                if (cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false &&
+                    if (unclipped && _table.CellSpacing.Point <= 0 && IsSolidStroke(rightPen, rightKey.Style))
+                    {
+                        if (!_paintedSolidRightBorders.TryGetValue(rightKey.Boundary, out var spans))
+                            _paintedSolidRightBorders[rightKey.Boundary] = spans = new();
+                        spans.Add((topPos.Point, verticalBottom.Point,
+                            (rightPos + rightWidth / 2).Point, rightPen!.Width, rightPen.Color, rightKey.Style));
+                    }
+                }
+                var leftPen = bordersRenderer.GetPen(BorderType.Left);
+                var leftKey = leftPen == null ? default : VerticalBorderKey(cell, bordersRenderer, leftPen, true);
+                var precedingOwnsLeft = _table.CellSpacing.Point <= 0 && IsSolidStroke(leftPen, leftKey.Style) &&
+                    _paintedSolidRightBorders.TryGetValue(leftKey.Boundary, out var paintedRights) &&
+                    paintedRights.Any(edge =>
+                        edge.Style == leftKey.Style &&
+                        edge.Width == leftPen!.Width && edge.Color == leftPen.Color &&
+                        Math.Abs(edge.X - (leftPos - leftWidth / 2).Point) < 0.000001 &&
+                        edge.Top <= topPos.Point + 0.000001 &&
+                        edge.Bottom >= verticalBottom.Point - 0.000001 &&
+                        edge.Bottom - edge.Top > (verticalBottom - topPos).Point + 0.000001);
+                if (!precedingOwnsLeft && cell.Borders.GetBorder(BorderType.Left)?.Values.Visible != false &&
                     !AdjacentClosedCellOwnsEdge(cell, BorderType.Left, bordersRenderer))
                     bordersRenderer.RenderVertically(BorderType.Left, leftPos - leftWidth, topPos,
                         verticalBottom - topPos, leftOuterStrokeTop, leftInnerStrokeBottom);
@@ -343,6 +364,11 @@ namespace MigraDoc.Rendering
         // borders cannot own a complete following edge.
         readonly Dictionary<int, List<(double Left, double Right, double Y, double Width, XColor Color, BorderStyle Style)>>
             _paintedSolidBottomBorders = new();
+
+        // The vertical counterpart uses actual painted lengths too, including
+        // the bottom-junction trim applied to individual cell borders.
+        readonly Dictionary<int, List<(double Top, double Bottom, double X, double Width, XColor Color, BorderStyle Style)>>
+            _paintedSolidRightBorders = new();
 
         static bool IsSolidStroke(XPen? pen, BorderStyle style)
             => pen is { DashStyle: XDashStyle.Solid } &&
