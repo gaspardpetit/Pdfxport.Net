@@ -46,6 +46,7 @@ namespace MigraDoc.Rendering
 
         void InitRendering()
         {
+            _paintedSolidBottomBorders.Clear();
             _horizontalBoundaryWidths.Clear();
             var formatInfo = (TableFormatInfo)_renderInfo.FormatInfo;
             _bottomBorderMap = formatInfo.BottomBorderMap ?? NRT.ThrowOnNull<Dictionary<int, XUnitPt>>();
@@ -125,7 +126,8 @@ namespace MigraDoc.Rendering
                     RenderDiagonalBorders(_mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow), innerRect);
                 }
                 else
-                    RenderBorders(cell, innerRect, followingTopBorders, precedingBottomBorders, followingLeftBorders);
+                    RenderBorders(cell, innerRect, followingTopBorders, precedingBottomBorders, followingLeftBorders,
+                        borderExclusions is not { Count: > 0 });
                 if (state != null)
                     _gfx.Restore(state);
             }
@@ -199,7 +201,8 @@ namespace MigraDoc.Rendering
         void RenderBorders(Cell cell, Rectangle innerRect,
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingTopBorders,
             HashSet<(int Boundary, int Start, int End, double LeftInset, double RightInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> precedingBottomBorders,
-            HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingLeftBorders)
+            HashSet<(int Boundary, int Start, int End, double BottomInset, double BorderWidth, double StrokeWidth, XColor Color, BorderStyle Style)> followingLeftBorders,
+            bool unclipped)
         {
             XUnitPt leftPos = innerRect.X;
             XUnitPt rightPos = leftPos + innerRect.Width;
@@ -300,10 +303,29 @@ namespace MigraDoc.Rendering
                 if (!followingOwnsBottom && !AdjacentClosedCellOwnsEdge(cell, BorderType.Bottom, bordersRenderer) &&
                     (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom), bottomPen) ||
                      !CoveredByNarrowerEdges(bottomKey, followingTopBorders, false)))
+                {
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, bottomLeft, bottomPos, bottomLength,
                         innerStrokeLeft, innerStrokeRight, internalBottomEdge);
+                    if (unclipped && _table.CellSpacing.Point <= 0 && IsSolidStroke(bottomPen, bottomKey.Style))
+                    {
+                        if (!_paintedSolidBottomBorders.TryGetValue(bottomKey.Boundary, out var spans))
+                            _paintedSolidBottomBorders[bottomKey.Boundary] = spans = new();
+                        spans.Add((bottomLeft.Point, (bottomLeft + bottomLength).Point,
+                            (bottomPos + bottomWidth / 2).Point, bottomPen!.Width, bottomPen.Color, bottomKey.Style));
+                    }
+                }
                 var topPen = bordersRenderer.GetPen(BorderType.Top);
-                if (cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false &&
+                var topKey = topPen == null ? default : HorizontalBorderKey(cell, bordersRenderer, topPen, true);
+                var precedingOwnsTop = _table.CellSpacing.Point <= 0 && IsSolidStroke(topPen, topKey.Style) &&
+                    _paintedSolidBottomBorders.TryGetValue(topKey.Boundary, out var paintedBottoms) &&
+                    paintedBottoms.Any(edge =>
+                        edge.Style == topKey.Style &&
+                        edge.Width == topPen!.Width && edge.Color == topPen.Color &&
+                        Math.Abs(edge.Y - (topPos - topWidth / 2).Point) < 0.000001 &&
+                        edge.Left <= (leftPos - leftWidth).Point + 0.000001 &&
+                        edge.Right >= (rightPos + rightWidth).Point - 0.000001 &&
+                        edge.Right - edge.Left > (rightPos + rightWidth - leftPos + leftWidth).Point + 0.000001);
+                if (!precedingOwnsTop && cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false &&
                     !AdjacentClosedCellOwnsEdge(cell, BorderType.Top, bordersRenderer) &&
                     (topPen == null || bordersRenderer.GetStyle(BorderType.Top) is not
                         (BorderStyle.Dot or BorderStyle.DashSmallGap or BorderStyle.DashDot or BorderStyle.DashDotDot) ||
@@ -315,6 +337,18 @@ namespace MigraDoc.Rendering
 
             RenderDiagonalBorders(mergedBorders, innerRect);
         }
+
+        // Keep actual painted spans: grid indices alone cannot establish coverage
+        // when cell paint rectangles have been moved or resized. Clipped bottom
+        // borders cannot own a complete following edge.
+        readonly Dictionary<int, List<(double Left, double Right, double Y, double Width, XColor Color, BorderStyle Style)>>
+            _paintedSolidBottomBorders = new();
+
+        static bool IsSolidStroke(XPen? pen, BorderStyle style)
+            => pen is { DashStyle: XDashStyle.Solid } &&
+                style is not (BorderStyle.Dot or BorderStyle.DashSmallGap or BorderStyle.DashLargeGap or
+                    BorderStyle.DashDot or BorderStyle.DashDotDot) &&
+                BorderStyleDescriptor.For(style).Kind == BorderDrawingKind.Stroke;
 
         bool AdjacentClosedCellOwnsEdge(Cell cell, BorderType side, BordersRenderer current)
         {
