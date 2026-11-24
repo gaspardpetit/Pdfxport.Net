@@ -152,7 +152,147 @@ public class MergedVerticalSolidBorderTests : IDisposable
             "an exclusion-clipped stroke cannot guarantee complete coverage");
     }
 
-    static (PdfDocumentRenderer Renderer, Table Table, Document Document) Create(double width, bool transparent, bool extraColumn = false)
+    [Theory]
+    [InlineData(.75, false)]
+    [InlineData(.75, true)]
+    [InlineData(3, false)]
+    [InlineData(3, true)]
+    public void MergedLeftOwnsMatchingShorterRights(double width, bool transparent)
+    {
+        var (renderer, _, _) = Create(width, transparent, mergeOnRight: true);
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var line = Lines(pdf.Pages[0]).Should().ContainSingle().Subject;
+        Math.Abs(line.Y2 - line.Y1).Should().BeApproximately(50, .01);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void UpcomingLeftKeepsIndependentOrCustomPlacementEdges(bool spaced, bool callback)
+    {
+        var (renderer, table, _) = Create(3, false, mergeOnRight: true);
+        if (spaced) table.CellSpacing = Unit.FromPoint(4);
+        if (callback) renderer.DocumentRenderer.TableCellPlacement = (_, _) => null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void HiddenUpcomingLeftDoesNotOwnVisibleRights()
+    {
+        var (renderer, table, _) = Create(3, false, mergeOnRight: true);
+        table[0, 1].Borders.Left.Visible = false;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void UpcomingLeftDoesNotSuppressAMismatchedStroke()
+    {
+        var (renderer, table, _) = Create(3, false, mergeOnRight: true);
+        table[0, 0].Borders.Right.Width = Unit.FromPoint(6);
+        table[0, 0].Borders.Right.Color = Colors.Blue;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void ExclusionClipsDisableUpcomingLeftOwnership()
+    {
+        var (reference, _, _) = Create(3, false, mergeOnRight: true);
+        reference.RenderDocument();
+        using var referencePdf = reference.PdfDocument;
+        var sharedX = Lines(referencePdf.Pages[0]).First().X1;
+        var (renderer, table, _) = Create(3, false, true, mergeOnRight: true);
+        for (int row = 0; row < 2; row++)
+        {
+            var borders = table[row, 2].Borders;
+            borders.Visible = true;
+            borders.Style = BorderStyle.Double;
+            borders.Width = Unit.FromPoint(3);
+            borders.Color = Colors.Blue;
+        }
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Where(line => Math.Abs(line.X1 - line.X2) < .001 &&
+            Math.Abs(line.X1 - sharedX) < .001).Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void UpcomingLeftOwnershipIsLimitedToTheCurrentFragment()
+    {
+        var (renderer, table, document) = Create(3, false, mergeOnRight: true);
+        table.Rows[0].Height = table.Rows[1].Height = Unit.FromPoint(60);
+        for (int row = 2; row < 4; row++)
+        {
+            table.AddRow().Height = Unit.FromPoint(60);
+            foreach (var border in new[] { table[row, 0].Borders.Right, table[row, 1].Borders.Left })
+            {
+                border.Visible = true;
+                border.Style = BorderStyle.Single;
+                border.Width = Unit.FromPoint(3);
+                border.Color = Colors.Red;
+            }
+        }
+        document.LastSection.PageSetup.PageHeight = Unit.FromPoint(180);
+        document.LastSection.PageSetup.TopMargin = document.LastSection.PageSetup.BottomMargin = Unit.FromPoint(20);
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        pdf.PageCount.Should().Be(2);
+        Lines(pdf.Pages[0]).Should().ContainSingle();
+        Lines(pdf.Pages[1]).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void EqualRowSpansWithDifferentBottomInsetsKeepTheirExistingStrokes()
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        var table = document.AddSection().AddTable();
+        table.AddColumn(Unit.FromPoint(80));
+        table.AddColumn(Unit.FromPoint(80));
+        table.AddRow().Height = Unit.FromPoint(50);
+        table.Borders.Visible = false;
+        foreach (var border in new[] { table[0, 0].Borders.Right, table[0, 1].Borders.Left })
+        {
+            border.Visible = true;
+            border.Width = Unit.FromPoint(3);
+            border.Color = Colors.Red;
+        }
+        for (int column = 0; column < 2; column++)
+        {
+            table[0, column].Borders.Bottom.Visible = true;
+            table[0, column].Borders.Bottom.Color = Colors.White;
+            table[0, column].Borders.Bottom.Width = Unit.FromPoint(column == 0 ? 4 : 4.00001);
+        }
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Count(line => Math.Abs(line.X2 - line.X1) < .001).Should().Be(2);
+    }
+
+    [Fact]
+    public void SeparateHeaderPassKeepsExistingVerticalOwnership()
+    {
+        var (renderer, table, document) = Create(3, false, mergeOnRight: true);
+        table.Rows[0].HeadingFormat = table.Rows[1].HeadingFormat = true;
+        table.AddRow().Height = Unit.FromPoint(60);
+        table.AddRow().Height = Unit.FromPoint(60);
+        document.LastSection.PageSetup.PageHeight = Unit.FromPoint(180);
+        document.LastSection.PageSetup.TopMargin = document.LastSection.PageSetup.BottomMargin = Unit.FromPoint(20);
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        pdf.PageCount.Should().Be(2);
+        Lines(pdf.Pages[0]).Should().HaveCount(3);
+        Lines(pdf.Pages[1]).Should().HaveCount(3);
+    }
+
+    static (PdfDocumentRenderer Renderer, Table Table, Document Document) Create(double width, bool transparent, bool extraColumn = false, bool mergeOnRight = false)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -164,8 +304,11 @@ public class MergedVerticalSolidBorderTests : IDisposable
         table.AddRow();
         table.Rows.Height = Unit.FromPoint(25);
         table.Borders.Visible = false;
-        table[0, 0].MergeDown = 1;
-        foreach (var border in new[] { table[0, 0].Borders.Right, table[0, 1].Borders.Left, table[1, 1].Borders.Left })
+        table[0, mergeOnRight ? 1 : 0].MergeDown = 1;
+        var shared = mergeOnRight
+            ? new[] { table[0, 0].Borders.Right, table[1, 0].Borders.Right, table[0, 1].Borders.Left }
+            : new[] { table[0, 0].Borders.Right, table[0, 1].Borders.Left, table[1, 1].Borders.Left };
+        foreach (var border in shared)
         {
             border.Visible = true;
             border.Style = BorderStyle.Single;
