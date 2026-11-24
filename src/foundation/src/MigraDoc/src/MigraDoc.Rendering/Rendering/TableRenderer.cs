@@ -210,19 +210,8 @@ namespace MigraDoc.Rendering
             XUnitPt topPos = innerRect.Y;
             XUnitPt bottomPos = innerRect.Y + innerRect.Height;
             var mergedBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
-            // Match the merged-side source selected by MergedCellList before
-            // neighboring-border fallback. A hidden source must not expand a
-            // neighbor's visible edge across this cell's entire merged span.
-            var rightSource = cell.Borders.GetBorder(BorderType.Right);
-            if (cell.MergeRight > 0)
-                rightSource = _table[cell.Row!.Index, cell.Column!.Index + cell.MergeRight]
-                    .Values.Borders?.Values.Right ?? rightSource;
-            var bottomSource = cell.Borders.GetBorder(BorderType.Bottom);
-            if (cell.MergeDown > 0)
-                bottomSource = _table[cell.Row!.Index + cell.MergeDown, cell.Column!.Index]
-                    .Values.Borders?.Values.Bottom ?? bottomSource;
-            var rightVisible = rightSource?.Values.Visible != false;
-            var bottomVisible = bottomSource?.Values.Visible != false;
+            var rightVisible = GetRightBorderSource(cell)?.Values.Visible != false;
+            var bottomVisible = GetBottomBorderSource(cell)?.Values.Visible != false;
 
             var bordersRenderer = new BordersRenderer(mergedBorders, _gfx);
             XUnitPt bottomWidth = bordersRenderer.GetWidth(BorderType.Bottom);
@@ -375,6 +364,18 @@ namespace MigraDoc.Rendering
 
             RenderDiagonalBorders(mergedBorders, innerRect);
         }
+
+        // Match MergedCellList's source selection before neighboring-border
+        // fallback, both when painting and when collecting edge ownership.
+        static Border? GetRightBorderSource(Cell cell)
+            => (cell.MergeRight > 0
+                ? cell.Table[cell.Row!.Index, cell.Column!.Index + cell.MergeRight].Values.Borders?.Values.Right
+                : null) ?? cell.Borders.GetBorder(BorderType.Right);
+
+        static Border? GetBottomBorderSource(Cell cell)
+            => (cell.MergeDown > 0
+                ? cell.Table[cell.Row!.Index + cell.MergeDown, cell.Column!.Index].Values.Borders?.Values.Bottom
+                : null) ?? cell.Borders.GetBorder(BorderType.Bottom);
 
         // Keep actual painted spans: grid indices alone cannot establish coverage
         // when cell paint rectangles have been moved or resized. Clipped bottom
@@ -653,7 +654,7 @@ namespace MigraDoc.Rendering
                     followingTopBorders.Add(HorizontalBorderKey(cell, borders, topPen, true));
                 }
                 if (bottomPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Bottom), bottomPen) &&
-                    cell.Borders.GetBorder(BorderType.Bottom)?.Values.Visible != false)
+                    GetBottomBorderSource(cell)?.Values.Visible != false)
                 {
                     precedingBottomBorders.Add(HorizontalBorderKey(cell, borders, bottomPen, false));
                 }

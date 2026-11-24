@@ -124,6 +124,51 @@ public class HiddenMergedBorderTests : IDisposable
             "the terminal covered cell replaces the leading cell's outer-side definition");
     }
 
+    [Theory]
+    [InlineData(BorderStyle.Dot, false)]
+    [InlineData(BorderStyle.Dot, true)]
+    [InlineData(BorderStyle.DashSmallGap, false)]
+    [InlineData(BorderStyle.DashSmallGap, true)]
+    [InlineData(BorderStyle.DashDot, false)]
+    [InlineData(BorderStyle.DashDot, true)]
+    [InlineData(BorderStyle.DashDotDot, false)]
+    [InlineData(BorderStyle.DashDotDot, true)]
+    public void DashedTopOwnershipUsesTerminalBottomVisibility(BorderStyle style, bool terminalVisible)
+    {
+        var document = new Document();
+        document.Styles.Normal.Font.Name = "Arial";
+        var table = document.AddSection().AddTable();
+        table.AddColumn(Unit.FromPoint(80));
+        table.AddColumn(Unit.FromPoint(80));
+        for (int i = 0; i < 3; i++) table.AddRow();
+        table.Rows.Height = Unit.FromPoint(25);
+        table.Borders.Visible = false;
+        for (int column = 0; column < 2; column++)
+        {
+            table[0, column].MergeDown = 1;
+            foreach (var border in new[] { table[0, column].Borders.Bottom, table[1, column].Borders.Bottom })
+            {
+                border.Visible = true;
+                border.Style = style;
+                border.Width = Unit.FromPoint(3);
+                border.Color = Colors.Red;
+            }
+            table[0, column].Borders.Bottom.Visible = !terminalVisible;
+            table[1, column].Borders.Bottom.Visible = terminalVisible;
+        }
+        table[2, 0].MergeRight = 1;
+        var top = table[2, 0].Borders.Top;
+        top.Visible = true;
+        top.Style = style;
+        top.Width = Unit.FromPoint(3);
+        top.Color = Colors.Red;
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Should().HaveCount(terminalVisible ? 6 : 3,
+            "ownership must reflect which terminal bottom edges can actually paint; each dashed edge has endpoint strokes");
+    }
+
     static (Document Document, Table Table) Create(bool vertical, BorderStyle style, double width)
     {
         var document = new Document();
