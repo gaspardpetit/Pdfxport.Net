@@ -210,6 +210,19 @@ namespace MigraDoc.Rendering
             XUnitPt topPos = innerRect.Y;
             XUnitPt bottomPos = innerRect.Y + innerRect.Height;
             var mergedBorders = _mergedCells.GetEffectiveBordersPdf(cell, _lastHeaderRow);
+            // Match the merged-side source selected by MergedCellList before
+            // neighboring-border fallback. A hidden source must not expand a
+            // neighbor's visible edge across this cell's entire merged span.
+            var rightSource = cell.Borders.GetBorder(BorderType.Right);
+            if (cell.MergeRight > 0)
+                rightSource = _table[cell.Row!.Index, cell.Column!.Index + cell.MergeRight]
+                    .Values.Borders?.Values.Right ?? rightSource;
+            var bottomSource = cell.Borders.GetBorder(BorderType.Bottom);
+            if (cell.MergeDown > 0)
+                bottomSource = _table[cell.Row!.Index + cell.MergeDown, cell.Column!.Index]
+                    .Values.Borders?.Values.Bottom ?? bottomSource;
+            var rightVisible = rightSource?.Values.Visible != false;
+            var bottomVisible = bottomSource?.Values.Visible != false;
 
             var bordersRenderer = new BordersRenderer(mergedBorders, _gfx);
             XUnitPt bottomWidth = bordersRenderer.GetWidth(BorderType.Bottom);
@@ -259,7 +272,8 @@ namespace MigraDoc.Rendering
                     bordersRenderer.RenderRounded(cell.RoundedCorner, innerRect.X - leftWidth, innerRect.Y - topWidth, innerRect.Width + leftWidth, innerRect.Height + topWidth);
 
                 // Render horizontal and vertical borders only if touching no rounded corner.
-                if (cell.RoundedCorner != RoundedCorner.TopRight && cell.RoundedCorner != RoundedCorner.BottomRight)
+                if (cell.RoundedCorner != RoundedCorner.TopRight && cell.RoundedCorner != RoundedCorner.BottomRight &&
+                    rightVisible)
                     bordersRenderer.RenderVertically(BorderType.Right, rightPos, topPos,
                         bottomPos + bottomWidth - topPos, rightOuterStrokeTop, rightInnerStrokeBottom);
 
@@ -267,7 +281,8 @@ namespace MigraDoc.Rendering
                     bordersRenderer.RenderVertically(BorderType.Left, leftPos - leftWidth, topPos,
                         bottomPos + bottomWidth - topPos, leftOuterStrokeTop, leftInnerStrokeBottom);
 
-                if (cell.RoundedCorner != RoundedCorner.BottomLeft && cell.RoundedCorner != RoundedCorner.BottomRight)
+                if (cell.RoundedCorner != RoundedCorner.BottomLeft && cell.RoundedCorner != RoundedCorner.BottomRight &&
+                    bottomVisible)
                     bordersRenderer.RenderHorizontally(BorderType.Bottom, leftPos - leftWidth, bottomPos,
                         rightPos + rightWidth + leftWidth - leftPos, innerStrokeLeft, innerStrokeRight,
                         internalBottomEdge);
@@ -285,7 +300,8 @@ namespace MigraDoc.Rendering
                 var followingOwnsRight = rightPen != null && CompoundProfile(rightKey.Style) != null &&
                     followingLeftBorders.Any(edge => edge.Boundary == rightKey.Boundary &&
                         edge.Start == rightKey.Start && edge.End == rightKey.End);
-                if (!followingOwnsRight && !AdjacentClosedCellOwnsEdge(cell, BorderType.Right, bordersRenderer) &&
+                if (rightVisible &&
+                    !followingOwnsRight && !AdjacentClosedCellOwnsEdge(cell, BorderType.Right, bordersRenderer) &&
                     (rightPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Right), rightPen) ||
                      !followingLeftBorders.Contains(rightKey)))
                 {
@@ -321,7 +337,8 @@ namespace MigraDoc.Rendering
                 var followingOwnsBottom = bottomPen != null && CompoundProfile(bottomKey.Style) != null &&
                     followingTopBorders.Any(edge => edge.Boundary == bottomKey.Boundary &&
                         edge.Start == bottomKey.Start && edge.End == bottomKey.End);
-                if (!followingOwnsBottom && !AdjacentClosedCellOwnsEdge(cell, BorderType.Bottom, bordersRenderer) &&
+                if (bottomVisible &&
+                    !followingOwnsBottom && !AdjacentClosedCellOwnsEdge(cell, BorderType.Bottom, bordersRenderer) &&
                     (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom), bottomPen) ||
                      !CoveredByNarrowerEdges(bottomKey, followingTopBorders, false)))
                 {
