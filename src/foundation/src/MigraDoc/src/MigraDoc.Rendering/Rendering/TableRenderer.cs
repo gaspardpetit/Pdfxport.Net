@@ -2271,6 +2271,23 @@ namespace MigraDoc.Rendering
             }
         }
 
+        // A covered row has no independently formatted cell to contribute its
+        // height. Each spanning cell must still cover the explicit row minima.
+        XUnitPt CalcCellSpanHeight(Cell cell, FormattedCell formattedCell)
+        {
+            if (cell.MergeDown == 0)
+                return formattedCell.InnerHeight;
+            XUnitPt minimum = 0;
+            var first = cell.Row!.Index;
+            for (var index = first; index <= first + cell.MergeDown; index++)
+            {
+                var row = _table.Rows[index];
+                if (row.HeightRule != RowHeightRule.Auto)
+                    minimum += Math.Max(0, row.Height.Point);
+            }
+            return Math.Max(formattedCell.InnerHeight, minimum);
+        }
+
         void CreateBottomBorderMap()
         {
 #if DEBUG
@@ -2319,7 +2336,7 @@ namespace MigraDoc.Rendering
 
             Cell minMergedCell = GetMinMergedCell(lastBorderRow);
             FormattedCell minMergedFormattedCell = _formattedCells[minMergedCell];
-            XUnitPt maxBottomBorderPosition = lastPos + minMergedFormattedCell.InnerHeight;
+            XUnitPt maxBottomBorderPosition = lastPos + CalcCellSpanHeight(minMergedCell, minMergedFormattedCell);
             maxBottomBorderPosition += CalcBoundaryBand(minMergedCell);
 
             foreach (Cell cell in _mergedCells)
@@ -2339,7 +2356,7 @@ namespace MigraDoc.Rendering
 #else
                     XUnitPt topBorderPos = _bottomBorderMapOld[cell.Row.Index];
 #endif
-                        XUnitPt bottomBorderPos = topBorderPos + formattedCell.InnerHeight;
+                        XUnitPt bottomBorderPos = topBorderPos + CalcCellSpanHeight(cell, formattedCell);
                         bottomBorderPos += CalcBoundaryBand(cell);
                         if (bottomBorderPos > maxBottomBorderPosition)
                             maxBottomBorderPosition = bottomBorderPos;
@@ -2391,7 +2408,7 @@ namespace MigraDoc.Rendering
 
             var minMergedCell = GetMinMergedCell(lastBorderRow);
             var minMergedFormattedCell = _formattedCells[minMergedCell];
-            XUnitPt maxBottomBorderPosition = lastPos + minMergedFormattedCell.InnerHeight;
+            XUnitPt maxBottomBorderPosition = lastPos + CalcCellSpanHeight(minMergedCell, minMergedFormattedCell);
             maxBottomBorderPosition += CalcBoundaryBand(minMergedCell);
 
             Debug.Assert(minMergedCell.Row != null, "minMergedCell.Row != null");
@@ -2438,7 +2455,7 @@ namespace MigraDoc.Rendering
 #else
                     XUnitPt topBorderPos = _bottomBorderMap[rowIndex];
 #endif
-                        XUnitPt bottomBorderPos = topBorderPos + formattedCell.InnerHeight;
+                        XUnitPt bottomBorderPos = topBorderPos + CalcCellSpanHeight(cell, formattedCell);
                         bottomBorderPos += CalcBoundaryBand(cell);
                         if (bottomBorderPos > maxBottomBorderPosition)
                             maxBottomBorderPosition = bottomBorderPos;
