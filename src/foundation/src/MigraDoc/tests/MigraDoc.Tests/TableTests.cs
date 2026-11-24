@@ -168,10 +168,26 @@ namespace MigraDoc.Tests
             }
             var renderer = new PdfDocumentRenderer { Document = document };
             renderer.RenderDocument();
-            var strokes = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
-                .Select(match => match.Value).ToArray();
+            var matches = BorderStrokes(PdfFileHelper.GetPageContentStream(renderer.PdfDocument, 0))
+                .Cast<Match>().ToArray();
+            var strokes = matches.Select(match => match.Value).ToArray();
             strokes.Should().OnlyHaveUniqueItems();
-            strokes.Should().HaveCount(verticalMerge ? 11 : 12);
+            // Exact-string uniqueness missed two shorter strokes overpainting
+            // the merged vertical side. Only the full-height owner is needed.
+            strokes.Should().HaveCount(verticalMerge ? 9 : 12);
+            if (verticalMerge)
+            {
+                var verticals = matches.Where(match => match.Groups["x1"].Value == match.Groups["x2"].Value)
+                    .GroupBy(match => double.Parse(match.Groups["x1"].Value, CultureInfo.InvariantCulture))
+                    .OrderBy(group => group.Key).ToArray();
+                verticals.Should().HaveCount(3);
+                var shared = verticals[1].Should().ContainSingle().Subject;
+                var outerLeft = verticals[0].Should().ContainSingle().Subject;
+                double Height(Match match) => Math.Abs(
+                    double.Parse(match.Groups["y2"].Value, CultureInfo.InvariantCulture) -
+                    double.Parse(match.Groups["y1"].Value, CultureInfo.InvariantCulture));
+                Height(shared).Should().BeApproximately(Height(outerLeft), .001);
+            }
         }
 
         static MatchCollection BorderStrokes(string content) => Regex.Matches(content,
