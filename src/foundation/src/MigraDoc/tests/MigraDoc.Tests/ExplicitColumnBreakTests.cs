@@ -402,6 +402,171 @@ public class ExplicitColumnBreakTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(1, false, false)]
+    [InlineData(1, false, true)]
+    [InlineData(1, true, false)]
+    [InlineData(1, true, true)]
+    [InlineData(2, false, false)]
+    [InlineData(2, false, true)]
+    [InlineData(2, true, false)]
+    [InlineData(2, true, true)]
+    [InlineData(3, false, false)]
+    [InlineData(3, false, true)]
+    [InlineData(3, true, false)]
+    [InlineData(3, true, true)]
+    public void ExplicitBreakCanPreserveFollowingSpaceBefore(int columns, bool column, bool preserve)
+    {
+        var document = Create(columns, 1);
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = column,
+            PreserveFollowingSpaceBefore = preserve
+        });
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        var renderer = Render(document);
+        var page = !column || columns == 1 ? 2 : 1;
+        renderer.PageCount.Should().Be(page);
+        var after = Texts(renderer, page, "After").Single();
+        var baseline = Texts(Render(Create(columns, 1)), 1).Single().Y;
+        after.Y.Should().BeApproximately(baseline + (preserve ? 17 : 0), .01);
+        after.X.Should().BeApproximately(column && columns > 1 ? 20 + 220.0 / columns : 20, .01);
+    }
+
+    [Fact]
+    public void LeadingColumnBreakCanPreserveFollowingSpace()
+    {
+        var document = Create(2, 0);
+        document.LastSection.Elements.Add(new PageBreak { IsColumnBreak = true, PreserveFollowingSpaceBefore = true });
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        var renderer = Render(document);
+        var after = Texts(renderer, 1, "After").Single();
+        var baseline = Texts(Render(Create(2, 1)), 1).Single().Y;
+        after.X.Should().BeApproximately(130, .01);
+        after.Y.Should().BeApproximately(baseline + 17, .01);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LastConsecutiveBreakControlsFollowingSpacing(bool lastPreserves)
+    {
+        var document = Create(2, 1);
+        document.LastSection.Elements.Add(new PageBreak { IsColumnBreak = true, PreserveFollowingSpaceBefore = !lastPreserves });
+        document.LastSection.Elements.Add(new PageBreak { IsColumnBreak = true, PreserveFollowingSpaceBefore = lastPreserves });
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(2);
+        var baseline = Texts(Render(Create(2, 1)), 1).Single().Y;
+        Texts(renderer, 2, "After").Single().Y.Should().BeApproximately(baseline + (lastPreserves ? 17 : 0), .01);
+    }
+
+    [Fact]
+    public void PreserveSettingDoesNotLeakToLaterAutomaticOverflow()
+    {
+        var document = Create(2, 1);
+        document.LastSection.Elements.Add(new PageBreak { IsColumnBreak = true, PreserveFollowingSpaceBefore = true });
+        for (int i = 0; i < 12; i++) document.LastSection.AddParagraph("Intervening");
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(2);
+        var baseline = Texts(Render(Create(2, 1)), 1).Single().Y;
+        Texts(renderer, 2, "After").Single().Y.Should().BeApproximately(baseline, .01);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CoalescedBreakRetainsExistingFollowingSpacing(bool preserve)
+    {
+        var document = Create(2, 12);
+        document.LastSection.AddParagraph("Overflow");
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = true,
+            PreserveFollowingSpaceBefore = preserve
+        });
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(1);
+        (Texts(renderer, 1, "After").Single().Y - Texts(renderer, 1, "Overflow").Single().Y)
+            .Should().BeApproximately(27, .01);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void DdlAndClonePreserveFollowingSpacingOption(bool column, bool preserve)
+    {
+        var document = Create(2, 1);
+        var pageBreak = new PageBreak
+        {
+            IsColumnBreak = column,
+            CoalesceWithPrecedingParagraphOverflow = true,
+            PreserveFollowingSpaceBefore = preserve
+        };
+        document.LastSection.Elements.Add(pageBreak);
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        pageBreak.Clone().Values.PreserveFollowingSpaceBefore.Should().Be(preserve);
+        var ddl = DdlWriter.WriteToString(document);
+        ddl.Should().Contain("PreserveFollowingSpaceBefore").And.Contain("CoalesceWithPrecedingParagraphOverflow");
+        foreach (var candidate in new[] { document.Clone(), DdlReader.DocumentFromString(ddl) })
+        {
+            candidate.LastSection.Elements.OfType<PageBreak>().Single().Values.PreserveFollowingSpaceBefore.Should().Be(preserve);
+            var renderer = Render(candidate);
+            var baseline = Texts(Render(Create(2, 1)), 1).Single().Y;
+            Texts(renderer, column ? 1 : 2, "After").Single().Y.Should()
+                .BeApproximately(baseline + (preserve ? 17 : 0), .01);
+        }
+    }
+
+    [Fact]
+    public void FollowingSpacingOptionIsUnsetByDefault()
+    {
+        var pageBreak = new PageBreak();
+        pageBreak.PreserveFollowingSpaceBefore.Should().BeFalse();
+        pageBreak.Values.PreserveFollowingSpaceBefore.Should().BeNull();
+        pageBreak.Clone().Values.PreserveFollowingSpaceBefore.Should().BeNull();
+        var document = Create(2, 1);
+        document.LastSection.Elements.Add(pageBreak);
+        DdlWriter.WriteToString(document).Should().NotContain("PreserveFollowingSpaceBefore");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BalancedColumnsRespectFollowingSpacingOption(bool preserve)
+    {
+        var document = Create(2, 1);
+        document.LastSection.PageSetup.BalanceColumns = true;
+        document.LastSection.Elements.Add(new PageBreak { IsColumnBreak = true, PreserveFollowingSpaceBefore = preserve });
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        var renderer = Render(document);
+        renderer.PageCount.Should().Be(1);
+        var baseline = Texts(Render(Create(2, 1)), 1).Single().Y;
+        Texts(renderer, 1, "After").Single().Y.Should().BeApproximately(baseline + (preserve ? 17 : 0), .01);
+    }
+
+    [Fact]
+    public void SpacingOnlyDdlDoesNotSetTheCoalescingOption()
+    {
+        var document = Create(2, 1);
+        document.LastSection.Elements.Add(new PageBreak { IsColumnBreak = true, PreserveFollowingSpaceBefore = true });
+        document.LastSection.AddParagraph("After").Format.SpaceBefore = Unit.FromPoint(17);
+        var ddl = DdlWriter.WriteToString(document);
+        ddl.Should().Contain("PreserveFollowingSpaceBefore").And.NotContain("CoalesceWithPrecedingParagraphOverflow");
+        var restored = DdlReader.DocumentFromString(ddl);
+        var pageBreak = restored.LastSection.Elements.OfType<PageBreak>().Single();
+        pageBreak.PreserveFollowingSpaceBefore.Should().BeTrue();
+        pageBreak.Values.CoalesceWithPrecedingParagraphOverflow.Should().BeNull();
+        var renderer = Render(restored);
+        var baseline = Texts(Render(Create(2, 1)), 1).Single().Y;
+        Texts(renderer, 1, "After").Single().Y.Should().BeApproximately(baseline + 17, .01);
+    }
+
     static PdfDocumentRenderer Render(Document document)
     {
         var renderer = new PdfDocumentRenderer { Document = document };

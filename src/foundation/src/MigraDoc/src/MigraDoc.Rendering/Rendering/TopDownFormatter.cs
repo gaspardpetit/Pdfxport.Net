@@ -110,7 +110,9 @@ namespace MigraDoc.Rendering
                     {
                         // IsFirstOnPage isn’t true for an element in _elements following a PageBreak. IsFirstOnRenderedPage is also true if the last element was a PageBreak.
                         bool isFirstOnRenderedPage = isFirstOnPage || idx > 0 && idx - 1 != coalescedBreak && _elements[idx - 1] is PageBreak;
-                        if (isFirstOnRenderedPage)
+                        var preserveSpaceBefore = _areaProvider is FormattedDocument && idx > 0 &&
+                            _elements[idx - 1] is PageBreak { PreserveFollowingSpaceBefore: true };
+                        if (isFirstOnRenderedPage && !preserveSpaceBefore)
                             p.Format.SpaceBefore = Unit.Zero;
                     }
                 }
