@@ -161,7 +161,110 @@ public class MergedSolidBorderTests : IDisposable
             "borders painted under exclusion clips cannot guarantee complete coverage");
     }
 
-    static (PdfDocumentRenderer Renderer, Table Table, Document Document) Create(double width, bool transparent, bool extraColumn = false)
+    [Theory]
+    [InlineData(.75, false)]
+    [InlineData(.75, true)]
+    [InlineData(3, false)]
+    [InlineData(3, true)]
+    public void MergedTopOwnsMatchingShorterBottoms(double width, bool transparent)
+    {
+        var (renderer, _, _) = Create(width, transparent, mergeBelow: true);
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        var line = Lines(pdf.Pages[0]).Should().ContainSingle().Subject;
+        Math.Abs(line.X2 - line.X1).Should().BeApproximately(160, .01);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void UpcomingTopKeepsIndependentOrCustomPlacementEdges(bool spaced, bool callback)
+    {
+        var (renderer, table, _) = Create(3, false, mergeBelow: true);
+        if (spaced) table.CellSpacing = Unit.FromPoint(4);
+        if (callback) renderer.DocumentRenderer.TableCellPlacement = (_, _) => null;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void HiddenUpcomingTopDoesNotOwnVisibleBottoms()
+    {
+        var (renderer, table, _) = Create(3, false, mergeBelow: true);
+        table[1, 0].Borders.Top.Visible = false;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void UpcomingTopDoesNotSuppressAMismatchedStroke()
+    {
+        var (renderer, table, _) = Create(3, false, mergeBelow: true);
+        table[0, 0].Borders.Bottom.Width = Unit.FromPoint(6);
+        table[0, 0].Borders.Bottom.Color = Colors.Blue;
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void TopOnAnotherPageCannotOwnPrecedingBottoms()
+    {
+        var (renderer, table, document) = Create(3, false, mergeBelow: true);
+        table.Rows[0].Height = table.Rows[1].Height = Unit.FromPoint(100);
+        document.LastSection.PageSetup.PageHeight = Unit.FromPoint(180);
+        document.LastSection.PageSetup.TopMargin = document.LastSection.PageSetup.BottomMargin = Unit.FromPoint(20);
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        pdf.PageCount.Should().Be(2);
+        Lines(pdf.Pages[0]).Should().HaveCount(2);
+        Lines(pdf.Pages[1]).Should().ContainSingle();
+    }
+
+    [Fact]
+    public void SeparateHeaderPassKeepsItsExistingOwnership()
+    {
+        var (renderer, table, document) = Create(3, false, mergeBelow: true);
+        table.Rows[0].HeadingFormat = true;
+        table.Rows[0].Height = Unit.FromPoint(40);
+        table.Rows[1].Height = Unit.FromPoint(60);
+        table.AddRow().Height = Unit.FromPoint(60);
+        table[2, 0].MergeRight = 1;
+        var top = table[2, 0].Borders.Top;
+        top.Visible = true;
+        top.Style = BorderStyle.Single;
+        top.Width = Unit.FromPoint(3);
+        top.Color = Colors.Red;
+        document.LastSection.PageSetup.PageHeight = Unit.FromPoint(180);
+        document.LastSection.PageSetup.TopMargin = document.LastSection.PageSetup.BottomMargin = Unit.FromPoint(20);
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        pdf.PageCount.Should().Be(2);
+        Lines(pdf.Pages[0]).Should().HaveCount(4);
+        Lines(pdf.Pages[1]).Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void ExclusionClipsDisableUpcomingTopOwnership()
+    {
+        var (renderer, table, _) = Create(3, false, true, mergeBelow: true);
+        for (int row = 0; row < 2; row++)
+        {
+            var borders = table[row, 2].Borders;
+            borders.Visible = true;
+            borders.Style = BorderStyle.Double;
+            borders.Width = Unit.FromPoint(3);
+            borders.Color = Colors.Blue;
+        }
+        renderer.RenderDocument();
+        using var pdf = renderer.PdfDocument;
+        Lines(pdf.Pages[0]).Where(line => Math.Abs(line.X2 - line.X1) > 70).Should().HaveCount(3);
+    }
+
+    static (PdfDocumentRenderer Renderer, Table Table, Document Document) Create(double width, bool transparent, bool extraColumn = false, bool mergeBelow = false)
     {
         var document = new Document();
         document.Styles.Normal.Font.Name = "Arial";
@@ -173,8 +276,11 @@ public class MergedSolidBorderTests : IDisposable
         table.AddRow();
         table.Rows.Height = Unit.FromPoint(25);
         table.Borders.Visible = false;
-        table[0, 0].MergeRight = 1;
-        foreach (var border in new[] { table[0, 0].Borders.Bottom, table[1, 0].Borders.Top, table[1, 1].Borders.Top })
+        table[mergeBelow ? 1 : 0, 0].MergeRight = 1;
+        var shared = mergeBelow
+            ? new[] { table[0, 0].Borders.Bottom, table[0, 1].Borders.Bottom, table[1, 0].Borders.Top }
+            : new[] { table[0, 0].Borders.Bottom, table[1, 0].Borders.Top, table[1, 1].Borders.Top };
+        foreach (var border in shared)
         {
             border.Visible = true;
             border.Style = BorderStyle.Single;

@@ -326,7 +326,18 @@ namespace MigraDoc.Rendering
                 var followingOwnsBottom = bottomPen != null && CompoundProfile(bottomKey.Style) != null &&
                     followingTopBorders.Any(edge => edge.Boundary == bottomKey.Boundary &&
                         edge.Start == bottomKey.Start && edge.End == bottomKey.End);
-                if (bottomVisible &&
+                var upcomingTopOwnsBottom = unclipped && _documentRenderer.TableCellPlacement is null &&
+                    IsSolidStroke(bottomPen, bottomKey.Style) &&
+                    _upcomingSolidTopBorders.TryGetValue(bottomKey.Boundary, out var upcomingTops) &&
+                    upcomingTops.Any(edge => edge.Start <= bottomKey.Start && edge.End >= bottomKey.End &&
+                        (edge.Start < bottomKey.Start || edge.End > bottomKey.End) &&
+                        edge.Style == bottomKey.Style &&
+                        edge.Width == bottomPen!.Width && edge.Color == bottomPen.Color &&
+                        Math.Abs(edge.Y - (bottomPos + bottomWidth / 2).Point) < 0.000001 &&
+                        edge.Left <= bottomLeft.Point + 0.000001 &&
+                        edge.Right >= (bottomLeft + bottomLength).Point - 0.000001 &&
+                        edge.Right - edge.Left > bottomLength.Point + 0.000001);
+                if (bottomVisible && !upcomingTopOwnsBottom &&
                     !followingOwnsBottom && !AdjacentClosedCellOwnsEdge(cell, BorderType.Bottom, bordersRenderer) &&
                     (bottomPen == null || !IsSharedEdgeStyle(bordersRenderer.GetStyle(BorderType.Bottom), bottomPen) ||
                      !CoveredByNarrowerEdges(bottomKey, followingTopBorders, false)))
@@ -387,6 +398,12 @@ namespace MigraDoc.Rendering
         // the bottom-junction trim applied to individual cell borders.
         readonly Dictionary<int, List<(double Top, double Bottom, double X, double Width, XColor Color, BorderStyle Style)>>
             _paintedSolidRightBorders = new();
+
+        // Only preflight default geometry within one body paint pass. Custom
+        // placement callbacks and the separate header/body passes keep their
+        // existing ownership rules; their future paint geometry is not fixed here.
+        readonly Dictionary<int, List<(int Start, int End, double Left, double Right, double Y, double Width, XColor Color, BorderStyle Style)>>
+            _upcomingSolidTopBorders = new();
 
         static bool IsSolidStroke(XPen? pen, BorderStyle style)
             => pen is { DashStyle: XDashStyle.Solid } &&
@@ -613,6 +630,7 @@ namespace MigraDoc.Rendering
 
         void RenderCells(IReadOnlyList<Cell> cells, IReadOnlyList<Cell>? followingCells = null)
         {
+            _upcomingSolidTopBorders.Clear();
             // A uniform double grid has two closed outlines: one facing each cell
             // and one around the outside of the table. Draw those as paths so the
             // corners are joins rather than unrelated line caps.
@@ -651,7 +669,18 @@ namespace MigraDoc.Rendering
                 if (topPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Top), topPen) &&
                     cell.Borders.GetBorder(BorderType.Top)?.Values.Visible != false)
                 {
-                    followingTopBorders.Add(HorizontalBorderKey(cell, borders, topPen, true));
+                    var key = HorizontalBorderKey(cell, borders, topPen, true);
+                    followingTopBorders.Add(key);
+                    if (!independentEdges && followingCells == null &&
+                        _documentRenderer.TableCellPlacement is null && IsSolidStroke(topPen, key.Style))
+                    {
+                        if (!_upcomingSolidTopBorders.TryGetValue(key.Boundary, out var spans))
+                            _upcomingSolidTopBorders[key.Boundary] = spans = new();
+                        spans.Add((key.Start, key.End, (innerRect.X - borders.GetWidth(BorderType.Left)).Point,
+                            (innerRect.X + innerRect.Width + borders.GetWidth(BorderType.Right)).Point,
+                            (innerRect.Y - borders.GetWidth(BorderType.Top) / 2).Point,
+                            topPen.Width, topPen.Color, key.Style));
+                    }
                 }
                 if (bottomPen != null && IsSharedEdgeStyle(borders.GetStyle(BorderType.Bottom), bottomPen) &&
                     GetBottomBorderSource(cell)?.Values.Visible != false)
