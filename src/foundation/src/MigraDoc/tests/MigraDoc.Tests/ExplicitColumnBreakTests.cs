@@ -567,6 +567,44 @@ public class ExplicitColumnBreakTests : IDisposable
         Texts(renderer, 1, "After").Single().Y.Should().BeApproximately(baseline + 17, .01);
     }
 
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    [InlineData(3, true)]
+    public void CoalescedBreakDoesNotPreserveSpacingOnLaterAutomaticOverflow(int columns, bool preserve)
+    {
+        var document = Create(columns, 12);
+        document.LastSection.AddParagraph("Overflow");
+        document.LastSection.Elements.Add(new PageBreak
+        {
+            IsColumnBreak = true,
+            CoalesceWithPrecedingParagraphOverflow = true,
+            PreserveFollowingSpaceBefore = preserve
+        });
+        var paragraph = document.LastSection.AddParagraph("After1");
+        paragraph.Format.SpaceBefore = Unit.FromPoint(17);
+        paragraph.Format.KeepTogether = true;
+        paragraph.Format.WidowControl = false;
+        for (int line = 2; line <= 10; line++)
+        {
+            paragraph.AddLineBreak();
+            paragraph.AddText("After" + line);
+        }
+        var renderer = Render(document);
+        var page = columns == 2 ? 2 : 1;
+        renderer.PageCount.Should().Be(page);
+        Texts(renderer, 1, "Overflow").Should().ContainSingle();
+        if (columns == 2) Texts(renderer, 1, "After").Should().BeEmpty();
+        var after = Texts(renderer, page, "After");
+        after.Should().HaveCount(10);
+        after.Should().OnlyContain(item => Math.Abs(item.X -
+            (columns == 2 ? 20 : 20 + 440.0 / columns)) < .01);
+        var baseline = Texts(Render(Create(columns, 1)), 1).Single().Y;
+        after[0].Y.Should().BeApproximately(baseline, .01,
+            "the coalesced break did not advance flow; this later transition is automatic overflow");
+    }
+
     static PdfDocumentRenderer Render(Document document)
     {
         var renderer = new PdfDocumentRenderer { Document = document };
