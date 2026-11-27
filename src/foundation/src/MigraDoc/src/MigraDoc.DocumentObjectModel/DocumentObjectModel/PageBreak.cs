@@ -53,15 +53,29 @@ namespace MigraDoc.DocumentObjectModel
         }
 
         /// <summary>
+        /// Gets or sets whether the immediately following paragraph keeps its
+        /// positive SpaceBefore at this explicit break. Defaults to false.
+        /// Applies to PDF section body layout for page and column breaks.
+        /// </summary>
+        public bool PreserveFollowingSpaceBefore
+        {
+            get => Values.PreserveFollowingSpaceBefore ?? false;
+            set => Values.PreserveFollowingSpaceBefore = value;
+        }
+
+        /// <summary>
         /// Converts PageBreak into DDL.
         /// </summary>
         internal override void Serialize(Serializer serializer) 
         {
             serializer.WriteLine(IsColumnBreak ? "\\columnbreak" : "\\pagebreak");
-            if (Values.CoalesceWithPrecedingParagraphOverflow is not null)
+            if (Values.CoalesceWithPrecedingParagraphOverflow is not null || Values.PreserveFollowingSpaceBefore is not null)
             {
                 serializer.BeginAttributes();
-                serializer.WriteSimpleAttribute("CoalesceWithPrecedingParagraphOverflow", CoalesceWithPrecedingParagraphOverflow);
+                if (Values.CoalesceWithPrecedingParagraphOverflow is not null)
+                    serializer.WriteSimpleAttribute("CoalesceWithPrecedingParagraphOverflow", CoalesceWithPrecedingParagraphOverflow);
+                if (Values.PreserveFollowingSpaceBefore is not null)
+                    serializer.WriteSimpleAttribute("PreserveFollowingSpaceBefore", PreserveFollowingSpaceBefore);
                 serializer.EndAttributes();
             }
         }
@@ -89,6 +103,9 @@ namespace MigraDoc.DocumentObjectModel
             public bool? IsColumnBreak { get; set; }
 
             public bool? CoalesceWithPrecedingParagraphOverflow { get; set; }
+
+            /// <summary>Gets or sets the nullable storage for PreserveFollowingSpaceBefore.</summary>
+            public bool? PreserveFollowingSpaceBefore { get; set; }
         }
     }
 }
